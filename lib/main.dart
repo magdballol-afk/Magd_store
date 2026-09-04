@@ -186,15 +186,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
 const SizedBox(height: 20),
       
           
-                  Row(
-                    children: [
-                      Expanded(child: _buildGradientButton(title: '👤 حساب عميل', icon: Icons.person_add)),
-                      const SizedBox(width: 10),
-                      Expanded(child: _buildGradientButton(title: '📊 تقرير ذكي', icon: Icons.analytics)),
-                    ],
-                  ),
+              Row(
+  children: [
+    Expanded(
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ContactsScreen(),
+            ),
+          );
+        },
+        child: _buildGradientButton(
+          title: 'حساب عميل',
+          icon: Icons.person_search_outlined,
+        ),
+      ),
+    ),
+    const SizedBox(width: 10),
+    Expanded(
+      child: GestureDetector(
+        onTap: () {
+          // التقرير الذكي
+        },
+        child: _buildGradientButton(
+          title: 'تقرير ذكي',
+          icon: Icons.analytics_outlined,
+        ),
+      ),
+    ),
+  ],
+),
+const SizedBox(height: 20),
 
-                  const SizedBox(height: 20),
 
                   // قسم تحليل AI للمبيعات الأخيرة
                   Container(

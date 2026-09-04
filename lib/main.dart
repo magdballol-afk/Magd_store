@@ -146,8 +146,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       Expanded(child: _buildGradientButton(title: '+ فاتورة جديدة', icon: Icons.add_shopping_cart)),
                       const SizedBox(width: 10),
-                      Expanded(
-  child: GestureDetecter(
+
+Expanded(
+  child: GestureDetector(
     onTap: () {
       Navigator.push(
         context,
@@ -158,6 +159,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ),
 ),
 
+
+
+                      
                     ],
                   ),
                   const SizedBox(height: 8),

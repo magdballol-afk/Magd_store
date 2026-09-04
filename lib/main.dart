@@ -1,3 +1,5 @@
+import 'screens/add_product_screen.dart';
+
 import 'package:flutter/material.dart';
 
 void main() {
@@ -144,7 +146,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       Expanded(child: _buildGradientButton(title: '+ فاتورة جديدة', icon: Icons.add_shopping_cart)),
                       const SizedBox(width: 10),
-                      Expanded(child: _buildGradientButton(title: '+ إضافة منتج', icon: Icons.inventory_2)),
+                      Expanded(
+  child: GestureDetecter(
+    onTap: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const AddProductScreen()),
+      );
+    },
+    child: _buildGradientButton(title: '+ إضافة منتج', icon: Icons.inventory_2),
+  ),
+),
+
                     ],
                   ),
                   const SizedBox(height: 8),

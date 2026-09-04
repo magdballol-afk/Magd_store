@@ -143,22 +143,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // الإجراءات السريعة بأزرار متموجة زرقاء
                   const Text('إجراءات سريعة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(child: _buildGradientButton(title: '+ فاتورة جديدة', icon: Icons.add_shopping_cart)),
-                      const SizedBox(width: 10),
+                  
+          Row(
+  children: [
+    // 1. زر فاتورة جديدة
+    Expanded(
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const NewInvoiceScreen(),
+            ),
+          );
+        },
+        child: _buildGradientButton(
+          title: '+ فاتورة جديدة',
+          // ضع باقي البارامترات الخاصة بالزر إن وجدت مثل الأيقونة
+        ),
+      ),
+    ),
+    const SizedBox(width: 10),
+    // 2. زر إضافة منتج
+    Expanded(
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AddProductScreen(),
+            ),
+          );
+        },
+        child: _buildGradientButton(
+          title: '+ إضافة منتج',
+          // ضع باقي البارامترات الخاصة بالزر إن وجدت مثل الأيقونة
+        ),
+      ),
+    ),
+  ],
+)
 
-Expanded(
-  child: GestureDetector(
-    onTap: () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const AddProductScreen()),
-      );
-    },
-    child: _buildGradientButton(title: '+ إضافة منتج', icon: Icons.inventory_2),
-  ),
-),
 
 
 

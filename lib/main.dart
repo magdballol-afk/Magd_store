@@ -182,15 +182,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     ),
   ],
-)
-
-
-
-
-                      
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+          ),
+             const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(child: _buildGradientButton(title: '👤 حساب عميل', icon: Icons.person_add)),

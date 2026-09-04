@@ -8,16 +8,19 @@ class NewInvoiceScreen extends StatefulWidget {
 }
 
 class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
-  // 1. سعر الصرف (يمكنك تعديله)
-  double _exchangeRate = 15000.0; 
+  // 1. إعدادات الفاتورة الأساسية
+  String _invoiceType = 'مبيعات'; // 'مبيعات' أو 'مشتريات'
+  String _paymentType = 'نقدي';   // 'نقدي' أو 'آجل'
   
-  // 2. العملة المحددة حالياً (SYP أو USD)
+  final TextEditingController _clientNameController = TextEditingController();
+  
+  // 2. سعر الصرف والعملة
+  double _exchangeRate = 15000.0; 
   String _selectedCurrency = 'SYP';
 
-  // 3. قائمة منتجات الفاتورة الحالية
+  // 3. قائمة منتجات الفاتورة
   final List<Map<String, dynamic>> _invoiceItems = [];
   
-  // متحكمات الحقول عند إضافة منتج
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _quantityController = TextEditingController(text: '1');
@@ -40,7 +43,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     return _exchangeRate > 0 ? _totalInSyp / _exchangeRate : 0.0;
   }
 
-  // دالة إضافة عنصر إلى الفاتورة
   void _addItem() {
     final String name = _nameController.text.trim();
     final double price = double.tryParse(_priceController.text) ?? 0.0;
@@ -59,11 +61,10 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       _nameController.clear();
       _priceController.clear();
       _quantityController.text = '1';
-      Navigator.pop(context); // إغلاق نافذة الإدخال
+      Navigator.pop(context);
     }
   }
 
-  // نافذة إدخال تفاصيل المنتج
   void _showAddItemDialog() {
     showDialog(
       context: context,
@@ -95,7 +96,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     textAlign: TextAlign.right,
                   ),
                   const SizedBox(height: 12),
-                  // اختيار العملة للمنتج
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -141,7 +141,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('فاتورة جديدة'),
+          title: Text('فاتورة $_invoiceType جديدة'),
           backgroundColor: const Color(0xFF0D47A1),
           actions: [
             IconButton(
@@ -155,7 +155,69 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              // عرض سعر الصرف
+              // 1. خيارات نوع الفاتورة وطريقة الدفع
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('نوع الفاتورة:', style: TextStyle(fontWeight: FontWeight.bold)),
+                          SegmentedButton<String>(
+                            segments: const [
+                              ButtonSegment(value: 'مبيعات', label: Text('مبيعات')),
+                              ButtonSegment(value: 'مشتريات', label: Text('مشتريات')),
+                            ],
+                            selected: {_invoiceType},
+                            onSelectionChanged: (Set<String> newSelection) {
+                              setState(() {
+                                _invoiceType = newSelection.first;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('طريقة الدفع:', style: TextStyle(fontWeight: FontWeight.bold)),
+                          SegmentedButton<String>(
+                            segments: const [
+                              ButtonSegment(value: 'نقدي', label: Text('نقدي')),
+                              ButtonSegment(value: 'آجل', label: Text('آجل (دين)')),
+                            ],
+                            selected: {_paymentType},
+                            onSelectionChanged: (Set<String> newSelection) {
+                              setState(() {
+                                _paymentType = newSelection.first;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // اسم العميل / المورد
+                      TextField(
+                        controller: _clientNameController,
+                        decoration: InputDecoration(
+                          labelText: _invoiceType == 'مبيعات' ? 'اسم العميل' : 'اسم المورد',
+                          prefixIcon: const Icon(Icons.person),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        textAlign: TextAlign.right,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // 2. شريط سعر الصرف
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                 decoration: BoxDecoration(
@@ -172,6 +234,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+
+              // 3. زر إضافة منتج
               ElevatedButton.icon(
                 onPressed: _showAddItemDialog,
                 icon: const Icon(Icons.add_shopping_cart),
@@ -181,7 +245,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              // عرض قائمة المنتجات المضافة
+
+              // 4. عرض قائمة المنتجات المضافة
               Expanded(
                 child: _invoiceItems.isEmpty
                     ? const Center(child: Text('لم يتم إضافة أي منتجات بعد'))
@@ -204,7 +269,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       ),
               ),
               const Divider(),
-              // بطاقة الإجمالي بالعملتين
+
+              // 5. بطاقة الإجمالي بالعملتين
               Card(
                 color: Colors.grey.shade100,
                 child: Padding(
@@ -233,12 +299,18 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+
+              // 6. زر حفظ وإصدار الفاتورة
               ElevatedButton(
                 onPressed: _invoiceItems.isEmpty
                     ? null
                     : () {
+                        final client = _clientNameController.text.trim();
+                        final clientText = client.isNotEmpty ? client : 'عميل عام';
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تم حفظ الفاتورة بنجاح')),
+                          SnackBar(
+                            content: Text('تم حفظ فاتورة $_invoiceType ($_paymentType) للعميل: $clientText'),
+                          ),
                         );
                       },
                 style: ElevatedButton.styleFrom(
@@ -254,7 +326,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     );
   }
 
-  // نافذة تعديل سعر الصرف
   void _showExchangeRateDialog() {
     final TextEditingController rateController = TextEditingController(text: _exchangeRate.toString());
     showDialog(

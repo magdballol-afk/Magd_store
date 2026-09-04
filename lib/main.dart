@@ -1,4 +1,5 @@
 import 'screens/add_product_screen.dart';
+import 'screens/new_invoice_screen.dart';
 
 import 'package:flutter/material.dart';
 

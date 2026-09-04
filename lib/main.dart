@@ -143,8 +143,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // الإجراءات السريعة بأزرار متموجة زرقاء
                   const Text('إجراءات سريعة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 10),
-                  
-          Row(
+            Row(
   children: [
     // 1. زر فاتورة جديدة
     Expanded(
@@ -159,7 +158,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
         child: _buildGradientButton(
           title: '+ فاتورة جديدة',
-          // ضع باقي البارامترات الخاصة بالزر إن وجدت مثل الأيقونة
+          icon: Icons.receipt_long,
         ),
       ),
     ),
@@ -177,13 +176,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
         child: _buildGradientButton(
           title: '+ إضافة منتج',
-          // ضع باقي البارامترات الخاصة بالزر إن وجدت مثل الأيقونة
+          icon: Icons.inventory_2_outlined,
         ),
       ),
     ),
   ],
-          ),
-             const SizedBox(height: 8),
+),
+const SizedBox(height: 20),
+      
+          
                   Row(
                     children: [
                       Expanded(child: _buildGradientButton(title: '👤 حساب عميل', icon: Icons.person_add)),

@@ -59,13 +59,20 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
   }
 
   // نافذة إضافة جهة اتصال جديدة
+  
+  // نافذة إضافة جهة اتصال جديدة مع تحديد نوع الرصيد (مدين/دائن)
   void _showAddContactDialog(ContactType defaultType) {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
     final addressController = TextEditingController();
     final balanceSypController = TextEditingController(text: '0');
     final balanceUsdController = TextEditingController(text: '0');
+    
     ContactType selectedType = defaultType;
+    
+    // متغيرات لتحديد هل الرصيد مدين (عليه) أو دائن (له)
+    bool isSypDebit = true; // true = مدين (مطلوب منه)، false = دائن (له)
+    bool isUsdDebit = true;
 
     showDialog(
       context: context,
@@ -79,6 +86,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -117,19 +125,64 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
                     decoration: const InputDecoration(labelText: 'العنوان (اختياري)', prefixIcon: Icon(Icons.location_on)),
                     textAlign: TextAlign.right,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 15),
                   const Text('الرصيد الافتتاحي (إن وجد):', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+
+                  // رصيد الليرة السورية مع تحديد (مدين/دائن)
                   TextField(
                     controller: balanceSypController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'الرصيد (ل.س)', prefixIcon: Icon(Icons.money)),
+                    decoration: const InputDecoration(
+                      labelText: 'الرصيد (ل.س)',
+                      prefixIcon: Icon(Icons.money),
+                    ),
                     textAlign: TextAlign.right,
                   ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      FilterChip(
+                        label: const Text('دائن (له)'),
+                        selected: !isSypDebit,
+                        onSelected: (val) => setDialogState(() => isSypDebit = false),
+                      ),
+                      const SizedBox(width: 8),
+                      FilterChip(
+                        label: const Text('مدين (عليه)'),
+                        selected: isSypDebit,
+                        onSelected: (val) => setDialogState(() => isSypDebit = true),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // رصيد الدولار مع تحديد (مدين/دائن)
                   TextField(
                     controller: balanceUsdController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'الرصيد (\$)', prefixIcon: Icon(Icons.attach_money)),
+                    decoration: const InputDecoration(
+                      labelText: 'الرصيد (\$)',
+                      prefixIcon: Icon(Icons.attach_money),
+                    ),
                     textAlign: TextAlign.right,
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      FilterChip(
+                        label: const Text('دائن (له)'),
+                        selected: !isUsdDebit,
+                        onSelected: (val) => setDialogState(() => isUsdDebit = false),
+                      ),
+                      const SizedBox(width: 8),
+                      FilterChip(
+                        label: const Text('مدين (عليه)'),
+                        selected: isUsdDebit,
+                        onSelected: (val) => setDialogState(() => isUsdDebit = true),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -142,6 +195,13 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
               ElevatedButton(
                 onPressed: () {
                   if (nameController.text.trim().isNotEmpty) {
+                    final double rawSyp = double.tryParse(balanceSypController.text) ?? 0.0;
+                    final double rawUsd = double.tryParse(balanceUsdController.text) ?? 0.0;
+
+                    // إذا كان مدين (عليه) نحفظ القيمة بسالب، أما إذا كان دائن (له) نحفظ بـ موجب
+                    final double finalSyp = isSypDebit ? -rawSyp.abs() : rawSyp.abs();
+                    final double finalUsd = isUsdDebit ? -rawUsd.abs() : rawUsd.abs();
+
                     setState(() {
                       _contactsList.add(
                         ContactModel(
@@ -150,8 +210,8 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
                           phone: phoneController.text.trim(),
                           address: addressController.text.trim().isEmpty ? null : addressController.text.trim(),
                           type: selectedType,
-                          balanceSyp: double.tryParse(balanceSypController.text) ?? 0.0,
-                          balanceUsd: double.tryParse(balanceUsdController.text) ?? 0.0,
+                          balanceSyp: finalSyp,
+                          balanceUsd: finalUsd,
                         ),
                       );
                     });

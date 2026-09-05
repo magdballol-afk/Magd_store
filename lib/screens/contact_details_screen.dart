@@ -25,7 +25,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       'date': DateTime(2026, 8, 15),
       'amount_syp': 100000.0,
       'amount_usd': 0.0,
-      'type': 'payment', // payment = قبض/دفعة
+      'type': 'payment',
       'note': 'دفعة تحت الحساب',
     },
     {
@@ -34,7 +34,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       'date': DateTime(2026, 8, 20),
       'amount_syp': -350000.0,
       'amount_usd': 0.0,
-      'type': 'invoice', // invoice = فاتورة
+      'type': 'invoice',
       'note': 'شراء بضاعة بالآجل',
     },
     {
@@ -69,9 +69,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     }).toList();
   }
 
-  // دالة اختيار التاريخ
-  
-  // دالة اختيار التاريخ المحدثة بدون التعارض اللغوي
+  // دالة اختيار التاريخ المحدثة
   Future<void> _selectDate(BuildContext context, bool isStart) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -79,17 +77,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
     );
-
-    if (picked != null) {
-      setState(() {
-        if (isStart) {
-          _startDate = picked;
-        } else {
-          _endDate = picked;
-        }
-      });
-    }
-  }
 
     if (picked != null) {
       setState(() {

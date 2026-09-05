@@ -1,6 +1,7 @@
 import 'screens/add_product_screen.dart';
 import 'screens/new_invoice_screen.dart';
 import 'screens/contacts_screen.dart';
+import 'screens/smart_report_screen.dart';
 
 import 'package:flutter/material.dart';
 
@@ -208,7 +209,10 @@ const SizedBox(height: 20),
     Expanded(
       child: GestureDetector(
         onTap: () {
-          // التقرير الذكي
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const SmartReportScreen()),
+      );
         },
         child: _buildGradientButton(
           title: 'تقرير ذكي',

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'screens/add_product_screen.dart';
 import 'screens/smart_report_screen.dart';
+import 'screens/products_screen.dart';
+import 'screens/invoices_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -33,12 +35,11 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
 
-  // قائمة الشاشات المرتبطة بالشريط السفلي
   final List<Widget> _screens = [
-    const DashboardScreenContent(), // الشاشة الرئيسية
-    const InvoicesScreenPlaceholder(), // شاشة الفواتير
-    const ProductsScreenPlaceholder(), // شاشة المنتجات
-    const SmartReportScreen(), // شاشة التقارير
+    const DashboardScreenContent(),
+    const InvoicesScreen(),
+    const ProductsScreen(),
+    const SmartReportScreen(),
   ];
 
   @override
@@ -91,7 +92,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 }
 
-// محتوى الواجهة الرئيسية (Dashboard)
 class DashboardScreenContent extends StatelessWidget {
   const DashboardScreenContent({super.key});
 
@@ -103,7 +103,6 @@ class DashboardScreenContent extends StatelessWidget {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              // الهيدر المتموج العلوي
               Container(
                 padding: const EdgeInsets.all(20.0),
                 decoration: const BoxDecoration(
@@ -156,7 +155,6 @@ class DashboardScreenContent extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // الإحصائيات والأرقام الرئيسية
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Column(
@@ -211,7 +209,6 @@ class DashboardScreenContent extends StatelessWidget {
 
                     const SizedBox(height: 20),
 
-                    // قسم إجراءات سريعة
                     const Align(
                       alignment: Alignment.centerRight,
                       child: Text(
@@ -281,7 +278,6 @@ class DashboardScreenContent extends StatelessWidget {
 
                     const SizedBox(height: 20),
 
-                    // تحليل AI
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -388,41 +384,6 @@ class DashboardScreenContent extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// شاشات مؤقتة للتبويب السفلي لحين إكمالها
-class InvoicesScreenPlaceholder extends StatelessWidget {
-  const InvoicesScreenPlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('سجل الفواتير', style: TextStyle(color: Colors.white)),
-        backgroundColor: const Color(0xFF0284C7),
-      ),
-      body: const Center(
-        child: Text('شاشة سجل الفواتير (سيتم تطويرها بالخطوة القادمة)', style: TextStyle(fontSize: 15)),
-      ),
-    );
-  }
-}
-
-class ProductsScreenPlaceholder extends StatelessWidget {
-  const ProductsScreenPlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('قائمة المنتجات والمخزون', style: TextStyle(color: Colors.white)),
-        backgroundColor: const Color(0xFF0284C7),
-      ),
-      body: const Center(
-        child: Text('شاشة المنتجات والمخزون (سيتم تطويرها بالخطوة القادمة)', style: TextStyle(fontSize: 15)),
       ),
     );
   }

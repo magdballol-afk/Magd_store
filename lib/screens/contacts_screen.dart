@@ -58,9 +58,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
     }).toList();
   }
 
-  // نافذة إضافة جهة اتصال جديدة
-  
-  // نافذة إضافة جهة اتصال جديدة مع تحديد نوع الرصيد (مدين/دائن)
+  // نافذة إضافة جهة اتصال جديدة مع تحديد مدين/دائن
   void _showAddContactDialog(ContactType defaultType) {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
@@ -69,9 +67,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
     final balanceUsdController = TextEditingController(text: '0');
     
     ContactType selectedType = defaultType;
-    
-    // متغيرات لتحديد هل الرصيد مدين (عليه) أو دائن (له)
-    bool isSypDebit = true; // true = مدين (مطلوب منه)، false = دائن (له)
+    bool isSypDebit = true; // true = مدين (عليه)، false = دائن (له)
     bool isUsdDebit = true;
 
     showDialog(
@@ -129,14 +125,11 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
                   const Text('الرصيد الافتتاحي (إن وجد):', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
 
-                  // رصيد الليرة السورية مع تحديد (مدين/دائن)
+                  // رصيد الليرة السورية
                   TextField(
                     controller: balanceSypController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'الرصيد (ل.س)',
-                      prefixIcon: Icon(Icons.money),
-                    ),
+                    decoration: const InputDecoration(labelText: 'الرصيد (ل.س)', prefixIcon: Icon(Icons.money)),
                     textAlign: TextAlign.right,
                   ),
                   Row(
@@ -158,14 +151,11 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
 
                   const SizedBox(height: 10),
 
-                  // رصيد الدولار مع تحديد (مدين/دائن)
+                  // رصيد الدولار
                   TextField(
                     controller: balanceUsdController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'الرصيد (\$)',
-                      prefixIcon: Icon(Icons.attach_money),
-                    ),
+                    decoration: const InputDecoration(labelText: 'الرصيد (\$)', prefixIcon: Icon(Icons.attach_money)),
                     textAlign: TextAlign.right,
                   ),
                   Row(
@@ -198,7 +188,6 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
                     final double rawSyp = double.tryParse(balanceSypController.text) ?? 0.0;
                     final double rawUsd = double.tryParse(balanceUsdController.text) ?? 0.0;
 
-                    // إذا كان مدين (عليه) نحفظ القيمة بسالب، أما إذا كان دائن (له) نحفظ بـ موجب
                     final double finalSyp = isSypDebit ? -rawSyp.abs() : rawSyp.abs();
                     final double finalUsd = isUsdDebit ? -rawUsd.abs() : rawUsd.abs();
 
@@ -316,7 +305,6 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
       padding: const EdgeInsets.all(8),
       itemBuilder: (context, index) {
         final contact = filteredList[index];
-        final isDebt = contact.balanceSyp < 0;
 
         return Card(
           elevation: 2,
@@ -335,24 +323,40 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  '${contact.balanceSyp.abs().toStringAsFixed(0)} ل.س',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: contact.balanceSyp == 0
-                        ? Colors.grey
-                        : (isDebt ? Colors.red : Colors.green),
+                // عرض رصيد ل.س إذا وجد أو إذا كان الحسابين صفراً
+                if (contact.balanceSyp != 0 || (contact.balanceSyp == 0 && contact.balanceUsd == 0)) ...[
+                  Text(
+                    '${contact.balanceSyp.abs().toStringAsFixed(0)} ل.س',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: contact.balanceSyp == 0
+                          ? Colors.grey
+                          : (contact.balanceSyp < 0 ? Colors.red : Colors.green),
+                    ),
                   ),
-                ),
+                ],
+                
+                // عرض رصيد $ إذا وجد
+                if (contact.balanceUsd != 0) ...[
+                  Text(
+                    '${contact.balanceUsd.abs().toStringAsFixed(2)} \$',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: contact.balanceUsd < 0 ? Colors.red : Colors.green,
+                    ),
+                  ),
+                ],
+
+                // حالة الحساب
                 Text(
-                  contact.balanceSyp == 0
+                  (contact.balanceSyp == 0 && contact.balanceUsd == 0)
                       ? 'متزن'
-                      : (isDebt ? 'مطلوب منه' : 'له عندنا'),
+                      : ((contact.balanceSyp < 0 || contact.balanceUsd < 0) ? 'مطلوب منه' : 'له عندنا'),
                   style: TextStyle(
                     fontSize: 11,
-                    color: contact.balanceSyp == 0
+                    color: (contact.balanceSyp == 0 && contact.balanceUsd == 0)
                         ? Colors.grey
-                        : (isDebt ? Colors.red : Colors.green),
+                        : ((contact.balanceSyp < 0 || contact.balanceUsd < 0) ? Colors.red : Colors.green),
                   ),
                 ),
               ],

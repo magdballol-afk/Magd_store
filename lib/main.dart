@@ -3,7 +3,6 @@ import 'screens/add_product_screen.dart';
 import 'screens/smart_report_screen.dart';
 import 'screens/products_screen.dart';
 import 'screens/invoices_screen.dart';
-
 void main() {
   runApp(const MyApp());
 }

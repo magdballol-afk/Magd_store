@@ -17,34 +17,53 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   DateTime? _startDate;
   DateTime? _endDate;
 
-  // قائمة الحركات المعتمدة
+  // قائمة الحركات المالية (تتضمن مبيعات، مشتريات، ودفعات للعملاء والموردين)
   final List<Map<String, dynamic>> _transactions = [
     {
-      'id': '1',
-      'title': 'دفعة نقداً',
-      'date': DateTime(2026, 8, 15),
-      'amount_syp': 100000.0,
-      'amount_usd': 0.0,
-      'type': 'payment',
-      'note': 'دفعة تحت الحساب',
-    },
-    {
-      'id': '2',
+      'id': '101',
       'title': 'فاتورة مبيعات #101',
-      'date': DateTime(2026, 8, 20),
+      'date': DateTime(2026, 8, 15),
       'amount_syp': -350000.0,
       'amount_usd': 0.0,
-      'type': 'invoice',
-      'note': 'شراء بضاعة بالآجل',
+      'type': 'invoice', // فاتورة
+      'note': 'بضاعة بالآجل',
+      'items': [
+        {'name': 'منتج تجريبي 1', 'qty': 2, 'price': 100000.0},
+        {'name': 'منتج تجريبي 2', 'qty': 1, 'price': 150000.0},
+      ],
     },
     {
-      'id': '3',
-      'title': 'دفعة بالدولار',
+      'id': '102',
+      'title': 'دفعة مقبوضة',
+      'date': DateTime(2026, 8, 20),
+      'amount_syp': 100000.0,
+      'amount_usd': 0.0,
+      'type': 'payment', // دفعة
+      'note': 'دفعة تحت الحساب',
+      'items': [],
+    },
+    {
+      'id': '103',
+      'title': 'فاتورة مشتريات #501',
+      'date': DateTime(2026, 8, 25),
+      'amount_syp': 500000.0,
+      'amount_usd': 0.0,
+      'type': 'purchase', // شراء من مورد
+      'note': 'توريد مواد خام',
+      'items': [
+        {'name': 'مادة خام أ', 'qty': 10, 'price': 30000.0},
+        {'name': 'مادة خام ب', 'qty': 4, 'price': 50000.0},
+      ],
+    },
+    {
+      'id': '104',
+      'title': 'دفعة مسددة للمورد',
       'date': DateTime(2026, 9, 1),
       'amount_syp': 0.0,
-      'amount_usd': 50.0,
-      'type': 'payment',
-      'note': 'تسليم دفعة بالدولار',
+      'amount_usd': -50.0,
+      'type': 'supplier_payment', // تسديد للمورد
+      'note': 'دفعة بالدولار حساب المورد',
+      'items': [],
     },
   ];
 
@@ -69,7 +88,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     }).toList();
   }
 
-  // دالة اختيار التاريخ المحدثة
+  // اختيار التاريخ
   Future<void> _selectDate(BuildContext context, bool isStart) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -89,6 +108,120 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     }
   }
 
+  // نافذة تفاصيل الفاتورة (مبيعات أو مشتريات)
+  void _showInvoiceDetailsDialog(BuildContext context, Map<String, dynamic> item) {
+    final bool isPurchase = item['type'] == 'purchase';
+    final List<dynamic> items = item['items'] as List<dynamic>? ?? [];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          isPurchase ? 'تفاصيل فاتورة مشتريات' : 'تفاصيل فاتورة مبيعات',
+          textAlign: TextAlign.right,
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('رقم الفاتورة: ${item['title']}'),
+              Text('البيان / ملاحظات: ${item['note']}'),
+              const SizedBox(height: 10),
+              const Text('الأصناف والكميات:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Divider(),
+              if (items.isEmpty)
+                const Text('لا توجد تفاصيل أصناف مسجلة')
+              else
+                ...items.map((prod) {
+                  final double price = prod['price'] as double;
+                  final int qty = prod['qty'] as int;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('${prod['name']} × $qty'),
+                        Text('${(price * qty).toStringAsFixed(0)} ل.س'),
+                      ],
+                    ),
+                  );
+                }),
+              const Divider(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('المبلغ الإجمالي:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    '${(item['amount_syp'] as double).abs().toStringAsFixed(0)} ل.س',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isPurchase ? Colors.orange.shade800 : Colors.red,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // نافذة تفاصيل الدفعة المالية (قبض من عميل / تسديد لمورد)
+  void _showPaymentDetailsDialog(BuildContext context, Map<String, dynamic> item) {
+    final bool isSupplierPayment = item['type'] == 'supplier_payment';
+    final double syp = item['amount_syp'] as double;
+    final double usd = item['amount_usd'] as double;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          isSupplierPayment ? 'إيصال دفعة مسددة للمورد' : 'إيصال دفعة مقبوضة من عميل',
+          textAlign: TextAlign.right,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('رقم العملية: #${item['id']}'),
+            Text('البيان: ${item['note']}'),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('المبلغ:'),
+                Text(
+                  syp != 0
+                      ? '${syp.abs().toStringAsFixed(0)} ل.س'
+                      : '${usd.abs().toStringAsFixed(2)} \$',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.green.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // نافذة تسجيل دفعة جديدة
   void _showAddPaymentDialog() {
     final sypController = TextEditingController(text: '0');
@@ -98,7 +231,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('تسجيل دفعة جديدة', textAlign: TextAlign.right),
+        title: Text(
+          _currentContact.type == ContactType.client ? 'تسجيل دفعة من عميل' : 'تسجيل دفعة لمورد',
+          textAlign: TextAlign.right,
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -126,7 +262,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
+            child: const Text('إغلاق'),
           ),
           ElevatedButton(
             onPressed: () {
@@ -134,15 +270,17 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
               final usd = double.tryParse(usdController.text) ?? 0.0;
 
               if (syp > 0 || usd > 0) {
+                final bool isClient = _currentContact.type == ContactType.client;
                 setState(() {
                   _transactions.insert(0, {
-                    'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                    'title': 'دفعة مقبوضة',
+                    'id': DateTime.now().millisecondsSinceEpoch.toString().substring(7),
+                    'title': isClient ? 'دفعة مقبوضة' : 'دفعة مسددة للمورد',
                     'date': DateTime.now(),
-                    'amount_syp': syp,
-                    'amount_usd': usd,
-                    'type': 'payment',
+                    'amount_syp': isClient ? syp : -syp,
+                    'amount_usd': isClient ? usd : -usd,
+                    'type': isClient ? 'payment' : 'supplier_payment',
                     'note': noteController.text.trim(),
+                    'items': [],
                   });
 
                   _currentContact = ContactModel(
@@ -151,8 +289,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     phone: _currentContact.phone,
                     address: _currentContact.address,
                     type: _currentContact.type,
-                    balanceSyp: _currentContact.balanceSyp + syp,
-                    balanceUsd: _currentContact.balanceUsd + usd,
+                    balanceSyp: _currentContact.balanceSyp + (isClient ? syp : -syp),
+                    balanceUsd: _currentContact.balanceUsd + (isClient ? usd : -usd),
                   );
                 });
                 Navigator.pop(context);
@@ -178,7 +316,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         ),
         body: Column(
           children: [
-            // بطاقة ملخص الحساب
+            // ملخص الحساب
             Card(
               margin: const EdgeInsets.all(12),
               color: Colors.blue.shade50,
@@ -210,7 +348,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
               ),
             ),
 
-            // شريط تصفية الفترة الزمنية
+            // شريط تصفية الفترة الزمنيّة
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               color: Colors.grey.shade100,
@@ -269,16 +407,17 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
               ),
             ),
 
-            // قائمة الحركات التابعة للكشف
+            // قائمة الحركات المعتمدة مع إمكانية النقر للفتح
             Expanded(
               child: filteredList.isEmpty
-                  ? const Center(child: Text('لا توجد حرّكات مسجلة في هذه الفترة'))
+                  ? const Center(child: Text('لا توجد حركات مسجلة في هذه الفترة'))
                   : ListView.builder(
                       itemCount: filteredList.length,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       itemBuilder: (context, index) {
                         final item = filteredList[index];
-                        final bool isPayment = item['type'] == 'payment';
+                        final String type = item['type'] as String;
+                        final bool isPayment = (type == 'payment' || type == 'supplier_payment');
                         final double sypAmount = item['amount_syp'] as double;
                         final double usdAmount = item['amount_usd'] as double;
                         final DateTime date = item['date'] as DateTime;
@@ -286,6 +425,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 4),
                           child: ListTile(
+                            onTap: () {
+                              if (isPayment) {
+                                _showPaymentDetailsDialog(context, item);
+                              } else {
+                                _showInvoiceDetailsDialog(context, item);
+                              }
+                            },
                             leading: CircleAvatar(
                               backgroundColor: isPayment ? Colors.green.shade100 : Colors.red.shade100,
                               child: Icon(

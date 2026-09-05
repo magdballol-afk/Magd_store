@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/contact_model.dart';
+import 'contact_details_screen.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -262,7 +263,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
         final contact = filteredList[index];
         final isDebt = contact.balanceSyp < 0;
 
-        return Card(
+                return Card(
           elevation: 2,
           margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           child: ListTile(
@@ -302,11 +303,12 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
               ],
             ),
             onTap: () {
-              // سيتم الربط هنا بصفحة كشف حساب التفصيلي للعميل/المورد
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ContactDetailsScreen(contact: contact),
+                ),
+              );
             },
           ),
         );
-      },
-    );
-  }
-}

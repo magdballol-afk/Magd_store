@@ -13,14 +13,14 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   
-  // قائمة مؤقتة محاكاة للبيانات (ستُربط بقاعدة البيانات لاحقاً)
+  // قائمة مؤقتة محاكاة للبيانات
   final List<ContactModel> _contactsList = [
     ContactModel(
       id: '1',
       name: 'أحمد محمود',
       phone: '0912345678',
       type: ContactType.client,
-      balanceSyp: -250000, // عليه دَين
+      balanceSyp: -250000,
       balanceUsd: 0,
     ),
     ContactModel(
@@ -28,7 +28,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
       name: 'شركة البركة للتوريد',
       phone: '0987654321',
       type: ContactType.supplier,
-      balanceSyp: 500000, // له مستحقات
+      balanceSyp: 500000,
       balanceUsd: 100,
     ),
   ];
@@ -48,7 +48,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
     super.dispose();
   }
 
-  // تصفية القائمة حسب النوع (عميل/مورد) ونص البحث
+  // تصفية القائمة حسب النوع ونص البحث
   List<ContactModel> _getFilteredContacts(ContactType type) {
     return _contactsList.where((contact) {
       final matchesType = contact.type == type;
@@ -80,7 +80,6 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // اختيار النوع
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -186,7 +185,6 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
         ),
         body: Column(
           children: [
-            // شريط البحث
             Padding(
               padding: const EdgeInsets.all(12.0),
               child: TextField(
@@ -215,8 +213,6 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
                 ),
               ),
             ),
-            
-            // عرض القوائم حسب التبويب
             Expanded(
               child: TabBarView(
                 controller: _tabController,
@@ -243,7 +239,6 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
     );
   }
 
-  // بناء قائمة الجهات
   Widget _buildContactList(ContactType type) {
     final filteredList = _getFilteredContacts(type);
 
@@ -263,7 +258,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
         final contact = filteredList[index];
         final isDebt = contact.balanceSyp < 0;
 
-                return Card(
+        return Card(
           elevation: 2,
           margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           child: ListTile(
@@ -312,3 +307,7 @@ class _ContactsScreenState extends State<ContactsScreen> with SingleTickerProvid
             },
           ),
         );
+      },
+    );
+  }
+}

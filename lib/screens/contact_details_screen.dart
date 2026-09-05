@@ -70,14 +70,26 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   }
 
   // دالة اختيار التاريخ
+  
+  // دالة اختيار التاريخ المحدثة بدون التعارض اللغوي
   Future<void> _selectDate(BuildContext context, bool isStart) async {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: isStart ? (_startDate ?? DateTime.now()) : (_endDate ?? DateTime.now()),
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
-      locale: const Locale('ar', ''),
     );
+
+    if (picked != null) {
+      setState(() {
+        if (isStart) {
+          _startDate = picked;
+        } else {
+          _endDate = picked;
+        }
+      });
+    }
+  }
 
     if (picked != null) {
       setState(() {

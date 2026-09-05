@@ -116,7 +116,14 @@ class SmartReportScreen extends StatelessWidget {
               children: [
                 Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B))),
                 const SizedBox(height: 4),
-                Text(description, style: const TextStyle(fontSize: 13, color: Colors.black60, height: 1.4)),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.black.withOpacity(0.6),
+                    height: 1.4,
+                  ),
+                ),
               ],
             ),
           ),
@@ -125,3 +132,4 @@ class SmartReportScreen extends StatelessWidget {
     );
   }
 }
+

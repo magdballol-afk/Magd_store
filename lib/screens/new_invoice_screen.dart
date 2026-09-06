@@ -13,11 +13,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   final TextEditingController _clientController = TextEditingController();
   final TextEditingController _overallDiscountController = TextEditingController(text: '0');
 
-  // قائمة المواد المضافة للفاتورة
-  final List<Map<String, dynamic>> _selectedProducts = [
-    {'name': 'ميموزا', 'qty': 1, 'price': 1000.0, 'discount': 0.0},
-    {'name': 'ديمة', 'qty': 1, 'price': 1000.0, 'discount': 0.0},
-  ];
+  // قائمة المواد المضافة للفاتورة (تبدأ فارغة تماماً)
+  final List<Map<String, dynamic>> _selectedProducts = [];
 
   // حساب المجموع الكلي
   double get _subtotal {
@@ -34,6 +31,18 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   double get _finalTotal {
     double net = _subtotal - _overallDiscount;
     return net > 0 ? net : 0;
+  }
+
+  // دالة مؤقتة لتجربة إضافة مادة عند الضغط على الزر
+  void _addProduct() {
+    setState(() {
+      _selectedProducts.add({
+        'name': 'مادة تجريبية ${_selectedProducts.length + 1}',
+        'qty': 1,
+        'price': 1000.0,
+        'discount': 0.0,
+      });
+    });
   }
 
   @override
@@ -130,68 +139,87 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
               // زر إضافة منتج
               OutlinedButton.icon(
-                onPressed: () {
-                  // فتح نافذة اختيار مادة
-                },
+                onPressed: _addProduct,
                 icon: const Icon(Icons.add_shopping_cart),
                 label: const Text('إضافة منتج للفاتورة'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 45),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-              // قائمة المواد مع الحسم المباشر غير الإجباري لكل مادة
-              ..._selectedProducts.map((item) {
-                double totalItemPrice = (item['qty'] * item['price']) - item['discount'];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            Text('${totalItemPrice.toStringAsFixed(1)} ل.س', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text('الكمية: ${item['qty']} × ${item['price']} ل.س', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                        const SizedBox(height: 8),
-                        
-                        // حقل حسم مباشر اختياري للمادة
-                        Row(
-                          children: [
-                            const Text('حسم مباشر:', style: TextStyle(fontSize: 12, color: Colors.red)),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 100,
-                              height: 32,
-                              child: TextField(
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  border: OutlineInputBorder(),
-                                  hintText: '0.0',
-                                ),
-                                onChanged: (val) {
-                                  setState(() {
-                                    item['discount'] = double.tryParse(val) ?? 0.0;
-                                  });
-                                },
-                              ),
-                            ),
-                            const Text(' ل.س', style: TextStyle(fontSize: 12)),
-                          ],
-                        ),
-                      ],
-                    ),
+              // عرض حالة القائمة الفارغة أو قائمة المواد المضافة
+              if (_selectedProducts.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24.0),
+                  child: Text(
+                    'لم يتم إضافة أي منتجات بعد',
+                    style: TextStyle(color: Colors.grey, fontSize: 15),
                   ),
-                );
-              }),
+                )
+              else
+                ..._selectedProducts.asMap().entries.map((entry) {
+                  int index = entry.key;
+                  var item = entry.value;
+                  double totalItemPrice = (item['qty'] * item['price']) - item['discount'];
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              Row(
+                                children: [
+                                  Text('${totalItemPrice.toStringAsFixed(1)} ل.س', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                    onPressed: () {
+                                      setState(() {
+                                        _selectedProducts.removeAt(index);
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          Text('الكمية: ${item['qty']} × ${item['price']} ل.س', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Text('حسم مباشر:', style: TextStyle(fontSize: 12, color: Colors.red)),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 100,
+                                height: 32,
+                                child: TextField(
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    border: OutlineInputBorder(),
+                                    hintText: '0.0',
+                                  ),
+                                  onChanged: (val) {
+                                    setState(() {
+                                      item['discount'] = double.tryParse(val) ?? 0.0;
+                                    });
+                                  },
+                                ),
+                              ),
+                              const Text(' ل.س', style: TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
 
               const Divider(height: 24),
 
@@ -210,8 +238,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
-
-                      // حسم إجمالي على الفاتورة
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [

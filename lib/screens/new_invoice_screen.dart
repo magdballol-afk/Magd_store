@@ -10,11 +10,26 @@ class NewInvoiceScreen extends StatefulWidget {
 class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   String _invoiceType = 'مبيعات'; // مبيعات أو مشتريات
   String _paymentType = 'نقدي'; // نقدي أو أجل (دين)
+  String _dealType = 'مفرق'; // نوع التعامل: مفرق، نصف جملة، جملة
+
   final TextEditingController _clientController = TextEditingController();
   final TextEditingController _overallDiscountController = TextEditingController(text: '0');
 
-  // قائمة المواد المضافة للفاتورة (تبدأ فارغة تماماً)
+  // قائمة المواد المضافة للفاتورة
   final List<Map<String, dynamic>> _selectedProducts = [];
+
+  // دالة جلب السعر المناسب بناءً على نوع التعامل المحدد
+  double _getPriceByDealType(Map<String, double> prices) {
+    switch (_dealType) {
+      case 'جملة':
+        return prices['wholesale'] ?? 0.0;
+      case 'نصف جملة':
+        return prices['semiWholesale'] ?? 0.0;
+      case 'مفرق':
+      default:
+        return prices['retail'] ?? 0.0;
+    }
+  }
 
   // حساب المجموع الكلي
   double get _subtotal {
@@ -33,15 +48,37 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     return net > 0 ? net : 0;
   }
 
-  // دالة مؤقتة لتجربة إضافة مادة عند الضغط على الزر
+  // دالة تجريبية لإضافة مادة مع تحديد سعرها وفق نوع التعامل الحالي
   void _addProduct() {
+    // أسعار افتراضية كمثال للمادة عند اختيارها
+    Map<String, double> samplePrices = {
+      'retail': 1200.0,        // سعر المفرق
+      'semiWholesale': 1100.0, // سعر نصف الجملة
+      'wholesale': 1000.0,     // سعر الجملة
+    };
+
+    double currentPrice = _getPriceByDealType(samplePrices);
+
     setState(() {
       _selectedProducts.add({
         'name': 'مادة تجريبية ${_selectedProducts.length + 1}',
         'qty': 1,
-        'price': 1000.0,
+        'prices': samplePrices,
+        'price': currentPrice,
         'discount': 0.0,
       });
+    });
+  }
+
+  // تحديث أسعار كافة المواد المعروضة عند تغيير نوع التعامل
+  void _updateAllProductsPrices(String newDealType) {
+    setState(() {
+      _dealType = newDealType;
+      for (var item in _selectedProducts) {
+        if (item.containsKey('prices')) {
+          item['price'] = _getPriceByDealType(Map<String, double>.from(item['prices']));
+        }
+      }
     });
   }
 
@@ -58,7 +95,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              // قسم نوع الفاتورة وطريقة الدفع
+              // قسم نوع الفاتورة وطريقة الدفع والعميل ونوع التعامل
               Card(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: Padding(
@@ -114,6 +151,28 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
                       ),
+                      const SizedBox(height: 12),
+
+                      // قائمة منسدلة لاختيار نوع التعامل (مفرق، نصف جملة، جملة)
+                      DropdownButtonFormField<String>(
+                        value: _dealType,
+                        decoration: const InputDecoration(
+                          labelText: 'نوع التعامل',
+                          prefixIcon: Icon(Icons.loyalty_outlined),
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'مفرق', child: Text('مفرق')),
+                          DropdownMenuItem(value: 'نصف جملة', child: Text('نصف جملة')),
+                          DropdownMenuItem(value: 'جملة', child: Text('جملة')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            _updateAllProductsPrices(val);
+                          }
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -148,7 +207,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               ),
               const SizedBox(height: 16),
 
-              // عرض حالة القائمة الفارغة أو قائمة المواد المضافة
+              // قائمة المواد
               if (_selectedProducts.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 24.0),
@@ -189,7 +248,10 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                               ),
                             ],
                           ),
-                          Text('الكمية: ${item['qty']} × ${item['price']} ل.س', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                          Text(
+                            'الكمية: ${item['qty']} × ${item['price']} ل.س (${_dealType})',
+                            style: const TextStyle(color: Colors.grey, fontSize: 13),
+                          ),
                           const SizedBox(height: 8),
                           Row(
                             children: [

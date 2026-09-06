@@ -1,138 +1,39 @@
 import 'package:flutter/material.dart';
 
-class NewInvoiceScreen extends StatefulWidget {
-  const NewInvoiceScreen({super.key});
+class CreateInvoiceScreen extends StatefulWidget {
+  const CreateInvoiceScreen({super.key});
 
   @override
-  State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();
+  State<CreateInvoiceScreen> createState() => _CreateInvoiceScreenState();
 }
 
-class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
-  // 1. إعدادات الفاتورة الأساسية
-  String _invoiceType = 'مبيعات'; // 'مبيعات' أو 'مشتريات'
-  String _paymentType = 'نقدي';   // 'نقدي' أو 'آجل'
-  
-  final TextEditingController _clientNameController = TextEditingController();
-  
-  // 2. سعر الصرف والعملة
-  double _exchangeRate = 15000.0; 
-  String _selectedCurrency = 'SYP';
+class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
+  String _invoiceType = 'مبيعات'; // مبيعات أو مشتريات
+  String _paymentType = 'نقدي'; // نقدي أو أجل (دين)
+  final TextEditingController _clientController = TextEditingController();
+  final TextEditingController _overallDiscountController = TextEditingController(text: '0');
 
-  // 3. قائمة منتجات الفاتورة
-  final List<Map<String, dynamic>> _invoiceItems = [];
-  
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _priceController = TextEditingController();
-  final TextEditingController _quantityController = TextEditingController(text: '1');
+  // قائمة المواد المضافة للفاتورة
+  List<Map<String, dynamic>> _selectedProducts = [
+    {'name': 'ميموزا', 'qty': 1, 'price': 1000.0, 'discount': 0.0},
+    {'name': 'ديمة', 'qty': 1, 'price': 1000.0, 'discount': 0.0},
+  ];
 
-  // حساب الإجمالي بالليرة السورية
-  double get _totalInSyp {
-    double total = 0.0;
-    for (var item in _invoiceItems) {
-      if (item['currency'] == 'USD') {
-        total += (item['total'] as double) * _exchangeRate;
-      } else {
-        total += item['total'] as double;
-      }
+  // حساب المجموع الكلي
+  double get _subtotal {
+    double total = 0;
+    for (var item in _selectedProducts) {
+      double itemTotal = (item['qty'] * item['price']) - item['discount'];
+      total += itemTotal > 0 ? itemTotal : 0;
     }
     return total;
   }
 
-  // حساب الإجمالي بالدولار
-  double get _totalInUsd {
-    return _exchangeRate > 0 ? _totalInSyp / _exchangeRate : 0.0;
-  }
+  double get _overallDiscount => double.tryParse(_overallDiscountController.text) ?? 0.0;
 
-  void _addItem() {
-    final String name = _nameController.text.trim();
-    final double price = double.tryParse(_priceController.text) ?? 0.0;
-    final int quantity = int.tryParse(_quantityController.text) ?? 1;
-
-    if (name.isNotEmpty && price > 0) {
-      setState(() {
-        _invoiceItems.add({
-          'name': name,
-          'quantity': quantity,
-          'price': price,
-          'currency': _selectedCurrency,
-          'total': price * quantity,
-        });
-      });
-      _nameController.clear();
-      _priceController.clear();
-      _quantityController.text = '1';
-      Navigator.pop(context);
-    }
-  }
-
-  void _showAddItemDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: const Text('إضافة منتج للفاتورة', textAlign: TextAlign.right),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(labelText: 'اسم المنتج'),
-                    textAlign: TextAlign.right,
-                  ),
-                  TextField(
-                    controller: _priceController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'السعر (${_selectedCurrency == 'SYP' ? 'ل.س' : '\$'})',
-                    ),
-                    textAlign: TextAlign.right,
-                  ),
-                  TextField(
-                    controller: _quantityController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'الكمية'),
-                    textAlign: TextAlign.right,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ChoiceChip(
-                        label: const Text('ليرة سورية (SYP)'),
-                        selected: _selectedCurrency == 'SYP',
-                        onSelected: (selected) {
-                          if (selected) setDialogState(() => _selectedCurrency = 'SYP');
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      ChoiceChip(
-                        label: const Text('دولار (USD)'),
-                        selected: _selectedCurrency == 'USD',
-                        onSelected: (selected) {
-                          if (selected) setDialogState(() => _selectedCurrency = 'USD');
-                        },
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('إلغاء'),
-              ),
-              ElevatedButton(
-                onPressed: _addItem,
-                child: const Text('إضافة'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+  double get _finalTotal {
+    double net = _subtotal - _overallDiscount;
+    return net > 0 ? net : 0;
   }
 
   @override
@@ -141,23 +42,16 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          title: Text('فاتورة $_invoiceType جديدة'),
+          title: Text(_invoiceType == 'مبيعات' ? 'فاتورة مبيعات جديدة' : 'فاتورة مشتريات جديدة'),
           backgroundColor: const Color(0xFF0D47A1),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.currency_exchange),
-              tooltip: 'تغيير سعر الصرف',
-              onPressed: _showExchangeRateDialog,
-            )
-          ],
         ),
-        body: Padding(
+        body: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              // 1. خيارات نوع الفاتورة وطريقة الدفع
+              // قسم نوع الفاتورة وطريقة الدفع
               Card(
-                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: Column(
@@ -166,17 +60,18 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text('نوع الفاتورة:', style: TextStyle(fontWeight: FontWeight.bold)),
-                          SegmentedButton<String>(
-                            segments: const [
-                              ButtonSegment(value: 'مبيعات', label: Text('مبيعات')),
-                              ButtonSegment(value: 'مشتريات', label: Text('مشتريات')),
-                            ],
-                            selected: {_invoiceType},
-                            onSelectionChanged: (Set<String> newSelection) {
+                          ToggleButtons(
+                            isSelected: [_invoiceType == 'مبيعات', _invoiceType == 'مشتريات'],
+                            onPressed: (index) {
                               setState(() {
-                                _invoiceType = newSelection.first;
+                                _invoiceType = index == 0 ? 'مبيعات' : 'مشتريات';
                               });
                             },
+                            borderRadius: BorderRadius.circular(8),
+                            children: const [
+                              Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('مبيعات')),
+                              Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('مشتريات')),
+                            ],
                           ),
                         ],
                       ),
@@ -185,31 +80,30 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text('طريقة الدفع:', style: TextStyle(fontWeight: FontWeight.bold)),
-                          SegmentedButton<String>(
-                            segments: const [
-                              ButtonSegment(value: 'نقدي', label: Text('نقدي')),
-                              ButtonSegment(value: 'آجل', label: Text('آجل (دين)')),
-                            ],
-                            selected: {_paymentType},
-                            onSelectionChanged: (Set<String> newSelection) {
+                          ToggleButtons(
+                            isSelected: [_paymentType == 'نقدي', _paymentType == 'آجل (دين)'],
+                            onPressed: (index) {
                               setState(() {
-                                _paymentType = newSelection.first;
+                                _paymentType = index == 0 ? 'نقدي' : 'آجل (دين)';
                               });
                             },
+                            borderRadius: BorderRadius.circular(8),
+                            children: const [
+                              Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('نقدي')),
+                              Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('آجل (دين)')),
+                            ],
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      // اسم العميل / المورد
                       TextField(
-                        controller: _clientNameController,
+                        controller: _clientController,
                         decoration: InputDecoration(
                           labelText: _invoiceType == 'مبيعات' ? 'اسم العميل' : 'اسم المورد',
                           prefixIcon: const Icon(Icons.person),
                           border: const OutlineInputBorder(),
-                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
-                        textAlign: TextAlign.right,
                       ),
                     ],
                   ),
@@ -217,62 +111,92 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               ),
               const SizedBox(height: 12),
 
-              // 2. شريط سعر الصرف
+              // سعر الصرف
               Container(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('سعر الصرف:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text('1 \$ = ${_exchangeRate.toStringAsFixed(0)} ل.س',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                  children: const [
+                    Text('سعر الصرف:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('1 \$ = 15000 ل.س', style: TextStyle(color: Color(0xFF0D47A1), fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
 
-              // 3. زر إضافة منتج
-              ElevatedButton.icon(
-                onPressed: _showAddItemDialog,
+              // زر إضافة منتج
+              OutlinedButton.icon(
+                onPressed: () {
+                  // فتح نافذة اختيار مادة
+                },
                 icon: const Icon(Icons.add_shopping_cart),
                 label: const Text('إضافة منتج للفاتورة'),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 45),
                 ),
               ),
               const SizedBox(height: 12),
 
-              // 4. عرض قائمة المنتجات المضافة
-              Expanded(
-                child: _invoiceItems.isEmpty
-                    ? const Center(child: Text('لم يتم إضافة أي منتجات بعد'))
-                    : ListView.builder(
-                        itemCount: _invoiceItems.length,
-                        itemBuilder: (context, index) {
-                          final item = _invoiceItems[index];
-                          final currencySymbol = item['currency'] == 'USD' ? '\$' : 'ل.س';
-                          return Card(
-                            child: ListTile(
-                              title: Text(item['name']),
-                              subtitle: Text('الكمية: ${item['quantity']} × ${item['price']} $currencySymbol'),
-                              trailing: Text(
-                                '${item['total']} $currencySymbol',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+              // قائمة المواد مع الحسم المباشر لكل مادة
+              ..._selectedProducts.map((item) {
+                double totalItemPrice = (item['qty'] * item['price']) - item['discount'];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text('${totalItemPrice.toStringAsFixed(1)} ل.س', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text('الكمية: ${item['qty']} × ${item['price']} ل.س', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                        
+                        // حقل حسم شريحة مباشر للمادة (يظهر دائماً أو عند المشتريات)
+                        Row(
+                          children: [
+                            const Text('حسم مباشر:', style: TextStyle(fontSize: 12, color: Colors.red)),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 90,
+                              height: 30,
+                              child: TextField(
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  border: OutlineInputBorder(),
+                                  hintText: '0.0',
+                                ),
+                                onChanged: (val) {
+                                  setState(() {
+                                    item['discount'] = double.tryParse(val) ?? 0.0;
+                                  });
+                                },
                               ),
                             ),
-                          );
-                        },
-                      ),
-              ),
-              const Divider(),
+                            const Text(' ل.س', style: TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
 
-              // 5. بطاقة الإجمالي بالعملتين
+              const Divider(height: 24),
+
+              // قسم الحسم الإجمالي والمجموع النهائي
               Card(
-                color: Colors.grey.shade100,
+                color: Colors.grey.shade50,
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: Column(
@@ -280,77 +204,73 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('الإجمالي (SYP):', style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text('${_totalInSyp.toStringAsFixed(0)} ل.س',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                          const Text('المجموع الفرعي:'),
+                          Text('${_subtotal.toStringAsFixed(0)} ل.س', style: const TextStyle(fontWeight: FontWeight.bold)),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
+
+                      // حسم إجمالي على الفاتورة ككل (خصيصاً لـ المشتريات والمبيعات)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('الإجمالي (USD):', style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text('${_totalInUsd.toStringAsFixed(2)} \$',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                          const Text('حسم الفاتورة الإجمالي:', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                          SizedBox(
+                            width: 120,
+                            height: 35,
+                            child: TextField(
+                              controller: _overallDiscountController,
+                              keyboardType: TextInputType.number,
+                              textAlign: TextAlign.center,
+                              decoration: const InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                border: OutlineInputBorder(),
+                                suffixText: 'ل.س',
+                              ),
+                              onChanged: (val) {
+                                setState(() {});
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('الإجمالي النهائي (SYP):', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16)),
+                          Text('${_finalTotal.toStringAsFixed(0)} ل.س', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('الإجمالي (USD):', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                          Text('\$ ${(_finalTotal / 15000).toStringAsFixed(2)}', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-              // 6. زر حفظ وإصدار الفاتورة
-              ElevatedButton(
-                onPressed: _invoiceItems.isEmpty
-                    ? null
-                    : () {
-                        final client = _clientNameController.text.trim();
-                        final clientText = client.isNotEmpty ? client : 'عميل عام';
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('تم حفظ فاتورة $_invoiceType ($_paymentType) للعميل: $clientText'),
-                          ),
-                        );
-                      },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  minimumSize: const Size.fromHeight(50),
+              // زر حفظ الفاتورة
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                  onPressed: () {
+                    // حفظ الفاتورة
+                  },
+                  child: const Text('حفظ وإصدار الفاتورة', style: TextStyle(fontSize: 16)),
                 ),
-                child: const Text('حفظ وإصدار الفاتورة', style: TextStyle(color: Colors.white, fontSize: 16)),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  void _showExchangeRateDialog() {
-    final TextEditingController rateController = TextEditingController(text: _exchangeRate.toString());
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تعديل سعر الصرف', textAlign: TextAlign.right),
-        content: TextField(
-          controller: rateController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'سعر 1 دولار بالليرة السورية'),
-          textAlign: TextAlign.right,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () {
-              final newRate = double.tryParse(rateController.text);
-              if (newRate != null && newRate > 0) {
-                setState(() => _exchangeRate = newRate);
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('حفظ'),
-          ),
-        ],
       ),
     );
   }

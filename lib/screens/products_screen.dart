@@ -1,190 +1,145 @@
 import 'package:flutter/material.dart';
 import 'add_product_screen.dart';
+import 'item_movement_filter_screen.dart';
 
-class ProductsScreen extends StatefulWidget {
-  const ProductsScreen({super.key});
-
-  @override
-  State<ProductsScreen> createState() => _ProductsScreenState();
-}
-
-class _ProductsScreenState extends State<ProductsScreen> {
-  String _searchQuery = '';
-
-  final List<Map<String, dynamic>> _products = [
-    {
-      'name': 'شامبو بانتين 400 مل',
-      'category': 'العناية الشخصية',
-      'price': '12,500 ل.س',
-      'quantity': 45,
-      'status': 'متوفر',
-      'statusColor': Colors.green,
-    },
-    {
-      'name': 'معجون أسنان كولجيت',
-      'category': 'العناية الشخصية',
-      'price': '8,000 ل.س',
-      'quantity': 3,
-      'status': 'قارب على الانتهاء',
-      'statusColor': Colors.orange,
-    },
-    {
-      'name': 'صابون دوف 100غ',
-      'category': 'منظفات',
-      'price': '4,500 ل.س',
-      'quantity': 120,
-      'status': 'متوفر',
-      'statusColor': Colors.green,
-    },
-    {
-      'name': 'مناديل فاين 500 منديل',
-      'category': 'ورقيات',
-      'price': '15,000 ل.س',
-      'quantity': 0,
-      'status': 'نفذت الكمية',
-      'statusColor': Colors.red,
-    },
-  ];
+class ProductsScreen extends StatelessWidget {
+  const ProductsScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final filteredProducts = _products.where((p) {
-      return p['name'].toString().contains(_searchQuery) ||
-          p['category'].toString().contains(_searchQuery);
-    }).toList();
-
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF0F6FF),
-        appBar: AppBar(
-          title: const Text('إدارة المنتجات والمخزون', style: TextStyle(color: Colors.white, fontSize: 18)),
-          backgroundColor: const Color(0xFF0284C7),
-          elevation: 0,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.add, color: Colors.white),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AddProductScreen()),
-                );
-              },
-            ),
-          ],
-        ),
-        body: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              color: Colors.white,
-              child: TextField(
-                onChanged: (value) {
-                  setState(() {
-                    _searchQuery = value;
-                  });
-                },
-                decoration: InputDecoration(
-                  hintText: 'ابحث عن منتج أو تصنيف...',
-                  prefixIcon: const Icon(Icons.search, color: Color(0xFF0284C7)),
-                  filled: true,
-                  fillColor: const Color(0xFFF1F5F9),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F7FA),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0277BD),
+        elevation: 0,
+        centerTitle: true,
+        title: const Text('إدارة المنتجات والمخزون', style: TextStyle(color: Colors.white)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AddProductScreen()),
+              );
+            },
+          )
+        ],
+      ),
+      body: Column(
+        children: [
+          // شريط البحث وزر كشف حركة مادة
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              children: [
+                TextField(
+                  textAlign: TextAlign.right,
+                  decoration: InputDecoration(
+                    hintText: 'بحث عن منتج أو تصنيف...',
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFF0277BD)),
+                    fillColor: Colors.white,
+                    filled: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
                 ),
+                const SizedBox(height: 10),
+                
+                // زر كشف حركة مادة المضاف حديثاً
+                SizedBox(
+                  width: double.infinity,
+                  height: 45,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0277BD),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.receipt_long, color: Colors.white),
+                    label: const Text(
+                      'كشف حركة مادة',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ItemMovementFilterScreen()),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // قائمة المنتجات المطابقة للصورة الثالثة
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                _buildProductCard('شامبو بانتين 400 مل', 'العناية الشخصية', '12,500 ل.س', 'متوفر (45)', Colors.green),
+                _buildProductCard('معجون أسنان كولجيت', 'العناية الشخصية', '8,000 ل.س', 'قارب على الانتهاء (3)', Colors.orange),
+                _buildProductCard('صابون دوف 100غ', 'منظفات', '4,500 ل.س', 'متوفر (120)', Colors.green),
+                _buildProductCard('مناديل فاين 500 منديل', 'ورقيات', '15,000 ل.س', 'نفذت الكمية (0)', Colors.red),
+              ],
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: const Color(0xFF0277BD),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('منتج جديد', style: TextStyle(color: Colors.white)),
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AddProductScreen()),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildProductCard(String title, String category, String price, String status, Color statusColor) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.inventory_2, color: Color(0xFF0277BD)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text('التصنيف: $category', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text(price, style: const TextStyle(color: Color(0xFF0277BD), fontWeight: FontWeight.bold)),
+                ],
               ),
             ),
-            Expanded(
-              child: filteredProducts.isEmpty
-                  ? const Center(child: Text('لا توجد منتجات مطابقة'))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: filteredProducts.length,
-                      itemBuilder: (context, index) {
-                        final product = filteredProducts[index];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              const CircleAvatar(
-                                backgroundColor: Color(0xFFE0F2FE),
-                                child: Icon(Icons.inventory_2, color: Color(0xFF0284C7)),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      product['name'],
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'التصنيف: ${product['category']}',
-                                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          product['price'],
-                                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0284C7), fontSize: 13),
-                                        ),
-                                        const Spacer(),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            color: (product['statusColor'] as Color).withOpacity(0.1),
-                                            borderRadius: BorderRadius.circular(6),
-                                          ),
-                                          child: Text(
-                                            '${product['status']} (${product['quantity']})',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: product['statusColor'],
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(status, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
             ),
           ],
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const AddProductScreen()),
-            );
-          },
-          backgroundColor: const Color(0xFF0284C7),
-          icon: const Icon(Icons.add, color: Colors.white),
-          label: const Text('منتج جديد', style: TextStyle(color: Colors.white)),
         ),
       ),
     );

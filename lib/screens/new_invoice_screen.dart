@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 
-class CreateInvoiceScreen extends StatefulWidget {
-  const CreateInvoiceScreen({super.key});
+class NewInvoiceScreen extends StatefulWidget {
+  const NewInvoiceScreen({super.key});
 
   @override
-  State<CreateInvoiceScreen> createState() => _CreateInvoiceScreenState();
+  State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();
 }
 
-class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
+class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   String _invoiceType = 'مبيعات'; // مبيعات أو مشتريات
   String _paymentType = 'نقدي'; // نقدي أو أجل (دين)
   final TextEditingController _clientController = TextEditingController();
   final TextEditingController _overallDiscountController = TextEditingController(text: '0');
 
   // قائمة المواد المضافة للفاتورة
-  List<Map<String, dynamic>> _selectedProducts = [
+  final List<Map<String, dynamic>> _selectedProducts = [
     {'name': 'ميموزا', 'qty': 1, 'price': 1000.0, 'discount': 0.0},
     {'name': 'ديمة', 'qty': 1, 'price': 1000.0, 'discount': 0.0},
   ];
@@ -141,7 +141,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               ),
               const SizedBox(height: 12),
 
-              // قائمة المواد مع الحسم المباشر لكل مادة
+              // قائمة المواد مع الحسم المباشر غير الإجباري لكل مادة
               ..._selectedProducts.map((item) {
                 double totalItemPrice = (item['qty'] * item['price']) - item['discount'];
                 return Card(
@@ -160,15 +160,16 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text('الكمية: ${item['qty']} × ${item['price']} ل.س', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                        const SizedBox(height: 8),
                         
-                        // حقل حسم شريحة مباشر للمادة (يظهر دائماً أو عند المشتريات)
+                        // حقل حسم مباشر اختياري للمادة
                         Row(
                           children: [
                             const Text('حسم مباشر:', style: TextStyle(fontSize: 12, color: Colors.red)),
                             const SizedBox(width: 8),
                             SizedBox(
-                              width: 90,
-                              height: 30,
+                              width: 100,
+                              height: 32,
                               child: TextField(
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
@@ -210,7 +211,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                       ),
                       const SizedBox(height: 8),
 
-                      // حسم إجمالي على الفاتورة ككل (خصيصاً لـ المشتريات والمبيعات)
+                      // حسم إجمالي على الفاتورة
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -273,5 +274,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _clientController.dispose();
+    _overallDiscountController.dispose();
+    super.dispose();
   }
 }

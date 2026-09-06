@@ -1,115 +1,132 @@
 import 'package:flutter/material.dart';
-import 'item_movement_ledger_screen.dart';
 
 class ItemMovementFilterScreen extends StatefulWidget {
-  const ItemMovementFilterScreen({Key? key}) : super(key: key);
+  const ItemMovementFilterScreen({super.key});
 
   @override
   State<ItemMovementFilterScreen> createState() => _ItemMovementFilterScreenState();
 }
 
 class _ItemMovementFilterScreenState extends State<ItemMovementFilterScreen> {
-  final TextEditingController _itemController = TextEditingController(text: 'شاي ليالينا 100غ');
-  final TextEditingController _fromDateController = TextEditingController(text: '2025/01/01');
-  final TextEditingController _toDateController = TextEditingController(text: '2026/09/06');
-  final TextEditingController _warehouseController = TextEditingController(text: 'المستودع 1');
-  final TextEditingController _accountController = TextEditingController();
+  DateTime? _fromDate;
+  DateTime? _toDate;
+  String _selectedMovementType = 'الكل';
+
+  final List<String> _movementTypes = ['الكل', 'مبيعات', 'مشتريات', 'مرتجعات', 'تعديل مخزون'];
+
+  Future<void> _selectDate(BuildContext context, bool isFromDate) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isFromDate) {
+          _fromDate = picked;
+        } else {
+          _toDate = picked;
+        }
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFEFEFEF),
-      appBar: AppBar(
-        title: const Text('خيارات كشف حركة مادة'),
-        backgroundColor: const Color(0xFF0277BD),
-        centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          children: [
-            _buildFilterRow('من تاريخ', _fromDateController, isDate: true),
-            _buildFilterRow('إلى تاريخ', _toDateController, isDate: true),
-            _buildFilterRow('اسم المادة', _itemController),
-            _buildFilterRow('الصنف', TextEditingController()),
-            _buildFilterRow('مستودع محدد', _warehouseController),
-            _buildFilterRow('حساب محدد', _accountController),
-            _buildFilterRow('الرقم التسلسلي', TextEditingController()),
-            _buildFilterRow('الباركود', TextEditingController()),
-            _buildFilterRow('المشروع', TextEditingController()),
-            _buildFilterRow('المندوب', TextEditingController()),
-            const SizedBox(height: 20),
-
-            // زر موافق لعرض كشف الحركة
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0277BD),
-                      padding: const EdgeInsets.vertical(12),
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ItemMovementLedgerScreen(
-                            itemName: _itemController.text,
-                            fromDate: _fromDateController.text,
-                            toDate: _toDateController.text,
-                          ),
-                        ),
-                      );
-                    },
-                    child: const Text('موافق / عرض', style: TextStyle(color: Colors.white, fontSize: 16)),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.vertical(12)),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('إلغاء'),
-                  ),
-                ),
-              ],
-            )
-          ],
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('تصفية حركة المواد'),
+          backgroundColor: const Color(0xFF0D47A1),
         ),
-      ),
-    );
-  }
-
-  Widget _buildFilterRow(String label, TextEditingController controller, {bool isDate = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              label,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              height: 38,
-              color: Colors.white,
-              child: TextField(
-                controller: controller,
-                style: const TextStyle(fontSize: 13),
-                decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  border: const OutlineInputBorder(),
-                  suffixIcon: isDate ? const Icon(Icons.calendar_today, size: 16) : null,
+        body: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'نوع الحركة:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _selectedMovementType,
+                items: _movementTypes.map((String type) {
+                  return DropdownMenuItem<String>(
+                    value: type,
+                    child: Text(type),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedMovementType = val);
+                },
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
               ),
-            ),
+              const SizedBox(height: 20),
+              const Text(
+                'الفترة الزمنية:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () => _selectDate(context, true),
+                      icon: const Icon(Icons.date_range),
+                      label: Text(
+                        _fromDate == null
+                            ? 'من تاريخ'
+                            : '${_fromDate!.year}-${_fromDate!.month}-${_fromDate!.day}',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () => _selectDate(context, false),
+                      icon: const Icon(Icons.date_range),
+                      label: Text(
+                        _toDate == null
+                            ? 'إلى تاريخ'
+                            : '${_toDate!.year}-${_toDate!.month}-${_toDate!.day}',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0D47A1),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context, {
+                      'type': _selectedMovementType,
+                      'fromDate': _fromDate,
+                      'toDate': _toDate,
+                    });
+                  },
+                  child: const Text('تطبيق التصفية', style: TextStyle(fontSize: 16)),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

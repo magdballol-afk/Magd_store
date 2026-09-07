@@ -20,9 +20,22 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   late TextEditingController customerController;
   late TextEditingController exchangeRateController;
   late TextEditingController globalDiscountController;
+  
+  // حقل الدفعة فقط هو حقل إدخال يدوي
+  late TextEditingController paidAmountController;
+
+  // قيمة الرصيد السابق المترتب على الزبون (تُجلب تلقائياً من قاعدة البيانات)
+  double previousBalance = 0.0;
 
   List<Map<String, dynamic>> invoiceItems = [];
   List<Map<String, dynamic>> backupItems = [];
+
+  // محاكاة لبيانات العملاء وأرصدتهم المترتبة عليهم من قاعدة البيانات
+  final Map<String, double> customerBalancesFromDB = {
+    'أحمد علي': 25000.0,
+    'محمد خالد': 50000.0,
+    'سامر محمود': 0.0,
+  };
 
   final List<Map<String, dynamic>> availableProducts = [
     {'name': 'شامبو بانتين 400 مل', 'price': 12500.0},
@@ -42,15 +55,36 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     exchangeRateController = TextEditingController(text: '15000');
     globalDiscountController = TextEditingController(text: '0');
 
+    paidAmountController = TextEditingController(
+      text: inv != null ? (inv['paidAmount']?.toString() ?? '0') : '0',
+    );
+
     if (inv != null) {
       invoiceType = inv['type'] ?? 'مبيعات';
       paymentType = inv['paymentType'] ?? 'نقدي';
+      previousBalance = (inv['previousBalance'] as num?)?.toDouble() ?? 0.0;
       if (inv['items'] != null) {
         invoiceItems = List<Map<String, dynamic>>.from(
           (inv['items'] as List).map((item) => Map<String, dynamic>.from(item)),
         );
       }
     }
+  }
+
+  // دالة لجلب رصيد الزبون السابق تلقائياً عند تغيير اسم الزبون
+  void _fetchCustomerPreviousBalance(String customerName) {
+    setState(() {
+      previousBalance = customerBalancesFromDB[customerName.trim()] ?? 0.0;
+    });
+  }
+
+  @override
+  void dispose() {
+    customerController.dispose();
+    exchangeRateController.dispose();
+    globalDiscountController.dispose();
+    paidAmountController.dispose();
+    super.dispose();
   }
 
   double get subTotal {
@@ -64,6 +98,12 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   double get grandTotal {
     double discount = double.tryParse(globalDiscountController.text) ?? 0.0;
     return (subTotal - discount) < 0 ? 0.0 : (subTotal - discount);
+  }
+
+  // حساب الرصيد الحالي: (الرصيد السابق المسجل + صافي الفاتورة) - الدفعة المقدمة
+  double get currentBalance {
+    double paid = double.tryParse(paidAmountController.text) ?? 0.0;
+    return (previousBalance + grandTotal) - paid;
   }
 
   void _showAddProductDialog() {
@@ -249,6 +289,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       controller: customerController,
                       enabled: isEditing,
                       textAlign: TextAlign.right,
+                      onChanged: _fetchCustomerPreviousBalance,
                       decoration: InputDecoration(
                         labelText: 'اسم العميل',
                         prefixIcon: const Icon(Icons.person_outline, color: Color(0xFF0277BD)),
@@ -320,6 +361,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const Divider(height: 30),
             Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
@@ -343,7 +385,78 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+
+            // ================== بطاقة التسوية المالية ==================
+            Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  children: [
+                    // 1. رصيد سابق (عرض قراءة فقط يجلب تلقائياً من داتابيز العميل)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.history, color: Color(0xFF0277BD)),
+                            SizedBox(width: 8),
+                            Text('رصيد سابق مترتب:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                          ],
+                        ),
+                        Text(
+                          '${previousBalance.toStringAsFixed(1)} ل.س',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: previousBalance > 0 ? Colors.red : Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 20),
+
+                    // 2. الدفعة المدفوعة حالياً (حقل إدخال)
+                    TextField(
+                      controller: paidAmountController,
+                      enabled: isEditing,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      textAlign: TextAlign.right,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'الدفعة المقبوضة',
+                        prefixIcon: const Icon(Icons.payments_outlined, color: Colors.green),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const Divider(height: 20),
+
+                    // 3. الرصيد الحالي المحسوب تلقائياً
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'الرصيد الحالي المتبقي:',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '${currentBalance.toStringAsFixed(1)} ل.س',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: currentBalance > 0 ? Colors.red : Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 16),
+
+            // زر الحفظ
             if (isEditing)
               Row(
                 children: [
@@ -358,7 +471,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                           isEditing = false;
                         });
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تم حفظ التعديلات بنجاح')),
+                          const SnackBar(content: Text('تم حفظ الفاتورة وتحديث حساب الزبون بنجاح')),
                         );
                         if (isNewInvoice) Navigator.pop(context);
                       },

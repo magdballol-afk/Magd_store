@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 class NewInvoiceScreen extends StatefulWidget {
-  const NewInvoiceScreen({super.key});
+  final Map<String, dynamic>? existingInvoice;
+
+  const NewInvoiceScreen({super.key, this.existingInvoice});
 
   @override
   State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();
@@ -19,6 +21,21 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   // مبالغ الحسابات
   double _subtotal = 0.0;
   double _previousBalance = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.existingInvoice != null) {
+      final inv = widget.existingInvoice!;
+      _customerController.text = inv['customer'] ?? '';
+      _isSales = inv['isSales'] ?? true;
+      _isCash = inv['isCash'] ?? true;
+      _selectedCurrency = inv['currency'] ?? 'SYP';
+      _subtotal = (inv['subtotal'] as num?)?.toDouble() ?? 0.0;
+      _previousBalance = (inv['previousBalance'] as num?)?.toDouble() ?? 0.0;
+      _paidAmountController.text = ((inv['paidAmount'] as num?)?.toDouble() ?? 0.0).toString();
+    }
+  }
 
   String get _currencySymbol => _selectedCurrency == 'USD' ? '\$' : 'ل.س';
 
@@ -38,9 +55,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           centerTitle: true,
           elevation: 0,
           backgroundColor: const Color(0xFF0083B0),
-          title: const Text(
-            'فاتورة جديدة',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+          title: Text(
+            widget.existingInvoice != null ? 'تعديل فاتورة' : 'فاتورة جديدة',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
           ),
         ),
         body: SingleChildScrollView(
@@ -137,9 +154,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     side: const BorderSide(color: Color(0xFF0083B0), width: 1.5),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () {
-                    // فتح نافذة اختيار المنتجات
-                  },
+                  onPressed: () {},
                   icon: const Icon(Icons.add_shopping_cart, color: Color(0xFF0083B0)),
                   label: const Text(
                     'إضافة منتج للفاتورة',
@@ -193,17 +208,21 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
+                      children: const [
                         Row(
-                          children: const [
+                          children: [
                             Icon(Icons.history, size: 18, color: Colors.grey),
                             SizedBox(width: 6),
                             Text('رصيد سابق مترتب:', style: TextStyle(fontSize: 13, color: Colors.grey)),
                           ],
                         ),
-                        Text('${_previousBalance.toStringAsFixed(1)} $_currencySymbol',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                       ],
+                    ),
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('${_previousBalance.toStringAsFixed(1)} $_currencySymbol',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
                     const SizedBox(height: 12),
 
@@ -249,18 +268,17 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     backgroundColor: const Color(0xFF0083B0),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () {
-                    // إجراء الحفظ وتغذية الصندوق المقابل (_selectedCurrency)
-                  },
-                  child: const Text(
-                    'حفظ الفاتورة',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
+                  onPressed: () {},
+                  child: Text(
+                    widget.existingInvoice != null ? 'تحديث الفاتورة' : 'حفظ الفاتورة',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
                   ),
                 ),
               ),
             ],
           ),
         ),
-      );
+      ),
+    );
   }
 }

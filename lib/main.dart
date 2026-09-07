@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-// استدعاء جميع الشاشات المبرمجة في مجلد screens
+// استدعاء الشاشات
 import 'screens/invoices_screen.dart';
 import 'screens/products_screen.dart';
 import 'screens/smart_report_screen.dart';
@@ -14,7 +14,7 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({Key? key}) : super(Key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -22,8 +22,13 @@ class MyApp extends StatelessWidget {
       title: 'Magd Store',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: const Color(0xFFF4F7FA), // خلفية ناصعة ومريحة
         fontFamily: 'Roboto',
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF0083B0),
+          primary: const Color(0xFF0083B0),
+          secondary: const Color(0xFF00B4DB),
+        ),
       ),
       home: const MainScreen(),
     );
@@ -31,7 +36,7 @@ class MyApp extends StatelessWidget {
 }
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({Key? key}) : super(key: key);
+  const MainScreen({Key? key}) : super(Key: key);
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -40,12 +45,11 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  // قائمة الشاشات المرتبطة بالشريط السفلي
   final List<Widget> _screens = const [
-    HomeScreenContent(),    // التبويب 0: الرئيسية
-    InvoicesScreen(),       // التبويب 1: الفواتير
-    ProductsScreen(),       // التبويب 2: المنتجات
-    SmartReportScreen(),    // التبويب 3: التقارير
+    HomeScreenContent(),
+    InvoicesScreen(),
+    ProductsScreen(),
+    SmartReportScreen(),
   ];
 
   @override
@@ -57,135 +61,195 @@ class _MainScreenState extends State<MainScreen> {
           index: _currentIndex,
           children: _screens,
         ),
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
-          type: BottomNavigationBarType.fixed,
-          selectedItemColor: const Color(0xFF0D47A1),
-          unselectedItemColor: Colors.grey,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: 'الرئيسية',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.receipt_long),
-              label: 'الفواتير',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.grid_view),
-              label: 'المنتجات',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart),
-              label: 'التقارير',
-            ),
-          ],
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 20,
+                offset: const Offset(0, -5),
+              ),
+            ],
+          ),
+          child: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: Colors.white,
+            selectedItemColor: const Color(0xFF0083B0),
+            unselectedItemColor: const Color(0xFF90A4AE),
+            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            unselectedLabelStyle: const TextStyle(fontSize: 11),
+            elevation: 0,
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.grid_view_round),
+                activeIcon: Icon(Icons.grid_view_rounded, color: Color(0xFF0083B0)),
+                label: 'الرئيسية',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.receipt_outlined),
+                activeIcon: Icon(Icons.receipt_rounded),
+                label: 'الفواتير',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.inventory_2_outlined),
+                activeIcon: Icon(Icons.inventory_2_rounded),
+                label: 'المنتجات',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.analytics_outlined),
+                activeIcon: Icon(Icons.analytics_rounded),
+                label: 'التقارير',
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// محتوى الشاشة الرئيسية (Home Tab)
 class HomeScreenContent extends StatelessWidget {
-  const HomeScreenContent({Key? key}) : super(key: key);
+  const HomeScreenContent({Key? key}) : super(Key: key);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('إدارة المبيعات والمستودع'),
-        backgroundColor: const Color(0xFF0D47A1),
+        centerTitle: true,
+        elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF00B4DB), Color(0xFF0083B0)],
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+            ),
+          ),
+        ),
+        title: const Text(
+          'إدارة المبيعات والمستودع',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19, color: Colors.white),
+        ),
       ),
       body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // بطاقة رأسية
+            // بطاقة رأسية بلمعان متدرج
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFF0D47A1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'إدارة المبيعات والمستودع',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0072FF).withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
                   ),
-                  SizedBox(height: 4),
-                  Text(
-                    'تحليلات الذكاء الاصطناعي اليومية',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'إدارة المبيعات والمستودع',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        'تحليلات الذكاء الاصطناعي اليومية',
+                        style: TextStyle(color: Colors.white90, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.auto_awesome, color: Colors.white, size: 28),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
-            // كروت الإحصائيات السريعة
+            // كروت الإحصائيات
             GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 1.3,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.25,
               children: [
-                _buildStatCard('إحصائيات المبيعات اليومية', '150,000 ل.س', 'زيادة 12% عن أمس', Colors.green),
-                _buildStatCard('المخزون الحالي', '2,300 قطعة', 'قارب على الانتهاء لـ 3', Colors.orange),
-                _buildStatCard('فواتير اليوم', '45 فاتورة', 'أعلى نشاط بين 4-6', Colors.blue),
-                _buildStatCard('حسابات العملاء', '8,900 ل.س', 'اقتراح: تواصل مع 2', Colors.purple),
+                _buildStatCard('إحصائيات المبيعات اليومية', '150,000 ل.س', 'زيادة 12% عن أمس', Icons.trending_up_rounded, const Color(0xFF10B981)),
+                _buildStatCard('المخزون الحالي', '2,300 قطعة', 'قارب على الانتهاء لـ 3', Icons.inventory_outlined, const Color(0xFFF59E0B)),
+                _buildStatCard('فواتير اليوم', '45 فاتورة', 'أعلى نشاط بين 4-6', Icons.receipt_long_outlined, const Color(0xFF3B82F6)),
+                _buildStatCard('حسابات العملاء', '8,900 ل.س', 'اقتراح: تواصل مع 2', Icons.people_alt_outlined, const Color(0xFF8B5CF6)),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
             const Text(
               'إجراءات سريعة',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
 
             // أزرار الإجراءات السريعة
             GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 2.2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 2.1,
               children: [
-                _buildActionButton(
+                _buildGradientActionButton(
                   context,
                   title: 'إضافة منتج +',
-                  icon: Icons.add_box,
+                  icon: Icons.add_box_rounded,
+                  colors: [const Color(0xFF00B4DB), const Color(0xFF0083B0)],
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddProductScreen())),
                 ),
-                _buildActionButton(
+                _buildGradientActionButton(
                   context,
                   title: 'فاتورة جديدة +',
-                  icon: Icons.receipt,
+                  icon: Icons.post_add_rounded,
+                  colors: [const Color(0xFF00C6FF), const Color(0xFF0072FF)],
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInvoiceScreen())),
                 ),
-                _buildActionButton(
+                _buildGradientActionButton(
                   context,
                   title: 'حركة صندوق',
-                  icon: Icons.account_balance_wallet,
+                  icon: Icons.account_balance_wallet_rounded,
+                  colors: [const Color(0xFF36D1DC), const Color(0xFF5B86E5)],
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashJournalScreen())),
                 ),
-                _buildActionButton(
+                _buildGradientActionButton(
                   context,
                   title: 'حساب عميل',
-                  icon: Icons.person,
+                  icon: Icons.person_search_rounded,
+                  colors: [const Color(0xFF4FACFE), const Color(0xFF00F2FE)],
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactsScreen())),
                 ),
               ],
@@ -196,35 +260,86 @@ class HomeScreenContent extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCard(String title, String value, String subText, Color color) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: Padding(
-        padding: const EdgeInsets.all(10.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(height: 4),
-            Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text(subText, style: TextStyle(fontSize: 11, color: color)),
-          ],
-        ),
+  Widget _buildStatCard(String title, String value, String subText, IconData icon, Color badgeColor) {
+    return Container(
+      padding: const EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
+              Icon(icon, size: 18, color: badgeColor),
+            ],
+          ),
+          Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: badgeColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              subText,
+              style: TextStyle(fontSize: 10, color: badgeColor, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildActionButton(BuildContext context, {required String title, required IconData icon, required VoidCallback onTap}) {
-    return ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF0277BD),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  Widget _buildGradientActionButton(BuildContext context, {required String title, required IconData icon, required List<Color> colors, required VoidCallback onTap}) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colors.last.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      onPressed: onTap,
-      icon: Icon(icon, color: Colors.white, size: 18),
-      label: Text(title, style: const TextStyle(color: Colors.white, fontSize: 13)),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

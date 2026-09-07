@@ -14,6 +14,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   bool _isSales = true; // true: مبيعات, false: مشتريات
   bool _isCash = true; // true: نقدي, false: أجل (دين)
   String _currency = 'ليرة سورية (ل.س)';
+  
+  // نوع التعامل (تحديد فئة السعر)
+  String _dealType = 'مفرق'; // الخيارات: مفرق، نصف جملة، جملة
 
   final TextEditingController _customerController = TextEditingController();
   final TextEditingController _paidAmountController = TextEditingController();
@@ -21,13 +24,26 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   // قائمة المنتجات المضافة للفاتورة الحالية
   List<Map<String, dynamic>> _selectedInvoiceItems = [];
 
-  // قائمة المنتجات الكلية في المحل (تأتي مستقبلاً من قاعدة البيانات)
+  // قائمة المنتجات الكلية في المحل مع تحديد أسعار كل فئة
   final List<Map<String, dynamic>> _allProducts = [
-    {'name': 'بسكويت سادة', 'price': 2000.0},
-    {'name': 'بسكويت محشي', 'price': 3500.0},
-    {'name': 'شيبس بالملح', 'price': 5000.0},
-    {'name': 'عصير برتقال', 'price': 4000.0},
-    {'name': 'شوكولاتة داكنة', 'price': 8000.0},
+    {
+      'name': 'بسكويت سادة',
+      'priceRetail': 2000.0,      // مفرق
+      'priceHalfWholesale': 1800.0, // نصف جملة
+      'priceWholesale': 1500.0,   // جملة
+    },
+    {
+      'name': 'بسكويت محشي',
+      'priceRetail': 3500.0,
+      'priceHalfWholesale': 3200.0,
+      'priceWholesale': 2800.0,
+    },
+    {
+      'name': 'شيبس بالملح',
+      'priceRetail': 5000.0,
+      'priceHalfWholesale': 4500.0,
+      'priceWholesale': 4000.0,
+    },
   ];
 
   double _previousBalance = 0.0;
@@ -39,11 +55,23 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       final inv = widget.existingInvoice!;
       _isSales = inv['isSales'] ?? true;
       _isCash = inv['isCash'] ?? true;
+      _dealType = inv['dealType'] ?? 'مفرق';
       _customerController.text = inv['customerName'] ?? '';
       _paidAmountController.text = (inv['paidAmount'] ?? 0.0).toString();
       if (inv['items'] != null) {
         _selectedInvoiceItems = List<Map<String, dynamic>>.from(inv['items']);
       }
+    }
+  }
+
+  // الحصول على السعر المناسب حسب نوع التعامل المحدد
+  double _getProductPrice(Map<String, dynamic> product) {
+    if (_dealType == 'جملة') {
+      return product['priceWholesale'] ?? 0.0;
+    } else if (_dealType == 'نصف جملة') {
+      return product['priceHalfWholesale'] ?? 0.0;
+    } else {
+      return product['priceRetail'] ?? 0.0; // مفرق
     }
   }
 
@@ -70,7 +98,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       builder: (context) {
         return StatefulWidget(
           builder: (context, setModalState) {
-            // تصفية المواد بحسب ما يكتبه المستخدم في حقل البحث
             final filteredProducts = _allProducts.where((product) {
               final name = product['name'].toString().toLowerCase();
               return name.contains(searchQuery.toLowerCase());
@@ -87,14 +114,13 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'بحث وأعمال إضافة منتج',
+                  Text(
+                    'بحث وإضافة منتج (السعر: $_dealType)',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
 
-                  // حقل البحث المباشر
                   TextField(
                     autofocus: true,
                     textAlign: TextAlign.right,
@@ -112,7 +138,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // قائمة النتائج المفلترة
                   SizedBox(
                     height: 250,
                     child: filteredProducts.isEmpty
@@ -126,6 +151,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                             itemCount: filteredProducts.length,
                             itemBuilder: (context, index) {
                               final prod = filteredProducts[index];
+                              final price = _getProductPrice(prod);
                               return Card(
                                 child: ListTile(
                                   title: Text(
@@ -133,7 +159,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                     style: const TextStyle(fontWeight: FontWeight.bold),
                                   ),
                                   subtitle: Text(
-                                    'السعر: ${prod['price']} ${_currency == 'ليرة سورية (ل.س)' ? 'ل.س' : '\$'}',
+                                    'السعر ($_dealType): $price ${_currency == 'ليرة سورية (ل.س)' ? 'ل.س' : '\$'}',
                                   ),
                                   trailing: const Icon(Icons.add_shopping_cart, color: Color(0xFF0277BD)),
                                   onTap: () {
@@ -146,7 +172,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                       } else {
                                         _selectedInvoiceItems.add({
                                           'name': prod['name'],
-                                          'price': prod['price'],
+                                          'price': price,
                                           'quantity': 1,
                                         });
                                       }
@@ -248,6 +274,38 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     ),
                     const SizedBox(height: 10),
 
+                    // نوع التعامل (مفرق - نصف جملة - جملة)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('نوع التعامل:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ToggleButtons(
+                          isSelected: [
+                            _dealType == 'مفرق',
+                            _dealType == 'نصف جملة',
+                            _dealType == 'جملة',
+                          ],
+                          borderRadius: BorderRadius.circular(20),
+                          selectedColor: Colors.white,
+                          fillColor: const Color(0xFF0277BD),
+                          constraints: const BoxConstraints(minWidth: 65, minHeight: 36),
+                          onPressed: (index) {
+                            setState(() {
+                              if (index == 0) _dealType = 'مفرق';
+                              if (index == 1) _dealType = 'نصف جملة';
+                              if (index == 2) _dealType = 'جملة';
+                            });
+                          },
+                          children: const [
+                            Text('مفرق', style: TextStyle(fontSize: 12)),
+                            Text('نصف جملة', style: TextStyle(fontSize: 11)),
+                            Text('جملة', style: TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+
                     // عملة الفاتورة
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -298,9 +356,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
               ),
               icon: const Icon(Icons.add_shopping_cart, color: Color(0xFF0277BD)),
-              label: const Text(
-                'إضافة منتج للفاتورة',
-                style: TextStyle(color: Color(0xFF0277BD), fontSize: 16, fontWeight: FontWeight.bold),
+              label: Text(
+                'إضافة منتج للفاتورة ($_dealType)',
+                style: const TextStyle(color: Color(0xFF0277BD), fontSize: 16, fontWeight: FontWeight.bold),
               ),
               onPressed: _showAddProductDialog,
             ),

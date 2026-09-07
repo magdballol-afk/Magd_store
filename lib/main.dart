@@ -14,7 +14,7 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(Key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +36,7 @@ class MyApp extends StatelessWidget {
 }
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({Key? key}) : super(Key: key);
+  const MainScreen({super.key});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -87,8 +87,8 @@ class _MainScreenState extends State<MainScreen> {
             elevation: 0,
             items: const [
               BottomNavigationBarItem(
-                icon: Icon(Icons.grid_view_round),
-                activeIcon: Icon(Icons.grid_view_rounded, color: Color(0xFF0083B0)),
+                icon: Icon(Icons.grid_view),
+                activeIcon: Icon(Icons.grid_view, color: Color(0xFF0083B0)),
                 label: 'الرئيسية',
               ),
               BottomNavigationBarItem(
@@ -115,7 +115,7 @@ class _MainScreenState extends State<MainScreen> {
 }
 
 class HomeScreenContent extends StatelessWidget {
-  const HomeScreenContent({Key? key}) : super(Key: key);
+  const HomeScreenContent({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -201,7 +201,7 @@ class HomeScreenContent extends StatelessWidget {
               mainAxisSpacing: 12,
               childAspectRatio: 1.25,
               children: [
-                _buildStatCard('إحصائيات المبيعات اليومية', '150,000 ل.س', 'زيادة 12% عن أمس', Icons.trending_up_rounded, const Color(0xFF10B981)),
+                _buildStatCard('إحصائيات المبيعات اليومية', '150,000 ل.س', 'زيادة 12% عن أمس', Icons.trending_up, const Color(0xFF10B981)),
                 _buildStatCard('المخزون الحالي', '2,300 قطعة', 'قارب على الانتهاء لـ 3', Icons.inventory_outlined, const Color(0xFFF59E0B)),
                 _buildStatCard('فواتير اليوم', '45 فاتورة', 'أعلى نشاط بين 4-6', Icons.receipt_long_outlined, const Color(0xFF3B82F6)),
                 _buildStatCard('حسابات العملاء', '8,900 ل.س', 'اقتراح: تواصل مع 2', Icons.people_alt_outlined, const Color(0xFF8B5CF6)),
@@ -227,28 +227,28 @@ class HomeScreenContent extends StatelessWidget {
                 _buildGradientActionButton(
                   context,
                   title: 'إضافة منتج +',
-                  icon: Icons.add_box_rounded,
+                  icon: Icons.add_box,
                   colors: [const Color(0xFF00B4DB), const Color(0xFF0083B0)],
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddProductScreen())),
                 ),
                 _buildGradientActionButton(
                   context,
                   title: 'فاتورة جديدة +',
-                  icon: Icons.post_add_rounded,
+                  icon: Icons.post_add,
                   colors: [const Color(0xFF00C6FF), const Color(0xFF0072FF)],
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInvoiceScreen())),
                 ),
                 _buildGradientActionButton(
                   context,
                   title: 'حركة صندوق',
-                  icon: Icons.account_balance_wallet_rounded,
+                  icon: Icons.account_balance_wallet,
                   colors: [const Color(0xFF36D1DC), const Color(0xFF5B86E5)],
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashJournalScreen())),
                 ),
                 _buildGradientActionButton(
                   context,
                   title: 'حساب عميل',
-                  icon: Icons.person_search_rounded,
+                  icon: Icons.person_search,
                   colors: [const Color(0xFF4FACFE), const Color(0xFF00F2FE)],
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactsScreen())),
                 ),

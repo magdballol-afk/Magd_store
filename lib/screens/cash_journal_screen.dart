@@ -10,6 +10,7 @@ class CashJournalScreen extends StatefulWidget {
 class _CashJournalScreenState extends State<CashJournalScreen> {
   DateTime _selectedDate = DateTime.now();
   bool _isPayment = true; // true: مدفوعات, false: مقبوضات
+  String _selectedCurrency = 'SYP'; // 'SYP' أو 'USD'
 
   final TextEditingController _accountController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
@@ -20,7 +21,15 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
   final List<Map<String, dynamic>> _movements = [
     {
       'account': 'مجد',
-      'amount': 108.0,
+      'amount': 10.0,
+      'currency': 'SYP',
+      'isPayment': true,
+      'description': 'بدون بيان',
+    },
+    {
+      'account': 'مجد بلول',
+      'amount': 12.0,
+      'currency': 'SYP',
       'isPayment': true,
       'description': 'بدون بيان',
     },
@@ -45,6 +54,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
         _movements[_editingIndex!] = {
           'account': account,
           'amount': amount,
+          'currency': _selectedCurrency,
           'isPayment': _isPayment,
           'description': description.isEmpty ? 'بدون بيان' : description,
         };
@@ -53,6 +63,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
         _movements.add({
           'account': account,
           'amount': amount,
+          'currency': _selectedCurrency,
           'isPayment': _isPayment,
           'description': description.isEmpty ? 'بدون بيان' : description,
         });
@@ -69,6 +80,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     setState(() {
       _editingIndex = index;
       _isPayment = item['isPayment'];
+      _selectedCurrency = item['currency'] ?? 'SYP';
       _accountController.text = item['account'];
       _amountController.text = item['amount'].toString();
       _descriptionController.text = item['description'] == 'بدون بيان' ? '' : item['description'];
@@ -96,15 +108,27 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     });
   }
 
-  double get _totalReceipts => _movements
-      .where((m) => m['isPayment'] == false)
+  // حسابات الليرة السورية
+  double get _totalReceiptsSyp => _movements
+      .where((m) => m['isPayment'] == false && m['currency'] == 'SYP')
       .fold(0.0, (sum, item) => sum + (item['amount'] as double));
 
-  double get _totalPayments => _movements
-      .where((m) => m['isPayment'] == true)
+  double get _totalPaymentsSyp => _movements
+      .where((m) => m['isPayment'] == true && m['currency'] == 'SYP')
       .fold(0.0, (sum, item) => sum + (item['amount'] as double));
 
-  double get _netAmount => _totalReceipts - _totalPayments;
+  double get _netAmountSyp => _totalReceiptsSyp - _totalPaymentsSyp;
+
+  // حسابات الدولار
+  double get _totalReceiptsUsd => _movements
+      .where((m) => m['isPayment'] == false && m['currency'] == 'USD')
+      .fold(0.0, (sum, item) => sum + (item['amount'] as double));
+
+  double get _totalPaymentsUsd => _movements
+      .where((m) => m['isPayment'] == true && m['currency'] == 'USD')
+      .fold(0.0, (sum, item) => sum + (item['amount'] as double));
+
+  double get _netAmountUsd => _totalReceiptsUsd - _totalPaymentsUsd;
 
   @override
   Widget build(BuildContext context) {
@@ -126,6 +150,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // اختيار التاريخ
               Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -166,6 +191,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
               ),
               const SizedBox(height: 16),
 
+              // نموذج الإدخال
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -194,6 +220,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                         ),
                       ),
                     
+                    // اختيار نوع الحركة (مقبوضات / مدفوعات)
                     Row(
                       children: [
                         Expanded(
@@ -255,6 +282,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                     ),
                     const SizedBox(height: 12),
 
+                    // اسم الحساب
                     TextField(
                       controller: _accountController,
                       decoration: InputDecoration(
@@ -266,18 +294,57 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                     ),
                     const SizedBox(height: 10),
 
-                    TextField(
-                      controller: _amountController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.attach_money, size: 20),
-                        hintText: 'المبلغ',
-                        contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
+                    // حقل المبلغ مع اختيار العملة
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _amountController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: InputDecoration(
+                              prefixIcon: Icon(
+                                _selectedCurrency == 'USD' ? Icons.attach_money : Icons.money_outlined,
+                                size: 20,
+                              ),
+                              hintText: 'المبلغ',
+                              contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedCurrency,
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'SYP',
+                                  child: Text('ل.س', style: TextStyle(fontWeight: FontWeight.bold)),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'USD',
+                                  child: Text('\$', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                ),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() => _selectedCurrency = val);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 10),
 
+                    // البيان
                     TextField(
                       controller: _descriptionController,
                       decoration: InputDecoration(
@@ -289,6 +356,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                     ),
                     const SizedBox(height: 14),
 
+                    // زر الإضافة / التحديث
                     SizedBox(
                       width: double.infinity,
                       height: 46,
@@ -316,6 +384,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
               ),
               const SizedBox(height: 10),
 
+              // قائمة الحركات المسجلة
               _movements.isEmpty
                   ? const Center(
                       child: Padding(
@@ -332,6 +401,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                         final item = _movements[index];
                         final isPayment = item['isPayment'] as bool;
                         final amount = item['amount'] as double;
+                        final currency = (item['currency'] ?? 'SYP') == 'USD' ? '\$' : 'ل.س';
 
                         return Container(
                           padding: const EdgeInsets.all(12),
@@ -362,7 +432,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    "${isPayment ? '-' : '+'}${amount.toStringAsFixed(1)} ل.س",
+                                    "${isPayment ? '-' : '+'}${amount.toStringAsFixed(1)} $currency",
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14,
@@ -398,6 +468,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                     ),
               const SizedBox(height: 20),
 
+              // ملخص الحركة مقسم حسب العملة
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -405,33 +476,71 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('إجمالي المقبوضات:', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                        Text('${_totalReceipts.toStringAsFixed(1)} ل.س', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                      ],
+                    const Text(
+                      'الملخص (الليرة السورية):',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0083B0)),
                     ),
                     const SizedBox(height: 6),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('إجمالي المدفوعات:', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                        Text('${_totalPayments.toStringAsFixed(1)} ل.س', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                        const Text('إجمالي المقبوضات:', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                        Text('${_totalReceiptsSyp.toStringAsFixed(1)} ل.س', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 12)),
                       ],
                     ),
-                    const Divider(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('صافي حركة اليوم:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        const Text('إجمالي المدفوعات:', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                        Text('${_totalPaymentsSyp.toStringAsFixed(1)} ل.س', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 12)),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('صافي الصندوق (ل.س):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                         Text(
-                          '${_netAmount.toStringAsFixed(1)} ل.س',
+                          '${_netAmountSyp.toStringAsFixed(1)} ل.س',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: _netAmount >= 0 ? Colors.green : Colors.red,
+                            fontSize: 13,
+                            color: _netAmountSyp >= 0 ? Colors.green : Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    const Text(
+                      'الملخص (الدولار \$):',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0083B0)),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('إجمالي المقبوضات:', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                        Text('${_totalReceiptsUsd.toStringAsFixed(1)} \$', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 12)),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('إجمالي المدفوعات:', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                        Text('${_totalPaymentsUsd.toStringAsFixed(1)} \$', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 12)),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('صافي الصندوق (\$):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text(
+                          '${_netAmountUsd.toStringAsFixed(1)} \$',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: _netAmountUsd >= 0 ? Colors.green : Colors.red,
                           ),
                         ),
                       ],

@@ -199,14 +199,14 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       children: [
                         const Text('عملة الفاتورة:', style: TextStyle(fontWeight: FontWeight.bold)),
                         ToggleButtons(
-                          isSelected: [_currency == 'ليرة سورية (ل.س)', _currency == 'دولار ($)'],
+                          isSelected: [_currency == 'ليرة سورية (ل.س)', _currency == 'دولار (\$)'],
                           borderRadius: BorderRadius.circular(20),
                           selectedColor: Colors.white,
                           fillColor: const Color(0xFF0277BD),
                           constraints: const BoxConstraints(minWidth: 90, minHeight: 36),
                           onPressed: (index) {
                             setState(() {
-                              _currency = index == 0 ? 'ليرة سورية (ل.س)' : 'دولار ($)';
+                              _currency = index == 0 ? 'ليرة سورية (ل.س)' : 'دولار (\$)';
                             });
                           },
                           children: const [

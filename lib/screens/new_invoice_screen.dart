@@ -21,11 +21,13 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   // قائمة المنتجات المضافة للفاتورة الحالية
   List<Map<String, dynamic>> _selectedInvoiceItems = [];
 
-  // قائمة منتجات افتراضية للاختيار (يمكن ربطها بالداتابيز)
-  final List<Map<String, dynamic>> _availableProducts = [
-    {'name': 'منتج 1', 'price': 5000.0},
-    {'name': 'منتج 2', 'price': 12500.0},
-    {'name': 'منتج 3', 'price': 25000.0},
+  // قائمة المنتجات الكلية في المحل (تأتي مستقبلاً من قاعدة البيانات)
+  final List<Map<String, dynamic>> _allProducts = [
+    {'name': 'بسكويت سادة', 'price': 2000.0},
+    {'name': 'بسكويت محشي', 'price': 3500.0},
+    {'name': 'شيبس بالملح', 'price': 5000.0},
+    {'name': 'عصير برتقال', 'price': 4000.0},
+    {'name': 'شوكولاتة داكنة', 'price': 8000.0},
   ];
 
   double _previousBalance = 0.0;
@@ -33,7 +35,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   @override
   void initState() {
     super.initState();
-    // إذا كان هناك فاتورة سابقة ممررة للتعديل يتم تحميل بياناتها
     if (widget.existingInvoice != null) {
       final inv = widget.existingInvoice!;
       _isSales = inv['isSales'] ?? true;
@@ -56,7 +57,10 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     return (_netTotal + _previousBalance) - paid;
   }
 
+  // نافذة البحث والانتفاء الذكي من قائمة المنتجات
   void _showAddProductDialog() {
+    String searchQuery = '';
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -64,49 +68,100 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'اختر منتج لإضافته للفاتورة',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        return StatefulWidget(
+          builder: (context, setModalState) {
+            // تصفية المواد بحسب ما يكتبه المستخدم في حقل البحث
+            final filteredProducts = _allProducts.where((product) {
+              final name = product['name'].toString().toLowerCase();
+              return name.contains(searchQuery.toLowerCase());
+            }).toList();
+
+            return Padding(
+              padding: EdgeInsets.only(
+                top: 16,
+                left: 16,
+                right: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
               ),
-              const SizedBox(height: 12),
-              ListView.builder(
-                shrinkWrap: true,
-                itemCount: _availableProducts.length,
-                itemBuilder: (context, index) {
-                  final prod = _availableProducts[index];
-                  return Card(
-                    child: ListTile(
-                      title: Text(prod['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('السعر: ${prod['price']} ${_currency == 'ليرة سورية (ل.س)' ? 'ل.س' : '\$'}'),
-                      trailing: const Icon(Icons.add_shopping_cart, color: Color(0xFF0277BD)),
-                      onTap: () {
-                        setState(() {
-                          int existingIndex = _selectedInvoiceItems.indexWhere((e) => e['name'] == prod['name']);
-                          if (existingIndex != -1) {
-                            _selectedInvoiceItems[existingIndex]['quantity'] += 1;
-                          } else {
-                            _selectedInvoiceItems.add({
-                              'name': prod['name'],
-                              'price': prod['price'],
-                              'quantity': 1,
-                            });
-                          }
-                        });
-                        Navigator.pop(context);
-                      },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'بحث وأعمال إضافة منتج',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // حقل البحث المباشر
+                  TextField(
+                    autofocus: true,
+                    textAlign: TextAlign.right,
+                    decoration: InputDecoration(
+                      hintText: 'اكتب اسم المنتج (مثال: بسك)...',
+                      prefixIcon: const Icon(Icons.search, color: Color(0xFF0277BD)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
-                  );
-                },
+                    onChanged: (value) {
+                      setModalState(() {
+                        searchQuery = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+
+                  // قائمة النتائج المفلترة
+                  SizedBox(
+                    height: 250,
+                    child: filteredProducts.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'لا يوجد منتج يطابق بحثك',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: filteredProducts.length,
+                            itemBuilder: (context, index) {
+                              final prod = filteredProducts[index];
+                              return Card(
+                                child: ListTile(
+                                  title: Text(
+                                    prod['name'],
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  subtitle: Text(
+                                    'السعر: ${prod['price']} ${_currency == 'ليرة سورية (ل.س)' ? 'ل.س' : '\$'}',
+                                  ),
+                                  trailing: const Icon(Icons.add_shopping_cart, color: Color(0xFF0277BD)),
+                                  onTap: () {
+                                    setState(() {
+                                      int existingIndex = _selectedInvoiceItems.indexWhere(
+                                        (e) => e['name'] == prod['name'],
+                                      );
+                                      if (existingIndex != -1) {
+                                        _selectedInvoiceItems[existingIndex]['quantity'] += 1;
+                                      } else {
+                                        _selectedInvoiceItems.add({
+                                          'name': prod['name'],
+                                          'price': prod['price'],
+                                          'quantity': 1,
+                                        });
+                                      }
+                                    });
+                                    Navigator.pop(context);
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );

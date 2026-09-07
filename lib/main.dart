@@ -22,7 +22,7 @@ class MyApp extends StatelessWidget {
       title: 'Magd Store',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFFF4F7FA), // خلفية ناصعة ومريحة
+        scaffoldBackgroundColor: const Color(0xFFF4F7FA),
         fontFamily: 'Roboto',
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF0083B0),
@@ -88,22 +88,18 @@ class _MainScreenState extends State<MainScreen> {
             items: const [
               BottomNavigationBarItem(
                 icon: Icon(Icons.grid_view),
-                activeIcon: Icon(Icons.grid_view, color: Color(0xFF0083B0)),
                 label: 'الرئيسية',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.receipt_outlined),
-                activeIcon: Icon(Icons.receipt_rounded),
                 label: 'الفواتير',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.inventory_2_outlined),
-                activeIcon: Icon(Icons.inventory_2_rounded),
                 label: 'المنتجات',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.analytics_outlined),
-                activeIcon: Icon(Icons.analytics_rounded),
                 label: 'التقارير',
               ),
             ],

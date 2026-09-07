@@ -15,10 +15,8 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
 
-  // متغير لتحديد الحركة المراد تعديلها (null يعني إضافة جديدة)
   int? _editingIndex;
 
-  // قائمة وهمية لحركات اليوم للتجربة والتفاعل
   final List<Map<String, dynamic>> _movements = [
     {
       'account': 'مجد',
@@ -44,7 +42,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
 
     setState(() {
       if (_editingIndex != null) {
-        // تعديل حركة موجودة
         _movements[_editingIndex!] = {
           'account': account,
           'amount': amount,
@@ -53,7 +50,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
         };
         _editingIndex = null;
       } else {
-        // إضافة حركة جديدة
         _movements.add({
           'account': account,
           'amount': amount,
@@ -130,7 +126,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // اختيار التاريخ
               Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -171,7 +166,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
               ),
               const SizedBox(height: 16),
 
-              // نموذج الإدخال والتعديل
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -183,7 +177,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                   children: [
                     if (_editingIndex != null)
                       Padding(
-                        padding: const EdgeInsets.bottom(12.0),
+                        padding: const EdgeInsets.only(bottom: 12.0),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -200,7 +194,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                         ),
                       ),
                     
-                    // أزرار نوع الحركة (مقبوضات / مدفوعات)
                     Row(
                       children: [
                         Expanded(
@@ -262,7 +255,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // حقل اسم الحساب
                     TextField(
                       controller: _accountController,
                       decoration: InputDecoration(
@@ -274,7 +266,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                     ),
                     const SizedBox(height: 10),
 
-                    // حقل المبلغ
                     TextField(
                       controller: _amountController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -287,7 +278,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                     ),
                     const SizedBox(height: 10),
 
-                    // حقل البيان
                     TextField(
                       controller: _descriptionController,
                       decoration: InputDecoration(
@@ -299,7 +289,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    // زر الإضافة / التحديث
                     SizedBox(
                       width: double.infinity,
                       height: 46,
@@ -327,7 +316,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
               ),
               const SizedBox(height: 10),
 
-              // قائمة الحركات المسجلة
               _movements.isEmpty
                   ? const Center(
                       child: Padding(
@@ -410,7 +398,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                     ),
               const SizedBox(height: 20),
 
-              // ملخص المبالغ
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -455,6 +442,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
             ],
           ),
         ),
-      );
+      ),
+    );
   }
 }

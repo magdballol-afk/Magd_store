@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+
+// استدعاء جميع الشاشات المبرمجة في مجلد screens
+import 'screens/invoices_screen.dart';
+import 'screens/products_screen.dart';
+import 'screens/smart_report_screen.dart';
 import 'screens/cash_journal_screen.dart';
 import 'screens/new_invoice_screen.dart';
 import 'screens/add_product_screen.dart';
@@ -14,11 +19,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Magu Store',
+      title: 'Magd Store',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        fontFamily: 'Roboto', // يمكنك تعديل الخط حسب المتوفر في مشروعك
+        fontFamily: 'Roboto',
       ),
       home: const MainScreen(),
     );
@@ -35,87 +40,155 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  Widget _buildQuickActionButton({
-    required String title,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF0277BD),
-        elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
+  // قائمة الشاشات المرتبطة بالشريط السفلي
+  final List<Widget> _screens = const [
+    HomeScreenContent(),    // التبويب 0: الرئيسية
+    InvoicesScreen(),       // التبويب 1: الفواتير
+    ProductsScreen(),       // التبويب 2: المنتجات
+    SmartReportScreen(),    // التبويب 3: التقارير
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        body: IndexedStack(
+          index: _currentIndex,
+          children: _screens,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      ),
-      onPressed: onTap,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: Colors.white, size: 20),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-              overflow: TextOverflow.ellipsis,
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          type: BottomNavigationBarType.fixed,
+          selectedItemColor: const Color(0xFF0D47A1),
+          unselectedItemColor: Colors.grey,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home),
+              label: 'الرئيسية',
             ),
-          ),
-        ],
+            BottomNavigationBarItem(
+              icon: Icon(Icons.receipt_long),
+              label: 'الفواتير',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.grid_view),
+              label: 'المنتجات',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.bar_chart),
+              label: 'التقارير',
+            ),
+          ],
+        ),
       ),
     );
   }
+}
 
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required String badgeText,
-    required Color badgeBgColor,
-    required Color badgeTextColor,
-    required IconData badgeIcon,
-  }) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
+// محتوى الشاشة الرئيسية (Home Tab)
+class HomeScreenContent extends StatelessWidget {
+  const HomeScreenContent({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('إدارة المبيعات والمستودع'),
+        backgroundColor: const Color(0xFF0D47A1),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              title,
-              style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              value,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
-            ),
+            // بطاقة رأسية
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: badgeBgColor,
-                borderRadius: BorderRadius.circular(6),
+                color: const Color(0xFF0D47A1),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(badgeIcon, size: 12, color: badgeTextColor),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      badgeText,
-                      style: TextStyle(color: badgeTextColor, fontSize: 11, fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  Text(
+                    'إدارة المبيعات والمستودع',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'تحليلات الذكاء الاصطناعي اليومية',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 16),
+
+            // كروت الإحصائيات السريعة
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 1.3,
+              children: [
+                _buildStatCard('إحصائيات المبيعات اليومية', '150,000 ل.س', 'زيادة 12% عن أمس', Colors.green),
+                _buildStatCard('المخزون الحالي', '2,300 قطعة', 'قارب على الانتهاء لـ 3', Colors.orange),
+                _buildStatCard('فواتير اليوم', '45 فاتورة', 'أعلى نشاط بين 4-6', Colors.blue),
+                _buildStatCard('حسابات العملاء', '8,900 ل.س', 'اقتراح: تواصل مع 2', Colors.purple),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            const Text(
+              'إجراءات سريعة',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+
+            // أزرار الإجراءات السريعة
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 2.2,
+              children: [
+                _buildActionButton(
+                  context,
+                  title: 'إضافة منتج +',
+                  icon: Icons.add_box,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddProductScreen())),
+                ),
+                _buildActionButton(
+                  context,
+                  title: 'فاتورة جديدة +',
+                  icon: Icons.receipt,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInvoiceScreen())),
+                ),
+                _buildActionButton(
+                  context,
+                  title: 'حركة صندوق',
+                  icon: Icons.account_balance_wallet,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CashJournalScreen())),
+                ),
+                _buildActionButton(
+                  context,
+                  title: 'حساب عميل',
+                  icon: Icons.person,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ContactsScreen())),
+                ),
+              ],
             ),
           ],
         ),
@@ -123,171 +196,35 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FA),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // الهيدر العلوي
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16.0),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF01579B), Color(0xFF0288D1)],
-                    begin: Alignment.topRight,
-                    end: Alignment.bottomLeft,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'إدارة المبيعات والمستودع',
-                          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'تحليلات الذكاء الاصطناعي اليومية',
-                          style: TextStyle(color: Colors.white70, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                    Icon(Icons.auto_awesome, color: Colors.white, size: 28),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // بطاقات الإحصائيات (2x2)
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                childAspectRatio: 1.3,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                children: [
-                  _buildStatCard(
-                    title: 'إحصائيات المبيعات اليومية',
-                    value: '150,000 ل.س',
-                    badgeText: 'زيادة 12% عن أمس',
-                    badgeBgColor: Colors.green.shade50,
-                    badgeTextColor: Colors.green.shade700,
-                    badgeIcon: Icons.trending_up,
-                  ),
-                  _buildStatCard(
-                    title: 'المخزون الحالي',
-                    value: '2,300 قطعة',
-                    badgeText: 'قارب على الانتهاء لـ 5 منتجات',
-                    badgeBgColor: Colors.amber.shade50,
-                    badgeTextColor: Colors.amber.shade900,
-                    badgeIcon: Icons.warning_amber_rounded,
-                  ),
-                  _buildStatCard(
-                    title: 'فواتير اليوم',
-                    value: '45 فاتورة',
-                    badgeText: 'أعلى نشاط بين 4-6 م',
-                    badgeBgColor: Colors.blue.shade50,
-                    badgeTextColor: Colors.blue.shade700,
-                    badgeIcon: Icons.bar_chart,
-                  ),
-                  _buildStatCard(
-                    title: 'حسابات العملاء',
-                    value: '8,900 ل.س',
-                    badgeText: 'اقتراح: تواصل للتجميع',
-                    badgeBgColor: Colors.red.shade50,
-                    badgeTextColor: Colors.red.shade700,
-                    badgeIcon: Icons.lightbulb_outline,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // قسم إجراءات سريعة
-              const Text(
-                'إجراءات سريعة',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
-              ),
-              const SizedBox(height: 12),
-
-              // أزرار الإجراءات السريعة الأربعة
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                childAspectRatio: 2.4,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                children: [
-                  _buildQuickActionButton(
-                    title: '+ فاتورة جديدة',
-                    icon: Icons.receipt_long,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const NewInvoiceScreen()),
-                      );
-                    },
-                  ),
-                  _buildQuickActionButton(
-                    title: '+ إضافة منتج',
-                    icon: Icons.add_box,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const AddProductScreen()),
-                      );
-                    },
-                  ),
-                  _buildQuickActionButton(
-                    title: 'حساب عميل',
-                    icon: Icons.person_outline,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const ContactsScreen()),
-                      );
-                    },
-                  ),
-                  _buildQuickActionButton(
-                    title: 'حركة صندوق',
-                    icon: Icons.account_balance_wallet,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const CashJournalScreen()),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
+  Widget _buildStatCard(String title, String value, String subText, Color color) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: Padding(
+        padding: const EdgeInsets.all(10.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 4),
+            Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(subText, style: TextStyle(fontSize: 11, color: color)),
+          ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        selectedItemColor: const Color(0xFF0277BD),
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        onTap: (index) => setState(() => _currentIndex = index),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'الرئيسية'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'الفواتير'),
-          BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: 'المنتجات'),
-          BottomNavigationBarItem(icon: Icon(Icons.insert_chart), label: 'التقارير'),
-        ],
+    );
+  }
+
+  Widget _buildActionButton(BuildContext context, {required String title, required IconData icon, required VoidCallback onTap}) {
+    return ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF0277BD),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
+      onPressed: onTap,
+      icon: Icon(icon, color: Colors.white, size: 18),
+      label: Text(title, style: const TextStyle(color: Colors.white, fontSize: 13)),
     );
   }
 }

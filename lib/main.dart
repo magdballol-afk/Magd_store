@@ -171,7 +171,7 @@ class HomeScreenContent extends StatelessWidget {
                       SizedBox(height: 6),
                       Text(
                         'تحليلات الذكاء الاصطناعي اليومية',
-                        style: TextStyle(color: Colors.white90, fontSize: 13),
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
                       ),
                     ],
                   ),

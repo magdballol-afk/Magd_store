@@ -351,7 +351,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0277BD),
-                        padding: const EdgeInsets.vertical(14),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onPressed: () {
                         setState(() {
@@ -369,7 +369,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.vertical(14)),
+                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
                         onPressed: () {
                           setState(() {
                             isEditing = false;

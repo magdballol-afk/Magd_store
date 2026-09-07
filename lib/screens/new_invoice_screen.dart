@@ -24,13 +24,13 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   // قائمة المنتجات المضافة للفاتورة الحالية
   List<Map<String, dynamic>> _selectedInvoiceItems = [];
 
-  // قائمة المنتجات الكلية في المحل مع تحديد أسعار كل فئة
+  // قائمة المنتجات الكلية في المحل مع أسعار الفئات المحددة
   final List<Map<String, dynamic>> _allProducts = [
     {
       'name': 'بسكويت سادة',
-      'priceRetail': 2000.0,      // مفرق
-      'priceHalfWholesale': 1800.0, // نصف جملة
-      'priceWholesale': 1500.0,   // جملة
+      'priceRetail': 2000.0,        // مفرق
+      'priceHalfWholesale': 1800.0,   // نصف جملة
+      'priceWholesale': 1500.0,     // جملة
     },
     {
       'name': 'بسكويت محشي',
@@ -64,7 +64,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     }
   }
 
-  // الحصول على السعر المناسب حسب نوع التعامل المحدد
+  // تحديد سعر المنتج بناءً على نوع التعامل المختار
   double _getProductPrice(Map<String, dynamic> product) {
     if (_dealType == 'جملة') {
       return product['priceWholesale'] ?? 0.0;
@@ -85,7 +85,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     return (_netTotal + _previousBalance) - paid;
   }
 
-  // نافذة البحث والانتفاء الذكي من قائمة المنتجات
+  // نافذة البحث والانتفاء الذكي للمواد
   void _showAddProductDialog() {
     String searchQuery = '';
 
@@ -96,8 +96,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return StatefulWidget(
-          builder: (context, setModalState) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
             final filteredProducts = _allProducts.where((product) {
               final name = product['name'].toString().toLowerCase();
               return name.contains(searchQuery.toLowerCase());
@@ -121,6 +121,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                   const SizedBox(height: 12),
 
+                  // حقل البحث المباشر
                   TextField(
                     autofocus: true,
                     textAlign: TextAlign.right,
@@ -138,6 +139,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                   const SizedBox(height: 12),
 
+                  // قائمة النتائج المفلترة
                   SizedBox(
                     height: 250,
                     child: filteredProducts.isEmpty

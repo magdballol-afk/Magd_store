@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
 
 class NewInvoiceScreen extends StatefulWidget {
-  const NewInvoiceScreen({super.key});
+  final Map<String, dynamic>? existingInvoice; // إضافة إمكانية استقبال فاتورة سابقة لعدم حدوث خطأ عند الاستدعاء
+
+  const NewInvoiceScreen({super.key, this.existingInvoice});
 
   @override
   State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();
 }
 
 class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
-  String _paymentType = 'آجل (دين)'; // 'نقدي' أو 'آجل (دين)'
-  String _dealType = 'مفرق'; // 'مفرق'، 'نصف جملة'، 'جملة'
-  String _currency = 'ليرة سورية'; // 'ليرة سورية' أو 'دولار ($)'
+  String _paymentType = 'آجل (دين)';
+  String _dealType = 'مفرق';
+  String _currency = 'ليرة سورية';
 
   final TextEditingController _customerNameController = TextEditingController();
   final TextEditingController _paidAmountController = TextEditingController();
 
-  // قاعدة بيانات تجريبية للعملاء (يمكن استبدالها بربط من قاعدة البيانات الحقيقية)
   final List<Map<String, dynamic>> _customersList = [
     {'name': 'محمد أحمد العلي', 'phone': '0911111111', 'previousBalance': 15000.0},
     {'name': 'محمود سليمان', 'phone': '0922222222', 'previousBalance': 0.0},
@@ -24,7 +25,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     {'name': 'سامر خليل', 'phone': '0955555555', 'previousBalance': 0.0},
   ];
 
-  // قائمة المنتجات داخل الفاتورة
   List<Map<String, dynamic>> _invoiceItems = [
     {
       'name': 'شامبو بانتين 400 مل',
@@ -34,17 +34,27 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     },
   ];
 
-  double _previousBalance = 0.0; // الرصيد السابق للعميل المختار
+  double _previousBalance = 0.0;
 
-  // حساب المجموع الفرعي
+  @override
+  void initState() {
+    super.initState();
+    // إذا تم تمرير فاتورة سابقة يتم تحميل بياناتها تلقائياً
+    if (widget.existingInvoice != null) {
+      final inv = widget.existingInvoice!;
+      _customerNameController.text = inv['customerName'] ?? '';
+      _paymentType = inv['paymentType'] ?? 'آجل (دين)';
+      _dealType = inv['dealType'] ?? 'مفرق';
+      _currency = inv['currency'] ?? 'ليرة سورية';
+    }
+  }
+
   double get _subtotal {
     return _invoiceItems.fold(0.0, (sum, item) => sum + (item['total'] as double));
   }
 
-  // حساب صافي الفاتورة
   double get _netTotal => _subtotal;
 
-  // حساب الدفعة المقبوضة
   double get _paidAmount {
     if (_paymentType == 'نقدي') {
       return _netTotal;
@@ -52,7 +62,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     return double.tryParse(_paidAmountController.text) ?? 0.0;
   }
 
-  // حساب الرصيد المتبقي
   double get _remainingBalance {
     if (_paymentType == 'نقدي') {
       return 0.0;
@@ -60,7 +69,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     return (_netTotal + _previousBalance) - _paidAmount;
   }
 
-  // إعادة ضبط الواجهة لإنشاء فاتورة جديدة
   void _resetForm() {
     setState(() {
       _paymentType = 'آجل (دين)';
@@ -73,9 +81,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     });
   }
 
-  // دالة حفظ الفاتورة مع التحقق من الشروط
   void _saveInvoice() {
-    // 1. التحقق من وجود منتجات
     if (_invoiceItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -86,7 +92,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       return;
     }
 
-    // 2. التحقق من اسم العميل في حال كانت الفاتورة آجل (دين)
     if (_paymentType == 'آجل (دين)' && _customerNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -97,7 +102,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       return;
     }
 
-    // 3. تأكيد الحفظ وإعادة ضبط الشاشة
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('تم حفظ الفاتورة بنجاح'),
@@ -105,7 +109,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       ),
     );
 
-    // الانتقال للوضع الأصلي وتصفير البيانات لإنشاء فاتورة جديدة
     _resetForm();
   }
 
@@ -161,7 +164,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            // خيارات طريقة الدفع
             Row(
               children: [
                 _buildToggleOption(
@@ -186,7 +188,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 12),
 
-            // خيارات نوع التعامل
             Row(
               children: [
                 _buildToggleOption(
@@ -212,7 +213,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 12),
 
-            // خيارات عملة الفاتورة
             Row(
               children: [
                 _buildToggleOption(
@@ -232,7 +232,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 16),
 
-            // حقل إدخال اسم العميل المتقدم مع خاصية الاقتراح التلقائي والبحث
+            // حقل البحث المتقدم
             RawAutocomplete<Map<String, dynamic>>(
               textEditingController: _customerNameController,
               focusNode: FocusNode(),
@@ -289,8 +289,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     elevation: 4.0,
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
+                      constraints: const BoxConstraints(maxHeight: 200), // تصحيح استخدام maxHeight عبر BoxConstraints
                       width: MediaQuery.of(context).size.width - 32,
-                      maxHeight: 200,
                       color: Colors.white,
                       child: ListView.separated(
                         padding: EdgeInsets.zero,
@@ -323,7 +323,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 12),
 
-            // زر إضافة منتج
             SizedBox(
               width: double.infinity,
               height: 48,
@@ -357,7 +356,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 8),
 
-            // قائمة المنتجات
             if (_invoiceItems.isEmpty)
               const Center(
                 child: Padding(
@@ -404,7 +402,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
             const Divider(height: 24),
 
-            // تفاصيل الحساب
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -433,7 +430,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 12),
 
-            // حقل الدفعة المقبوضة (مفعل عند الدفع الآجل)
             if (_paymentType == 'آجل (دين)') ...[
               TextField(
                 controller: _paidAmountController,
@@ -454,7 +450,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               const SizedBox(height: 12),
             ],
 
-            // الرصيد المتبقي
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -472,7 +467,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
             const SizedBox(height: 24),
 
-            // زر الحفظ
             SizedBox(
               width: double.infinity,
               height: 52,

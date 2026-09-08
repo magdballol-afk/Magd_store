@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 
 class NewInvoiceScreen extends StatefulWidget {
-  const NewInvoiceScreen({Key? key}) : super(key: key);
+  final dynamic existingInvoice;
+
+  const NewInvoiceScreen({
+    Key? key,
+    this.existingInvoice,
+  }) : super(key: key);
 
   @override
   State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();
@@ -9,22 +14,27 @@ class NewInvoiceScreen extends StatefulWidget {
 
 class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   // Enum/Types
-  String _invoiceType = 'مبيعات'; // مبيعات / مشتريات
-  String _paymentMethod = 'نقدي'; // نقدي / آجل (دين)
-  String _tradeType = 'مفرق'; // مفرق / نصف جملة / جملة
-  String _currency = 'ليرة سورية'; // ليرة سورية / دولار ($)
+  String _invoiceType = 'مبيعات';
+  String _paymentMethod = 'نقدي';
+  String _tradeType = 'مفرق';
+  String _currency = 'ليرة سورية';
 
   // Controllers & Amounts
   final TextEditingController _customerNameController = TextEditingController();
   final TextEditingController _paidAmountController = TextEditingController();
 
   double _subTotal = 0.0;
-  double _previousBalance = 0.0; // رصيد سابق مترتب
+  double _previousBalance = 0.0;
 
   @override
   void initState() {
     super.initState();
     _paidAmountController.addListener(_onPaidAmountChanged);
+
+    // إذا كانت هناك فاتورة سابقة ممررة للتعديل
+    if (widget.existingInvoice != null) {
+      // يمكنك هنا تعبئة البيانات من widget.existingInvoice
+    }
   }
 
   @override
@@ -34,16 +44,13 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     super.dispose();
   }
 
-  // حساب صافي الفاتورة
   double get _netTotal => _subTotal;
 
-  // حساب الرصيد الحالي المتبقي
   double get _remainingBalance {
     double paid = double.tryParse(_paidAmountController.text) ?? 0.0;
     return (_netTotal + _previousBalance) - paid;
   }
 
-  // تحديث الدفعة المقبوضة تلقائياً عند تغيير طريقة الدفع أو إجمالي الفاتورة
   void _updatePaymentLogic() {
     if (_paymentMethod == 'نقدي') {
       _paidAmountController.text = _netTotal.toStringAsFixed(2);
@@ -51,14 +58,14 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   }
 
   void _onPaidAmountChanged() {
-    setState(() {}); // إعادة بناء الواجهة لتحديث الرصيد المتبقي
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('فاتورة جديدة'),
+        title: Text(widget.existingInvoice != null ? 'تعديل فاتورة' : 'فاتورة جديدة'),
         centerTitle: true,
       ),
       body: Directionality(
@@ -68,7 +75,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. خيارات نوع الفاتورة وطريقة الدفع
               _buildToggleRow(
                 title: 'نوع الفاتورة:',
                 options: ['مبيعات', 'مشتريات'],
@@ -100,13 +106,12 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
               _buildToggleRow(
                 title: 'عملة الفاتورة:',
-                options: ['ليرة سورية', 'دولار ($)'],
+                options: ['ليرة سورية', r'دولار ($)'], // تم إصلاح علامة الـ $
                 selectedValue: _currency,
                 onSelected: (val) => setState(() => _currency = val),
               ),
               const SizedBox(height: 16),
 
-              // 2. حقل اسم العميل
               TextField(
                 controller: _customerNameController,
                 decoration: InputDecoration(
@@ -119,10 +124,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 3. زر إضافة منتج
               OutlinedButton.icon(
                 onPressed: () {
-                  // محاكاة إضافة منتج بقيمة 10000 لتجربة المنطق
                   setState(() {
                     _subTotal += 10000;
                     _updatePaymentLogic();
@@ -139,24 +142,21 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               ),
               const SizedBox(height: 20),
 
-              // 4. عرض المجاميع
               _buildSummaryRow('المجموع الفرعي:', _subTotal),
               const Divider(),
               _buildSummaryRow('صافي الفاتورة:', _netTotal, isHighlight: true),
               const SizedBox(height: 16),
 
-              // 5. الرصيد السابق والدفعات
               Text(
                 'رصيد سابق مترتب: ${_previousBalance.toStringAsFixed(1)} $_currencySymbol',
                 style: const TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 8),
 
-              // حقل الدفعة المقبوضة
               TextField(
                 controller: _paidAmountController,
                 keyboardType: TextInputType.number,
-                enabled: _paymentMethod != 'نقدي', // تعطيل التعديل اليدوي إذا كانت الفاتورة نقدية
+                enabled: _paymentMethod != 'نقدي',
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.payments_outlined, color: Colors.green),
                   labelText: 'الدفعة المقبوضة ($_currencySymbol)',
@@ -167,7 +167,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               ),
               const SizedBox(height: 12),
 
-              // 6. الرصيد الحالي المتبقي
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -192,9 +191,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     );
   }
 
-  String get _currencySymbol => _currency == 'ليرة سورية' ? 'ل.س' : '\$';
+  String get _currencySymbol => _currency == 'ليرة سورية' ? 'ل.س' : r'$';
 
-  // WIDGETS HELPER: أزرار التبديل الاختيارية
   Widget _buildToggleRow({
     required String title,
     required List<String> options,
@@ -248,7 +246,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     );
   }
 
-  // WIDGETS HELPER: صفوف المجاميع
   Widget _buildSummaryRow(String title, double amount, {bool isHighlight = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),

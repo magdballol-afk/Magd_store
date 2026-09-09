@@ -1,514 +1,351 @@
 import 'package:flutter/material.dart';
-
-// enum لتحديد نوع الحسم (مبلغ أو نسبة مئوية)
-enum DiscountType { fixed, percentage }
-
-// نموذج يمثل عنصر الفاتورة
-class InvoiceItem {
-  final String name;
-  final double price;
-  final int quantity;
-  final double discountValue; // قيمة الحسم المُدخلة
-  final DiscountType discountType; // نوع الحسم (مبلغ أو نسبة)
-
-  InvoiceItem({
-    required this.name,
-    required this.price,
-    required this.quantity,
-    this.discountValue = 0.0,
-    this.discountType = DiscountType.fixed,
-  });
-
-  // حساب مبلغ الحسم الفعلي للمادة
-  double get calculatedDiscount {
-    double subtotal = price * quantity;
-    if (discountType == DiscountType.percentage) {
-      return subtotal * (discountValue / 100.0);
-    }
-    return discountValue;
-  }
-
-  // إجمالي سعر المادة بعد الحسم
-  double get total => (price * quantity) - calculatedDiscount;
-}
+import 'package:blue_thermal_printer/blue_thermal_printer.dart'; // حزمة البلوتوث
 
 class NewInvoiceScreen extends StatefulWidget {
-  final dynamic existingInvoice; // إمكانية استقبال فاتورة للتعديل
-
-  const NewInvoiceScreen({
-    Key? key,
-    this.existingInvoice,
-  }) : super(key: key);
+  const NewInvoiceScreen({Key? key}) : super(key: key);
 
   @override
   State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();
 }
 
 class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
-  // خيارات الفاتورة
-  String paymentType = 'آجل (دين)';
-  String dealType = 'مفرق';
-  String currency = 'ليرة سورية';
+  // إعدادات البلوتوث والطابعة
+  BlueThermalPrinter bluetooth = BlueThermalPrinter.instance;
+  List<BluetoothDevice> _devices = [];
+  BluetoothDevice? _selectedDevice;
+  bool _isConnected = false;
 
-  // القوائم والمُدخلات
-  final List<InvoiceItem> _addedProducts = [];
+  // عناصر الفاتورة
+  String selectedCurrency = 'ليرة سورية';
+  bool isDiscountAmount = true; // مبلغ أم نسبة مئوية
   final TextEditingController _customerController = TextEditingController();
-  final TextEditingController _paidAmountController = TextEditingController();
-  final TextEditingController _totalDiscountController = TextEditingController(); // حسم الفاتورة الكلي
+  final TextEditingController _discountController = TextEditingController(text: '0.0');
+  final TextEditingController _paidController = TextEditingController();
 
-  DiscountType _totalDiscountType = DiscountType.fixed; // نوع الحسم الكلي للفاتورة
+  // بيانات حسابية تجريبية
+  double subtotal = 0.0;
+  double totalDiscount = 0.0;
+  double netTotal = 0.0;
+  double previousBalance = 0.0;
+  double remainingBalance = 0.0;
 
-  double previousBalance = 0.0; // رصيد سابق مترتب
-
-  // حساب المجموع الفرعي (مجموع العناصر بعد حسم المواد وقبل حسم الفاتورة الكلي)
-  double get subTotal {
-    return _addedProducts.fold(0.0, (sum, item) => sum + item.total);
+  @override
+  void initState() {
+    super.initState();
+    _initBluetooth();
   }
 
-  // حساب الخصم الكلي للفاتورة بالقيم المالية
-  double get calculatedTotalDiscount {
-    double inputVal = double.tryParse(_totalDiscountController.text) ?? 0.0;
-    if (_totalDiscountType == DiscountType.percentage) {
-      return subTotal * (inputVal / 100.0);
+  // تهيئة البلوتوث وجلب الأجهزة المقترنة
+  void _initBluetooth() async {
+    bool? isConnected = await bluetooth.isConnected;
+    List<BluetoothDevice> devices = [];
+    try {
+      devices = await bluetooth.getBondedDevices();
+    } catch (e) {
+      print("خطأ في جلب أجهزة البلوتوث: $e");
     }
-    return inputVal;
+
+    if (mounted) {
+      setState(() {
+        _devices = devices;
+        _isConnected = isConnected ?? false;
+      });
+    }
   }
 
-  // حساب صافي الفاتورة
-  double get netTotal {
-    double total = subTotal - calculatedTotalDiscount;
-    return total < 0 ? 0 : total;
+  // دالة اختيار الطابعة والاتصال بها
+  void _showPrinterDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('اختر طابعة البلوتوث', textAlign: TextAlign.right),
+          content: DropdownButton<BluetoothDevice>(
+            value: _selectedDevice,
+            hint: const Text('اختر الطابعة'),
+            isExpanded: true,
+            items: _devices.map((device) {
+              return DropdownMenuItem(
+                value: device,
+                child: Text(device.name ?? 'جهاز غير معروف'),
+              );
+            }).toList(),
+            onChanged: (device) {
+              setState(() {
+                _selectedDevice = device;
+              });
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (_selectedDevice != null) {
+                  await bluetooth.connect(_selectedDevice!);
+                  setState(() {
+                    _isConnected = true;
+                  });
+                  Navigator.pop(context);
+                  _printReceipt(); // طباعة الفاتورة فور الاتصال
+                }
+              },
+              child: const Text('اتصال وطباعة'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
-  // حساب الرصيد المتبقي
-  double get remainingBalance {
-    double paid = double.tryParse(_paidAmountController.text) ?? 0.0;
-    return (netTotal + previousBalance) - paid;
+  // دالة طباعة الفاتورة حرارياً عبر البلوتوث
+  void _printReceipt() async {
+    if ((await bluetooth.isConnected) ?? false) {
+      // 1. عنوان الفاتورة (منتصف)
+      bluetooth.printCustom("فاتورة مبيعات", 3, 1);
+      bluetooth.printNewLine();
+
+      // 2. تفاصيل العميل والعملة
+      bluetooth.printLeftRight("العميل:", _customerController.text.isEmpty ? "عميل نقدي" : _customerController.text, 1);
+      bluetooth.printLeftRight("العملة:", selectedCurrency, 1);
+      bluetooth.printCustom("--------------------------------", 1, 1);
+
+      // 3. الحسابات والأسعار
+      bluetooth.printLeftRight("المجموع الفرعي:", "$subtotal $selectedCurrency", 1);
+      bluetooth.printLeftRight("الخصم الكلي:", "${_discountController.text} $selectedCurrency", 1);
+      bluetooth.printLeftRight("صافي الفاتورة:", "$netTotal $selectedCurrency", 1);
+      bluetooth.printLeftRight("الدفعة المقبوضة:", "${_paidController.text} $selectedCurrency", 1);
+      bluetooth.printLeftRight("الرصيد المتبقي:", "$remainingBalance $selectedCurrency", 1);
+
+      bluetooth.printCustom("--------------------------------", 1, 1);
+      bluetooth.printCustom("شكراً لزيارتكم", 2, 1);
+      bluetooth.printNewLine();
+      bluetooth.printNewLine();
+      bluetooth.paperCut(); // قطع الورقة إن كانت الطابعة تدعم ذلك
+    } else {
+      _showPrinterDialog(); // إذا لم يكن متصلاً، افحص وافتح قائمة الطابعات
+    }
   }
 
   @override
   void dispose() {
     _customerController.dispose();
-    _paidAmountController.dispose();
-    _totalDiscountController.dispose();
+    _discountController.dispose();
+    _paidController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF4F6F9),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF0D47A1),
-          elevation: 0,
-          centerTitle: true,
-          title: Text(
-            widget.existingInvoice == null ? 'فاتورة جديدة' : 'تعديل الفاتورة',
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // طريقة الدفع
-              _buildToggleSection(
-                title: ':طريقة الدفع',
-                options: ['آجل (دين)', 'نقدي'],
-                selectedValue: paymentType,
-                onSelect: (val) => setState(() => paymentType = val),
-              ),
-              const SizedBox(height: 12),
-
-              // نوع التعامل
-              _buildToggleSection(
-                title: ':نوع التعامل',
-                options: ['مفرق', 'نصف جملة', 'جملة'],
-                selectedValue: dealType,
-                onSelect: (val) => setState(() => dealType = val),
-              ),
-              const SizedBox(height: 12),
-
-              // عملة الفاتورة
-              _buildToggleSection(
-                title: ':عملة الفاتورة',
-                options: ['ليرة سورية', r'($) دولار'],
-                selectedValue: currency,
-                onSelect: (val) => setState(() => currency = val),
-              ),
-              const SizedBox(height: 16),
-
-              // البحث/إدخال العميل
-              TextField(
-                controller: _customerController,
-                decoration: _inputDecoration(
-                  hintText: '...ابحث أو أدخل اسم العميل',
-                  prefixIcon: Icons.person_search_outlined,
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // زر إضافة منتج
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF0D47A1), width: 1.5),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-                ),
-                onPressed: _showAddProductDialog,
-                icon: const Icon(Icons.shopping_cart_outlined, color: Color(0xFF0D47A1)),
-                label: Text(
-                  'إضافة منتج للفاتورة ($dealType)',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0D47A1)),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // قائمة المنتجات المضافة
-              const Text('المنتجات المضافة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 8),
-
-              _addedProducts.isEmpty
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20),
-                        child: Text('لم يتم إضافة أي منتج بعد', style: TextStyle(color: Colors.grey)),
-                      ),
-                    )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _addedProducts.length,
-                      itemBuilder: (context, index) {
-                        final item = _addedProducts[index];
-                        final discountText = item.discountValue > 0
-                            ? (item.discountType == DiscountType.percentage
-                                ? '${item.discountValue}% (${item.calculatedDiscount.toStringAsFixed(1)})'
-                                : '${item.discountValue}')
-                            : '0';
-
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          child: ListTile(
-                            title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('الكمية: ${item.quantity} | السعر: ${item.price} | حسم: $discountText'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text('${item.total.toStringAsFixed(1)} $currency',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D47A1))),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                  onPressed: () {
-                                    setState(() {
-                                      _addedProducts.removeAt(index);
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('فاتورة جديدة'),
+        centerTitle: true,
+        backgroundColor: const Color(0xFF0D47A1),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. عملة الفاتورة
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    ChoiceChip(
+                      label: const Text('(\$) دولار'),
+                      selected: selectedCurrency == 'دولار',
+                      onSelected: (selected) {
+                        setState(() => selectedCurrency = 'دولار');
                       },
                     ),
-
-              const Divider(height: 32),
-
-              // المجموع الفرعي
-              _buildSummaryRow('المجموع الفرعي:', '${subTotal.toStringAsFixed(1)} $currency'),
-              const SizedBox(height: 10),
-
-              // حسم الفاتورة الكلي مع زر التحويل بين (مبلغ / %)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('حسم الفاتورة الكلي:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
-                  Row(
-                    children: [
-                      // Toggle switch بين المبلغ والنسبة المئوية
-                      ToggleButtons(
-                        constraints: const BoxConstraints(minWidth: 38, minHeight: 36),
-                        borderRadius: BorderRadius.circular(8),
-                        isSelected: [
-                          _totalDiscountType == DiscountType.fixed,
-                          _totalDiscountType == DiscountType.percentage,
-                        ],
-                        onPressed: (index) {
-                          setState(() {
-                            _totalDiscountType = index == 0 ? DiscountType.fixed : DiscountType.percentage;
-                          });
-                        },
-                        children: const [
-                          Text('مبلغ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                          Text('%', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 100,
-                        height: 40,
-                        child: TextField(
-                          controller: _totalDiscountController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          textAlign: TextAlign.center,
-                          decoration: InputDecoration(
-                            hintText: '0.0',
-                            contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          onChanged: (val) => setState(() {}),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // صافي الفاتورة
-              _buildSummaryRow(
-                'صافي الفاتورة:',
-                '${netTotal.toStringAsFixed(1)} $currency',
-                valueColor: Colors.green.shade700,
-                isBold: true,
-              ),
-              const SizedBox(height: 6),
-
-              _buildSummaryRow('رصيد سابق مترتب:', '${previousBalance.toStringAsFixed(1)} $currency', valueColor: Colors.grey),
-              const SizedBox(height: 12),
-
-              // الدفعة المقبوضة
-              TextField(
-                controller: _paidAmountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                onChanged: (val) => setState(() {}),
-                decoration: _inputDecoration(
-                  hintText: 'الدفعة المقبوضة ($currency)',
-                  prefixIcon: Icons.money_outlined,
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // الرصيد الحالي المتبقي
-              _buildSummaryRow(
-                'الرصيد الحالي المتبقي:',
-                '${remainingBalance.toStringAsFixed(1)} $currency',
-                valueColor: Colors.green.shade700,
-                isBold: true,
-              ),
-              const SizedBox(height: 24),
-
-              // زر حفظ الفاتورة
-              SizedBox(
-                height: 50,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D47A1),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: _saveInvoice,
-                  icon: const Icon(Icons.save_outlined, color: Colors.white),
-                  label: const Text('حفظ الفاتورة', style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // نافذة إضافة مادة مع خيار الحسم (مبلغ أو %)
-  void _showAddProductDialog() {
-    final nameController = TextEditingController();
-    final priceController = TextEditingController();
-    final quantityController = TextEditingController(text: '1');
-    final itemDiscountController = TextEditingController(text: '0');
-
-    DiscountType itemDiscountType = DiscountType.fixed;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return Directionality(
-            textDirection: TextDirection.rtl,
-            child: AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Center(
-                child: Text('إضافة مادة للفاتورة', style: TextStyle(color: Color(0xFF0D47A1), fontWeight: FontWeight.bold)),
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(labelText: 'اسم المادة أو الباركود', prefixIcon: Icon(Icons.search)),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: priceController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(labelText: 'السعر'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: quantityController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'الكمية'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    // حقل حسم المادة مع أزرار التحويل
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: itemDiscountController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(
-                              labelText: 'الحسم على المادة',
-                              prefixIcon: Icon(Icons.discount_outlined),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ToggleButtons(
-                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                          borderRadius: BorderRadius.circular(8),
-                          isSelected: [
-                            itemDiscountType == DiscountType.fixed,
-                            itemDiscountType == DiscountType.percentage,
-                          ],
-                          onPressed: (index) {
-                            setDialogState(() {
-                              itemDiscountType = index == 0 ? DiscountType.fixed : DiscountType.percentage;
-                            });
-                          },
-                          children: const [
-                            Text('مبلغ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                            Text('%', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ],
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('ليرة سورية'),
+                      selected: selectedCurrency == 'ليرة سورية',
+                      selectedColor: const Color(0xFF0D47A1),
+                      labelStyle: TextStyle(color: selectedCurrency == 'ليرة سورية' ? Colors.white : Colors.black),
+                      onSelected: (selected) {
+                        setState(() => selectedCurrency = 'ليرة سورية');
+                      },
                     ),
                   ],
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D47A1)),
-                  onPressed: () {
-                    if (nameController.text.isNotEmpty) {
-                      final price = double.tryParse(priceController.text) ?? 0.0;
-                      final qty = int.tryParse(quantityController.text) ?? 1;
-                      final discountVal = double.tryParse(itemDiscountController.text) ?? 0.0;
+                const Text(':عملة الفاتورة', style: TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 16),
 
-                      setState(() {
-                        _addedProducts.add(InvoiceItem(
-                          name: nameController.text,
-                          price: price,
-                          quantity: qty,
-                          discountValue: discountVal,
-                          discountType: itemDiscountType,
-                        ));
-                      });
-                      Navigator.of(ctx).pop();
-                    }
+            // 2. البحث عن اسم العميل
+            TextFormField(
+              controller: _customerController,
+              textAlign: TextAlign.right,
+              decoration: InputDecoration(
+                hintText: 'ابحث أو أدخل اسم العميل...',
+                prefixIcon: const Icon(Icons.person_search_outlined),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // 3. زر إضافة منتج للفاتورة
+            OutlinedButton.icon(
+              onPressed: () {},
+              icon: const Icon(Icons.shopping_cart_outlined, color: Color(0xFF0D47A1)),
+              label: const Text('إضافة منتج للفاتورة (مفرق)', style: TextStyle(color: Color(0xFF0D47A1), fontSize: 16)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFF0D47A1), width: 1.5),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // 4. قائمة المنتجات المضافة
+            const Align(
+              alignment: Alignment.centerRight,
+              child: Text('المنتجات المضافة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+            const SizedBox(height: 20),
+            Center(
+              child: Text('لم يتم إضافة أي منتج بعد', style: TextStyle(color: Colors.grey[400])),
+            ),
+            const SizedBox(height: 20),
+            const Divider(),
+
+            // 5. المجموع الفرعي
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$subtotal $selectedCurrency', style: const TextStyle(fontWeight: FontWeight.bold)),
+                const Text(':المجموع الفرعي', style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // 6. حسم الفاتورة الكلي
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                SizedBox(
+                  width: 120,
+                  child: TextFormField(
+                    controller: _discountController,
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+                ToggleButtons(
+                  isSelected: [isDiscountAmount, !isDiscountAmount],
+                  onPressed: (index) {
+                    setState(() {
+                      isDiscountAmount = index == 0;
+                    });
                   },
-                  child: const Text('إضافة', style: TextStyle(color: Colors.white)),
+                  borderRadius: BorderRadius.circular(8),
+                  children: const [
+                    Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('مبلغ')),
+                    Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('%')),
+                  ],
+                ),
+                const Text(':حسم الفاتورة الكلي', style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // 7. صافي الفاتورة
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$netTotal $selectedCurrency', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                const Text(':صافي الفاتورة', style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // 8. رصيد سابق مترتب
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$previousBalance $selectedCurrency', style: const TextStyle(color: Colors.grey)),
+                const Text(':رصيد سابق مترتب', style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // 9. الدفعة المقبوضة
+            TextFormField(
+              controller: _paidController,
+              textAlign: TextAlign.right,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                hintText: 'الدفعة المقبوضة ($selectedCurrency)',
+                prefixIcon: const Icon(Icons.money),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // 10. الرصيد الحالي المتبقي
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$remainingBalance $selectedCurrency', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                const Text(':الرصيد الحالي المتبقي', style: TextStyle(color: Colors.grey)),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // ================== الأزرار الرئيسية ==================
+            Row(
+              children: [
+                // زر طباعة عبر البلوتوث المضاف
+                Expanded(
+                  flex: 1,
+                  child: ElevatedButton.icon(
+                    onPressed: _showPrinterDialog,
+                    icon: const Icon(Icons.print_outlined, color: Colors.white),
+                    label: const Text('طباعة', style: TextStyle(fontSize: 16, color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal, // لون مميز لزر الطباعة
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // زر حفظ الفاتورة الرئيسي
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      // كود حفظ الفاتورة
+                    },
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('حفظ الفاتورة', style: TextStyle(fontSize: 18)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D47A1),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
+                  ),
                 ),
               ],
             ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildToggleSection({
-    required String title,
-    required List<String> options,
-    required String selectedValue,
-    required Function(String) onSelect,
-  }) {
-    return Row(
-      children: [
-        SizedBox(width: 100, child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-        Expanded(
-          child: Wrap(
-            spacing: 8,
-            children: options.map((option) {
-              final isSelected = selectedValue == option;
-              return ChoiceChip(
-                label: Text(option),
-                selected: isSelected,
-                selectedColor: const Color(0xFF0D47A1),
-                labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: FontWeight.bold),
-                onSelected: (_) => onSelect(option),
-              );
-            }).toList(),
-          ),
+          ],
         ),
-      ],
-    );
-  }
-
-  Widget _buildSummaryRow(String label, String value, {Color? valueColor, bool isBold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(fontSize: 15, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-              color: valueColor ?? Colors.black,
-            ),
-          ),
-        ],
       ),
-    );
-  }
-
-  InputDecoration _inputDecoration({required String hintText, required IconData prefixIcon}) {
-    return InputDecoration(
-      hintText: hintText,
-      prefixIcon: Icon(prefixIcon, color: const Color(0xFF0D47A1)),
-      fillColor: Colors.white,
-      filled: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-    );
-  }
-
-  void _saveInvoice() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم حفظ الفاتورة بنجاح')),
     );
   }
 }

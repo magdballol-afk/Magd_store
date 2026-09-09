@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:blue_thermal_printer/blue_thermal_printer.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 class NewInvoiceScreen extends StatefulWidget {
-  // إضافة البارامتر لتفادي خطأ existingInvoice
   final dynamic existingInvoice;
 
   const NewInvoiceScreen({Key? key, this.existingInvoice}) : super(key: key);
@@ -13,9 +12,8 @@ class NewInvoiceScreen extends StatefulWidget {
 
 class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   // إعدادات البلوتوث والطابعة
-  BlueThermalPrinter bluetooth = BlueThermalPrinter.instance;
-  List<BluetoothDevice> _devices = [];
-  BluetoothDevice? _selectedDevice;
+  List<BluetoothInfo> _devices = [];
+  BluetoothInfo? _selectedDevice;
   bool _isConnected = false;
 
   // عناصر الفاتورة
@@ -25,7 +23,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   final TextEditingController _discountController = TextEditingController(text: '0.0');
   final TextEditingController _paidController = TextEditingController();
 
-  // بيانات حسابية
+  // الحسابات
   double subtotal = 0.0;
   double totalDiscount = 0.0;
   double netTotal = 0.0;
@@ -36,50 +34,49 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   void initState() {
     super.initState();
     _initBluetooth();
-
-    // إذا كانت الفاتورة معبأة مسبقاً (تعديل فاتورة)
-    if (widget.existingInvoice != null) {
-      // يمكنك جلب وتعبئة البيانات هنا إن لزم الأمر
-    }
   }
 
+  // البحث عن أجهزة البلوتوث المقترنة
   void _initBluetooth() async {
-    bool? isConnected = await bluetooth.isConnected;
-    List<BluetoothDevice> devices = [];
-    try {
-      devices = await bluetooth.getBondedDevices();
-    } catch (e) {
-      print("خطأ في جلب أجهزة البلوتوث: $e");
-    }
-
-    if (mounted) {
-      setState(() {
-        _devices = devices;
-        _isConnected = isConnected ?? false;
-      });
+    final bool result = await PrintBluetoothThermal.bluetoothEnabled;
+    if (result) {
+      final List<BluetoothInfo> pairedDevices = await PrintBluetoothThermal.pairedBluetoothDevice;
+      if (mounted) {
+        setState(() {
+          _devices = pairedDevices;
+        });
+      }
     }
   }
 
+  // نافذة اختيار الطابعة
   void _showPrinterDialog() {
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: const Text('اختر طابعة البلوتوث', textAlign: TextAlign.right),
-          content: DropdownButton<BluetoothDevice>(
-            value: _selectedDevice,
-            hint: const Text('اختر الطابعة'),
-            isExpanded: true,
-            items: _devices.map((device) {
-              return DropdownMenuItem(
-                value: device,
-                child: Text(device.name ?? 'جهاز غير معروف'),
+          content: StatefulBuilder(
+            builder: (BuildContext context, StateSetter setDialogState) {
+              return DropdownButton<BluetoothInfo>(
+                value: _selectedDevice,
+                hint: const Text('اختر الطابعة'),
+                isExpanded: true,
+                items: _devices.map((device) {
+                  return DropdownMenuItem(
+                    value: device,
+                    child: Text(device.name),
+                  );
+                }).toList(),
+                onChanged: (device) {
+                  setDialogState(() {
+                    _selectedDevice = device;
+                  });
+                  setState(() {
+                    _selectedDevice = device;
+                  });
+                },
               );
-            }).toList(),
-            onChanged: (device) {
-              setState(() {
-                _selectedDevice = device;
-              });
             },
           ),
           actions: [
@@ -90,12 +87,20 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ElevatedButton(
               onPressed: () async {
                 if (_selectedDevice != null) {
-                  await bluetooth.connect(_selectedDevice!);
+                  final bool connect = await PrintBluetoothThermal.connect(
+                    macPrinterAddress: _selectedDevice!.macAdress,
+                  );
                   setState(() {
-                    _isConnected = true;
+                    _isConnected = connect;
                   });
                   Navigator.pop(context);
-                  _printReceipt();
+                  if (connect) {
+                    _printReceipt();
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('فشل الاتصال بالطابعة')),
+                    );
+                  }
                 }
               },
               child: const Text('اتصال وطباعة'),
@@ -106,26 +111,25 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     );
   }
 
+  // عملية الطباعة
   void _printReceipt() async {
-    if ((await bluetooth.isConnected) ?? false) {
-      bluetooth.printCustom("فاتورة مبيعات", 3, 1);
-      bluetooth.printNewLine();
+    bool connectionStatus = await PrintBluetoothThermal.connectionStatus;
+    if (connectionStatus) {
+      String receiptText = "فاتورة مبيعات\n";
+      receiptText += "العميل: ${_customerController.text.isEmpty ? "عميل نقدي" : _customerController.text}\n";
+      receiptText += "العملة: $selectedCurrency\n";
+      receiptText += "--------------------------------\n";
+      receiptText += "المجموع الفرعي: $subtotal $selectedCurrency\n";
+      receiptText += "الخصم الكلي: ${_discountController.text} $selectedCurrency\n";
+      receiptText += "صافي الفاتورة: $netTotal $selectedCurrency\n";
+      receiptText += "الدفعة المقبوضة: ${_paidController.text} $selectedCurrency\n";
+      receiptText += "الرصيد المتبقي: $remainingBalance $selectedCurrency\n";
+      receiptText += "--------------------------------\n";
+      receiptText += "شكراً لزيارتكم\n\n\n";
 
-      bluetooth.printLeftRight("العميل:", _customerController.text.isEmpty ? "عميل نقدي" : _customerController.text, 1);
-      bluetooth.printLeftRight("العملة:", selectedCurrency, 1);
-      bluetooth.printCustom("--------------------------------", 1, 1);
-
-      bluetooth.printLeftRight("المجموع الفرعي:", "$subtotal $selectedCurrency", 1);
-      bluetooth.printLeftRight("الخصم الكلي:", "${_discountController.text} $selectedCurrency", 1);
-      bluetooth.printLeftRight("صافي الفاتورة:", "$netTotal $selectedCurrency", 1);
-      bluetooth.printLeftRight("الدفعة المقبوضة:", "${_paidController.text} $selectedCurrency", 1);
-      bluetooth.printLeftRight("الرصيد المتبقي:", "$remainingBalance $selectedCurrency", 1);
-
-      bluetooth.printCustom("--------------------------------", 1, 1);
-      bluetooth.printCustom("شكراً لزيارتكم", 2, 1);
-      bluetooth.printNewLine();
-      bluetooth.printNewLine();
-      bluetooth.paperCut();
+      await PrintBluetoothThermal.writeString(
+        printText: PrintTextSize(size: 2, text: receiptText),
+      );
     } else {
       _showPrinterDialog();
     }
@@ -170,7 +174,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       label: const Text('ليرة سورية'),
                       selected: selectedCurrency == 'ليرة سورية',
                       selectedColor: const Color(0xFF0D47A1),
-                      labelStyle: TextStyle(color: selectedCurrency == 'ليرة سورية' ? Colors.white : Colors.black),
+                      labelStyle: TextStyle(
+                        color: selectedCurrency == 'ليرة سورية' ? Colors.white : Colors.black,
+                      ),
                       onSelected: (selected) {
                         setState(() => selectedCurrency = 'ليرة سورية');
                       },
@@ -199,7 +205,10 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             OutlinedButton.icon(
               onPressed: () {},
               icon: const Icon(Icons.shopping_cart_outlined, color: Color(0xFF0D47A1)),
-              label: const Text('إضافة منتج للفاتورة (مفرق)', style: TextStyle(color: Color(0xFF0D47A1), fontSize: 16)),
+              label: const Text(
+                'إضافة منتج للفاتورة (مفرق)',
+                style: TextStyle(color: Color(0xFF0D47A1), fontSize: 16),
+              ),
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Color(0xFF0D47A1), width: 1.5),
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -208,7 +217,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 16),
 
-            // قائمة المنتجات المضافة
+            // قائمة المنتجات
             const Align(
               alignment: Alignment.centerRight,
               child: Text('المنتجات المضافة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -235,7 +244,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 SizedBox(
-                  width: 120,
+                  width: 100,
                   child: TextFormField(
                     controller: _discountController,
                     textAlign: TextAlign.center,
@@ -308,7 +317,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 24),
 
-            // الأزرار
+            // الأزرار السفليّة (طباعة وحفظ)
             Row(
               children: [
                 Expanded(
@@ -329,8 +338,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   flex: 2,
                   child: ElevatedButton.icon(
                     onPressed: () {},
-                    icon: const Icon(Icons.save_outlined),
-                    label: const Text('حفظ الفاتورة', style: TextStyle(fontSize: 18)),
+                    icon: const Icon(Icons.save_outlined, color: Colors.white),
+                    label: const Text('حفظ الفاتورة', style: TextStyle(fontSize: 18, color: Colors.white)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0D47A1),
                       padding: const EdgeInsets.symmetric(vertical: 14),

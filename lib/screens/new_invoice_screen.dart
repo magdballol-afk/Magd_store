@@ -145,7 +145,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     showDialog(
       context: context,
       builder: (context) {
-        // ✅ تم التصحيح هنا: استخدام StatefulBuilder بدلاً من StatefulWidget
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
@@ -167,7 +166,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       focusNode: FocusNode(),
                       optionsBuilder: (TextEditingValue textEditingValue) {
                         if (textEditingValue.text.isEmpty) {
-                          return const Iterable<Map<String, dynamic>>.empty();
+                          // ✅ تصحيح: إرجاع قائمة فارغة بشكل مباشر دون أخطاء
+                          return const [];
                         }
                         return _productsList.where((prod) {
                           final name = prod['name'].toString().toLowerCase();
@@ -454,7 +454,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               focusNode: FocusNode(),
               optionsBuilder: (TextEditingValue textEditingValue) {
                 if (textEditingValue.text.isEmpty) {
-                  return const Iterable<Map<String, dynamic>>::empty();
+                  // ✅ تصحيح: إرجاع قائمة فارغة بشكل مباشر بدون أخطاء
+                  return const [];
                 }
                 return _customersList.where((customer) {
                   final name = customer['name'].toString().toLowerCase();

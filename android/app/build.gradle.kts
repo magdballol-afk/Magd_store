@@ -8,8 +8,8 @@ plugins {
 android {
     namespace = "com.example.pro"
     compileSdk = flutter.compileSdkVersion
-    
-    // التعديل هنا: تم تحديد رقم نسخة NDK المطلوبة مباشرة
+
+    // تحديث نسخة NDK للتوافق مع حزم Flutter الحديثة
     ndkVersion = "27.0.12077973"
 
     compileOptions {
@@ -22,17 +22,17 @@ android {
     }
 
     defaultConfig {
-        // اكتب هنا باقي محتوى defaultConfig الحالي لديك في الملف
         applicationId = "com.example.pro"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
+        
+        // تعديل الصياغة لتفادي خطأ Kotlin DSL
+        versionCode = flutter.versionCode.toInt()
         versionName = flutter.versionName
     }
 
     buildTypes {
         release {
-            // إعدادات التوقيع والـ release الحالية لديك
             signingConfig = signingConfigs.getByName("debug")
         }
     }

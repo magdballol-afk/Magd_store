@@ -161,79 +161,82 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   children: [
                     const Text('اسم المادة أو الباركود:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 6),
-                    RawAutocomplete<Map<String, dynamic>>(
-                      textEditingController: productNameController,
-                      focusNode: FocusNode(),
-                      optionsBuilder: (TextEditingValue textEditingValue) {
-                        if (textEditingValue.text.isEmpty) {
-                          // ✅ تصحيح: إرجاع قائمة فارغة بشكل مباشر دون أخطاء
-                          return const [];
-                        }
-                        return _productsList.where((prod) {
-                          final name = prod['name'].toString().toLowerCase();
-                          final barcode = prod['barcode'].toString();
-                          final query = textEditingValue.text.toLowerCase();
-                          return name.contains(query) || barcode.contains(query);
-                        });
-                      },
-                      displayStringForOption: (option) => option['name'],
-                      onSelected: (option) {
-                        double basePrice = option['priceRetail'];
-                        if (_dealType == 'جملة') {
-                          basePrice = option['priceWholesale'];
-                        } else if (_dealType == 'نصف جملة') {
-                          basePrice = option['priceHalfWholesale'];
-                        }
-                        priceController.text = basePrice.toString();
-                        setDialogState(() {});
-                      },
-                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                        return TextField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          textAlign: TextAlign.right,
-                          decoration: InputDecoration(
-                            hintText: 'ابحث عن مادة...',
-                            prefixIcon: const Icon(Icons.search, color: Color(0xFF0277BD)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        );
-                      },
-                      optionsViewBuilder: (context, onSelected, options) {
-                        return Align(
-                          alignment: Alignment.topRight,
-                          child: Material(
-                            elevation: 4.0,
-                            borderRadius: BorderRadius.circular(10),
-                            child: Container(
-                              constraints: const BoxConstraints(maxHeight: 180),
-                              width: 250,
-                              color: Colors.white,
-                              child: ListView.separated(
-                                padding: EdgeInsets.zero,
-                                shrinkWrap: true,
-                                itemCount: options.length,
-                                separatorBuilder: (context, index) => const Divider(height: 1),
-                                itemBuilder: (context, index) {
-                                  final option = options.elementAt(index);
-                                  return ListTile(
-                                    title: Text(
-                                      option['name'],
-                                      textAlign: TextAlign.right,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                    ),
-                                    subtitle: Text(
-                                      'باركود: ${option['barcode']}',
-                                      textAlign: TextAlign.right,
-                                      style: const TextStyle(fontSize: 11, color: Colors.grey),
-                                    ),
-                                    onTap: () => onSelected(option),
-                                  );
-                                },
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        return RawAutocomplete<Map<String, dynamic>>(
+                          textEditingController: productNameController,
+                          focusNode: FocusNode(),
+                          optionsBuilder: (TextEditingValue textEditingValue) {
+                            if (textEditingValue.text.isEmpty) {
+                              return const [];
+                            }
+                            return _productsList.where((prod) {
+                              final name = prod['name'].toString().toLowerCase();
+                              final barcode = prod['barcode'].toString();
+                              final query = textEditingValue.text.toLowerCase();
+                              return name.contains(query) || barcode.contains(query);
+                            });
+                          },
+                          displayStringForOption: (option) => option['name'],
+                          onSelected: (option) {
+                            double basePrice = option['priceRetail'];
+                            if (_dealType == 'جملة') {
+                              basePrice = option['priceWholesale'];
+                            } else if (_dealType == 'نصف جملة') {
+                              basePrice = option['priceHalfWholesale'];
+                            }
+                            priceController.text = basePrice.toString();
+                            setDialogState(() {});
+                          },
+                          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                            return TextField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              textAlign: TextAlign.right,
+                              decoration: InputDecoration(
+                                hintText: 'ابحث عن مادة...',
+                                prefixIcon: const Icon(Icons.search, color: Color(0xFF0277BD)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                               ),
-                            ),
-                          ),
+                            );
+                          },
+                          optionsViewBuilder: (context, onSelected, options) {
+                            return Align(
+                              alignment: Alignment.topLeft,
+                              child: Material(
+                                elevation: 4.0,
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  constraints: const BoxConstraints(maxHeight: 180),
+                                  width: constraints.maxWidth,
+                                  color: Colors.white,
+                                  child: ListView.separated(
+                                    padding: EdgeInsets.zero,
+                                    shrinkWrap: true,
+                                    itemCount: options.length,
+                                    separatorBuilder: (context, index) => const Divider(height: 1),
+                                    itemBuilder: (context, index) {
+                                      final option = options.elementAt(index);
+                                      return ListTile(
+                                        title: Text(
+                                          option['name'],
+                                          textAlign: TextAlign.right,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                        ),
+                                        subtitle: Text(
+                                          'باركود: ${option['barcode']}',
+                                          textAlign: TextAlign.right,
+                                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                        ),
+                                        onTap: () => onSelected(option),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
                         );
                       },
                     ),
@@ -327,9 +330,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         );
       },
     );
-  }
-
-  Widget _buildToggleOption<T>({
+      Widget _buildToggleOption<T>({
     required String label,
     required bool isSelected,
     required VoidCallback onTap,
@@ -454,7 +455,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               focusNode: FocusNode(),
               optionsBuilder: (TextEditingValue textEditingValue) {
                 if (textEditingValue.text.isEmpty) {
-                  // ✅ تصحيح: إرجاع قائمة فارغة بشكل مباشر بدون أخطاء
                   return const [];
                 }
                 return _customersList.where((customer) {
@@ -700,3 +700,5 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     );
   }
 }
+
+  }

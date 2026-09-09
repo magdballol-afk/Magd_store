@@ -9,7 +9,6 @@ android {
     namespace = "com.example.pro"
     compileSdk = flutter.compileSdkVersion
 
-    // تحديث نسخة NDK للتوافق مع حزم Flutter الحديثة
     ndkVersion = "27.0.12077973"
 
     compileOptions {
@@ -26,9 +25,9 @@ android {
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         
-        // تعديل الصياغة لتفادي خطأ Kotlin DSL
-        versionCode = flutter.versionCode.toInt()
-        versionName = flutter.versionName
+        // التعديل هنا: استدعاء الدوال بأقواس () كما يطلب الخطأ تماماً
+        versionCode(flutter.versionCode)
+        versionName(flutter.versionName)
     }
 
     buildTypes {

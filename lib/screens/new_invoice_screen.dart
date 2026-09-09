@@ -40,7 +40,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   void _initBluetooth() async {
     final bool result = await PrintBluetoothThermal.bluetoothEnabled;
     if (result) {
-      final List<BluetoothInfo> pairedDevices = await PrintBluetoothThermal.pairedBluetoothDevice;
+      // تم التعديل هنا لتفادي خطأ Compilation
+      final List<BluetoothInfo> pairedDevices = await PrintBluetoothThermal.pairedBluetooths;
       if (mounted) {
         setState(() {
           _devices = pairedDevices;

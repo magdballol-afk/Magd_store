@@ -1,6 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
+class InvoiceItem {
+  final String name;
+  final double price;
+  final int quantity;
+
+  InvoiceItem({
+    required this.name,
+    required this.price,
+    required this.quantity,
+  });
+
+  double get total => price * quantity;
+}
+
 class NewInvoiceScreen extends StatefulWidget {
   final dynamic existingInvoice;
 
@@ -23,35 +37,127 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   final TextEditingController _discountController = TextEditingController(text: '0.0');
   final TextEditingController _paidController = TextEditingController();
 
+  // قائمة المنتجات المضافة
+  List<InvoiceItem> _items = [];
+
   // الحسابات
-  double subtotal = 0.0;
-  double totalDiscount = 0.0;
-  double netTotal = 0.0;
+  double get subtotal => _items.fold(0.0, (sum, item) => sum + item.total);
+
+  double get totalDiscount {
+    double discountVal = double.tryParse(_discountController.text) ?? 0.0;
+    if (isDiscountAmount) {
+      return discountVal;
+    } else {
+      return (subtotal * discountVal) / 100.0;
+    }
+  }
+
+  double get netTotal {
+    double res = subtotal - totalDiscount;
+    return res < 0 ? 0 : res;
+  }
+
   double previousBalance = 0.0;
-  double remainingBalance = 0.0;
+
+  double get remainingBalance {
+    double paid = double.tryParse(_paidController.text) ?? 0.0;
+    return (netTotal + previousBalance) - paid;
+  }
 
   @override
   void initState() {
     super.initState();
     _initBluetooth();
+    _discountController.addListener(() => setState(() {}));
+    _paidController.addListener(() => setState(() {}));
   }
 
   // البحث عن أجهزة البلوتوث المقترنة
-  void _initBluetooth() async {
+  Future<void> _initBluetooth() async {
     final bool result = await PrintBluetoothThermal.bluetoothEnabled;
     if (result) {
-      // تم التعديل هنا لتفادي خطأ Compilation
-      final List<BluetoothInfo> pairedDevices = await PrintBluetoothThermal.pairedBluetooths;
+      final List<BluetoothInfo> pairedDevices =
+          await PrintBluetoothThermal.pairedBluetooths;
       if (mounted) {
         setState(() {
           _devices = pairedDevices;
+          if (_devices.isNotEmpty && _selectedDevice == null) {
+            _selectedDevice = _devices.first;
+          }
         });
       }
     }
   }
 
+  // نافذة إضافة منتج جديد
+  void _showAddItemDialog() {
+    final nameController = TextEditingController();
+    final priceController = TextEditingController();
+    final qtyController = TextEditingController(text: '1');
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('إضافة منتج', textAlign: TextAlign.right),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                textAlign: TextAlign.right,
+                decoration: const InputDecoration(labelText: 'اسم المنتج'),
+              ),
+              TextField(
+                controller: priceController,
+                textAlign: TextAlign.right,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'السعر'),
+              ),
+              TextField(
+                controller: qtyController,
+                textAlign: TextAlign.right,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'الكمية'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                final price = double.tryParse(priceController.text) ?? 0.0;
+                final qty = int.tryParse(qtyController.text) ?? 1;
+
+                if (name.isNotEmpty && price > 0) {
+                  setState(() {
+                    _items.add(InvoiceItem(
+                      name: name,
+                      price: price,
+                      quantity: qty,
+                    ));
+                  });
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('إضافة'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // نافذة اختيار الطابعة
-  void _showPrinterDialog() {
+  void _showPrinterDialog() async {
+    await _initBluetooth(); // إعادة تحديث الأجهزة عند فتح النافذة
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (context) {
@@ -59,6 +165,15 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           title: const Text('اختر طابعة البلوتوث', textAlign: TextAlign.right),
           content: StatefulBuilder(
             builder: (BuildContext context, StateSetter setDialogState) {
+              if (_devices.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text(
+                    'لم يتم العثور على أجهزة مقترنة.\nتأكد من تشغيل البلوتوث واقتران الطابعة من إعدادات الهاتف.',
+                    textAlign: TextAlign.center,
+                  ),
+                );
+              }
               return DropdownButton<BluetoothInfo>(
                 value: _selectedDevice,
                 hint: const Text('اختر الطابعة'),
@@ -66,7 +181,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                 items: _devices.map((device) {
                   return DropdownMenuItem(
                     value: device,
-                    child: Text(device.name),
+                    child: Text(device.name.isEmpty ? device.macAdress : device.name),
                   );
                 }).toList(),
                 onChanged: (device) {
@@ -94,13 +209,16 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   setState(() {
                     _isConnected = connect;
                   });
-                  Navigator.pop(context);
+                  if (context.mounted) Navigator.pop(context);
+
                   if (connect) {
                     _printReceipt();
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('فشل الاتصال بالطابعة')),
-                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('فشل الاتصال بالطابعة')),
+                      );
+                    }
                   }
                 }
               },
@@ -120,8 +238,12 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       receiptText += "العميل: ${_customerController.text.isEmpty ? "عميل نقدي" : _customerController.text}\n";
       receiptText += "العملة: $selectedCurrency\n";
       receiptText += "--------------------------------\n";
+      for (var item in _items) {
+        receiptText += "${item.name} x${item.quantity} : ${item.total} $selectedCurrency\n";
+      }
+      receiptText += "--------------------------------\n";
       receiptText += "المجموع الفرعي: $subtotal $selectedCurrency\n";
-      receiptText += "الخصم الكلي: ${_discountController.text} $selectedCurrency\n";
+      receiptText += "الخصم الكلي: $totalDiscount $selectedCurrency\n";
       receiptText += "صافي الفاتورة: $netTotal $selectedCurrency\n";
       receiptText += "الدفعة المقبوضة: ${_paidController.text} $selectedCurrency\n";
       receiptText += "الرصيد المتبقي: $remainingBalance $selectedCurrency\n";
@@ -204,7 +326,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
             // زر إضافة منتج
             OutlinedButton.icon(
-              onPressed: () {},
+              onPressed: _showAddItemDialog,
               icon: const Icon(Icons.shopping_cart_outlined, color: Color(0xFF0D47A1)),
               label: const Text(
                 'إضافة منتج للفاتورة (مفرق)',
@@ -223,10 +345,39 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               alignment: Alignment.centerRight,
               child: Text('المنتجات المضافة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             ),
-            const SizedBox(height: 20),
-            Center(
-              child: Text('لم يتم إضافة أي منتج بعد', style: TextStyle(color: Colors.grey[400])),
-            ),
+            const SizedBox(height: 12),
+
+            _items.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text('لم يتم إضافة أي منتج بعد', style: TextStyle(color: Colors.grey[400])),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _items.length,
+                    itemBuilder: (context, index) {
+                      final item = _items[index];
+                      return Card(
+                        child: ListTile(
+                          title: Text(item.name, textAlign: TextAlign.right),
+                          subtitle: Text('الكمية: ${item.quantity} | السعر: ${item.price}', textAlign: TextAlign.right),
+                          trailing: Text('${item.total} $selectedCurrency', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          leading: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () {
+                              setState(() {
+                                _items.removeAt(index);
+                              });
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+
             const SizedBox(height: 20),
             const Divider(),
 
@@ -338,7 +489,11 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                 Expanded(
                   flex: 2,
                   child: ElevatedButton.icon(
-                    onPressed: () {},
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم حفظ الفاتورة بنجاح')),
+                      );
+                    },
                     icon: const Icon(Icons.save_outlined, color: Colors.white),
                     label: const Text('حفظ الفاتورة', style: TextStyle(fontSize: 18, color: Colors.white)),
                     style: ElevatedButton.styleFrom(

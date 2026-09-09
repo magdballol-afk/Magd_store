@@ -17,7 +17,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   final TextEditingController _customerNameController = TextEditingController();
   final TextEditingController _paidAmountController = TextEditingController();
 
-  // قاعدة بيانات تجريبية للعملاء
   final List<Map<String, dynamic>> _customersList = [
     {'name': 'محمد أحمد العلي', 'phone': '0911111111', 'previousBalance': 15000.0},
     {'name': 'محمود سليمان', 'phone': '0922222222', 'previousBalance': 0.0},
@@ -26,7 +25,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     {'name': 'سامر خليل', 'phone': '0955555555', 'previousBalance': 0.0},
   ];
 
-  // قاعدة بيانات تجريبية للمنتجات (الأسعار المرجعية الحقيقية)
   final List<Map<String, dynamic>> _productsList = [
     {
       'name': 'شامبو بانتين 400 مل',
@@ -58,7 +56,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     },
   ];
 
-  // قائمة المنتجات داخل الفاتورة الحالية
   final List<Map<String, dynamic>> _invoiceItems = [];
 
   double _previousBalance = 0.0;
@@ -138,9 +135,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     _resetForm();
   }
 
-  // نافذة إدخال وانتقاء المادة المتقدمة
   void _showAddProductDialog() {
-    Map<String, dynamic>? selectedProduct;
     final TextEditingController productNameController = TextEditingController();
     final TextEditingController priceController = TextEditingController();
     final TextEditingController quantityController = TextEditingController(text: '1');
@@ -150,7 +145,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     showDialog(
       context: context,
       builder: (context) {
-        return StatefulWidget(
+        // ✅ تم التصحيح هنا: استخدام StatefulBuilder بدلاً من StatefulWidget
+        return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -182,8 +178,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       },
                       displayStringForOption: (option) => option['name'],
                       onSelected: (option) {
-                        selectedProduct = option;
-                        // اختيار السعر حسب نوع التعامل الحالي
                         double basePrice = option['priceRetail'];
                         if (_dealType == 'جملة') {
                           basePrice = option['priceWholesale'];
@@ -307,7 +301,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     if (name.isEmpty || price == null || qty == null || qty <= 0) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('يرجى التحقق من صحة البيانات المخلة'),
+                          content: Text('يرجى التحقق من صحة البيانات المدخلة'),
                           backgroundColor: Colors.orange,
                         ),
                       );
@@ -318,7 +312,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       _invoiceItems.add({
                         'name': name,
                         'quantity': qty,
-                        'price': price, // السعر المخصص داخل الفاتورة دون التعديل على القائمة الأصلية
+                        'price': price,
                         'total': price * qty,
                       });
                     });
@@ -455,13 +449,12 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 16),
 
-            // حقل البحث المتقدم للعميل
             RawAutocomplete<Map<String, dynamic>>(
               textEditingController: _customerNameController,
               focusNode: FocusNode(),
               optionsBuilder: (TextEditingValue textEditingValue) {
                 if (textEditingValue.text.isEmpty) {
-                  return const Iterable<Map<String, dynamic>>.empty();
+                  return const Iterable<Map<String, dynamic>>::empty();
                 }
                 return _customersList.where((customer) {
                   final name = customer['name'].toString().toLowerCase();
@@ -546,7 +539,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 12),
 
-            // زر فتح نافذة إضافة المنتج
             SizedBox(
               width: double.infinity,
               height: 48,

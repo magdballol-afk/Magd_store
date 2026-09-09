@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:blue_thermal_printer/blue_thermal_printer.dart'; // حزمة البلوتوث
+import 'package:blue_thermal_printer/blue_thermal_printer.dart';
 
 class NewInvoiceScreen extends StatefulWidget {
-  const NewInvoiceScreen({Key? key}) : super(key: key);
+  // إضافة البارامتر لتفادي خطأ existingInvoice
+  final dynamic existingInvoice;
+
+  const NewInvoiceScreen({Key? key, this.existingInvoice}) : super(key: key);
 
   @override
   State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();
@@ -17,12 +20,12 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
   // عناصر الفاتورة
   String selectedCurrency = 'ليرة سورية';
-  bool isDiscountAmount = true; // مبلغ أم نسبة مئوية
+  bool isDiscountAmount = true;
   final TextEditingController _customerController = TextEditingController();
   final TextEditingController _discountController = TextEditingController(text: '0.0');
   final TextEditingController _paidController = TextEditingController();
 
-  // بيانات حسابية تجريبية
+  // بيانات حسابية
   double subtotal = 0.0;
   double totalDiscount = 0.0;
   double netTotal = 0.0;
@@ -33,9 +36,13 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   void initState() {
     super.initState();
     _initBluetooth();
+
+    // إذا كانت الفاتورة معبأة مسبقاً (تعديل فاتورة)
+    if (widget.existingInvoice != null) {
+      // يمكنك جلب وتعبئة البيانات هنا إن لزم الأمر
+    }
   }
 
-  // تهيئة البلوتوث وجلب الأجهزة المقترنة
   void _initBluetooth() async {
     bool? isConnected = await bluetooth.isConnected;
     List<BluetoothDevice> devices = [];
@@ -53,7 +60,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     }
   }
 
-  // دالة اختيار الطابعة والاتصال بها
   void _showPrinterDialog() {
     showDialog(
       context: context,
@@ -89,7 +95,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     _isConnected = true;
                   });
                   Navigator.pop(context);
-                  _printReceipt(); // طباعة الفاتورة فور الاتصال
+                  _printReceipt();
                 }
               },
               child: const Text('اتصال وطباعة'),
@@ -100,19 +106,15 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     );
   }
 
-  // دالة طباعة الفاتورة حرارياً عبر البلوتوث
   void _printReceipt() async {
     if ((await bluetooth.isConnected) ?? false) {
-      // 1. عنوان الفاتورة (منتصف)
       bluetooth.printCustom("فاتورة مبيعات", 3, 1);
       bluetooth.printNewLine();
 
-      // 2. تفاصيل العميل والعملة
       bluetooth.printLeftRight("العميل:", _customerController.text.isEmpty ? "عميل نقدي" : _customerController.text, 1);
       bluetooth.printLeftRight("العملة:", selectedCurrency, 1);
       bluetooth.printCustom("--------------------------------", 1, 1);
 
-      // 3. الحسابات والأسعار
       bluetooth.printLeftRight("المجموع الفرعي:", "$subtotal $selectedCurrency", 1);
       bluetooth.printLeftRight("الخصم الكلي:", "${_discountController.text} $selectedCurrency", 1);
       bluetooth.printLeftRight("صافي الفاتورة:", "$netTotal $selectedCurrency", 1);
@@ -123,9 +125,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       bluetooth.printCustom("شكراً لزيارتكم", 2, 1);
       bluetooth.printNewLine();
       bluetooth.printNewLine();
-      bluetooth.paperCut(); // قطع الورقة إن كانت الطابعة تدعم ذلك
+      bluetooth.paperCut();
     } else {
-      _showPrinterDialog(); // إذا لم يكن متصلاً، افحص وافتح قائمة الطابعات
+      _showPrinterDialog();
     }
   }
 
@@ -150,7 +152,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. عملة الفاتورة
+            // عملة الفاتورة
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -180,7 +182,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 16),
 
-            // 2. البحث عن اسم العميل
+            // اسم العميل
             TextFormField(
               controller: _customerController,
               textAlign: TextAlign.right,
@@ -193,7 +195,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 16),
 
-            // 3. زر إضافة منتج للفاتورة
+            // زر إضافة منتج
             OutlinedButton.icon(
               onPressed: () {},
               icon: const Icon(Icons.shopping_cart_outlined, color: Color(0xFF0D47A1)),
@@ -206,7 +208,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 16),
 
-            // 4. قائمة المنتجات المضافة
+            // قائمة المنتجات المضافة
             const Align(
               alignment: Alignment.centerRight,
               child: Text('المنتجات المضافة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -218,7 +220,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             const SizedBox(height: 20),
             const Divider(),
 
-            // 5. المجموع الفرعي
+            // المجموع الفرعي
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -228,7 +230,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 12),
 
-            // 6. حسم الفاتورة الكلي
+            // حسم الفاتورة الكلي
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -262,7 +264,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 12),
 
-            // 7. صافي الفاتورة
+            // صافي الفاتورة
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -272,7 +274,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 8),
 
-            // 8. رصيد سابق مترتب
+            // رصيد سابق مترتب
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -282,7 +284,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 12),
 
-            // 9. الدفعة المقبوضة
+            // الدفعة المقبوضة
             TextFormField(
               controller: _paidController,
               textAlign: TextAlign.right,
@@ -296,7 +298,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 12),
 
-            // 10. الرصيد الحالي المتبقي
+            // الرصيد الحالي المتبقي
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -306,10 +308,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             const SizedBox(height: 24),
 
-            // ================== الأزرار الرئيسية ==================
+            // الأزرار
             Row(
               children: [
-                // زر طباعة عبر البلوتوث المضاف
                 Expanded(
                   flex: 1,
                   child: ElevatedButton.icon(
@@ -317,21 +318,17 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     icon: const Icon(Icons.print_outlined, color: Colors.white),
                     label: const Text('طباعة', style: TextStyle(fontSize: 16, color: Colors.white)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal, // لون مميز لزر الطباعة
+                      backgroundColor: Colors.teal,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
-
-                // زر حفظ الفاتورة الرئيسي
                 Expanded(
                   flex: 2,
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      // كود حفظ الفاتورة
-                    },
+                    onPressed: () {},
                     icon: const Icon(Icons.save_outlined),
                     label: const Text('حفظ الفاتورة', style: TextStyle(fontSize: 18)),
                     style: ElevatedButton.styleFrom(

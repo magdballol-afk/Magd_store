@@ -330,7 +330,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         );
       },
     );
-      Widget _buildToggleOption<T>({
+  }
+
+  Widget _buildToggleOption<T>({
     required String label,
     required bool isSelected,
     required VoidCallback onTap,
@@ -700,5 +702,3 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     );
   }
 }
-
-  }

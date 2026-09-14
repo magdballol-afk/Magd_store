@@ -292,7 +292,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                               borderRadius: BorderRadius.circular(12),
                               child: Container(
                                 width: constraints.maxWidth,
-                                maxConstraints: const BoxConstraints(maxHeight: 200),
+                                constraints: const BoxConstraints(maxHeight: 200), // تم تصحيح الخاصية هنا
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12),

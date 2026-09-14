@@ -73,7 +73,7 @@ class DatabaseHelper {
         contact_name TEXT,
         deal_type TEXT NOT NULL, -- 'مفرق', 'نصف جملة', 'جملة'
         payment_type TEXT NOT NULL, -- 'نقدي' أو 'آجل (دين)'
-        currency TEXT NOT NULL, -- 'ليرة سورية' أو 'دولار ($)'
+        currency TEXT NOT NULL, -- 'ليرة سورية' أو 'دولار (\$)'
         subtotal REAL NOT NULL,
         net_total REAL NOT NULL,
         previous_balance REAL DEFAULT 0.0,
@@ -107,7 +107,7 @@ class DatabaseHelper {
         contact_id INTEGER,
         contact_name TEXT,
         amount REAL NOT NULL,
-        currency TEXT NOT NULL, -- 'ليرة سورية' أو 'دولار ($)'
+        currency TEXT NOT NULL, -- 'ليرة سورية' أو 'دولار (\$)'
         notes TEXT,
         date TEXT NOT NULL,
         FOREIGN KEY (contact_id) REFERENCES contacts (id) ON DELETE SET NULL

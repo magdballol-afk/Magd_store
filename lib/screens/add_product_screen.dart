@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../database/database_helper.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({Key? key}) : super(key: key);
@@ -10,28 +11,77 @@ class AddProductScreen extends StatefulWidget {
 class _AddProductScreenState extends State<AddProductScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers
+  // متحكمات المدخلات (TextControllers)
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _barcodeController = TextEditingController();
   final TextEditingController _quantityController = TextEditingController();
-  final TextEditingController _purchasePriceController = TextEditingController(); // حقل سعر الشراء الجديد
+  final TextEditingController _costPriceController = TextEditingController();
   final TextEditingController _retailPriceController = TextEditingController();
   final TextEditingController _halfWholesalePriceController = TextEditingController();
   final TextEditingController _wholesalePriceController = TextEditingController();
 
   String? _selectedCategory;
+  bool _isSaving = false;
 
+  // قائمة أصناف تجريبية (يمكن توسيعها حسب الحاجة)
   final List<String> _categories = [
-    'العناية الشخصية',
-    'منظفات',
-    'ورقيات',
     'مواد غذائية',
+    'منظفات',
+    'حلويات',
+    'مشروبات',
+    'عام',
   ];
+
+  // دالة حفظ المنتج في قاعدة البيانات
+  Future<void> _saveProduct() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSaving = true);
+
+    try {
+      final productData = {
+        'name': _nameController.text.trim(),
+        'barcode': _barcodeController.text.trim().isEmpty ? null : _barcodeController.text.trim(),
+        'category': _selectedCategory ?? 'عام',
+        'quantity': double.tryParse(_quantityController.text) ?? 0.0,
+        'price_cost': double.tryParse(_costPriceController.text) ?? 0.0,
+        'price_retail': double.tryParse(_retailPriceController.text) ?? 0.0,
+        'price_half_wholesale': double.tryParse(_halfWholesalePriceController.text) ?? 0.0,
+        'price_wholesale': double.tryParse(_wholesalePriceController.text) ?? 0.0,
+      };
+
+      // إدراج البيانات في قاعدة البيانات SQLite عبر الهيلبر
+      await DatabaseHelper.instance.insertProduct(productData);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم حفظ المنتج بنجاح في قاعدة البيانات'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      // العودة للشاشة السابقة بعد الحفظ
+      Navigator.pop(context, true);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('حدث خطأ أثناء الحفظ: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _barcodeController.dispose();
     _quantityController.dispose();
-    _purchasePriceController.dispose();
+    _costPriceController.dispose();
     _retailPriceController.dispose();
     _halfWholesalePriceController.dispose();
     _wholesalePriceController.dispose();
@@ -40,145 +90,123 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF4F6F9),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF0D47A1),
-          elevation: 0,
-          centerTitle: true,
-          title: const Text(
-            'إضافة منتج جديد',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // 1. اسم المنتج
-                _buildInputField(
-                  controller: _nameController,
-                  hintText: 'اسم المنتج',
-                  icon: Icons.shopping_bag_outlined,
-                ),
-                const SizedBox(height: 12),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FE),
+      appBar: AppBar(
+        title: const Text('إضافة منتج جديد'),
+        centerTitle: true,
+        backgroundColor: const Color(0xFF0052CC),
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. اسم المنتج
+              _buildInputField(
+                controller: _nameController,
+                label: 'اسم المنتج',
+                icon: Icons.shopping_bag_outlined,
+                validator: (val) => (val == null || val.trim().isEmpty) ? 'يرجى إدخال اسم المنتج' : null,
+              ),
+              const SizedBox(height: 16),
 
-                // 2. اختر الصنف
-                DropdownButtonFormField<String>(
-                  value: _selectedCategory,
-                  decoration: _inputDecoration(
-                    hintText: 'اختر الصنف',
-                    icon: Icons.category_outlined,
-                  ),
-                  items: _categories.map((category) {
-                    return DropdownMenuItem(
-                      value: category,
-                      child: Text(category),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedCategory = value;
-                    });
-                  },
-                  validator: (val) => val == null ? 'يرجى اختيار الصنف' : null,
-                ),
-                const SizedBox(height: 12),
+              // 2. اختيار الصنف
+              DropdownButtonFormField<String>(
+                value: _selectedCategory,
+                decoration: _inputDecoration('اختر الصنف', Icons.category_outlined),
+                items: _categories.map((cat) {
+                  return DropdownMenuItem(value: cat, child: Text(cat));
+                }).toList(),
+                onChanged: (val) => setState(() => _selectedCategory = val),
+              ),
+              const SizedBox(height: 16),
 
-                // 3. الكمية الأولية في المخزن
-                _buildInputField(
-                  controller: _quantityController,
-                  hintText: 'الكمية الأولية في المخزن',
-                  icon: Icons.archive_outlined,
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 20),
+              // 3. الكمية الأولية في المخزن
+              _buildInputField(
+                controller: _quantityController,
+                label: 'الكمية الأولية في المخزن',
+                icon: Icons.move_to_inbox_outlined,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 24),
 
-                // عنوان أسعار البيع والتسعير
-                const Text(
-                  ':أسعار البيع والتسعير',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0D47A1),
-                  ),
+              // عنوان قسم الأسعار
+              const Text(
+                'أسعار البيع والتسعير:',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0052CC),
                 ),
-                const SizedBox(height: 12),
+              ),
+              const SizedBox(height: 16),
 
-                // 4. سعر الشراء / التكلفة (الحقل المضاف)
-                _buildInputField(
-                  controller: _purchasePriceController,
-                  hintText: 'سعر الشراء / التكلفة (ل.س)',
-                  icon: Icons.shopping_cart_outlined,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                ),
-                const SizedBox(height: 12),
+              // 4. سعر الشراء / التكلفة
+              _buildInputField(
+                controller: _costPriceController,
+                label: 'سعر الشراء / التكلفة (ل.س)',
+                icon: Icons.shopping_cart_outlined,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 16),
 
-                // 5. سعر المفرق
-                _buildInputField(
-                  controller: _retailPriceController,
-                  hintText: 'سعر المفرق (ل.س)',
-                  icon: Icons.label_outlined,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                ),
-                const SizedBox(height: 12),
+              // 5. سعر المفرق
+              _buildInputField(
+                controller: _retailPriceController,
+                label: 'سعر المفرق (ل.س)',
+                icon: Icons.sell_outlined,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 16),
 
-                // 6. سعر نصف الجملة
-                _buildInputField(
-                  controller: _halfWholesalePriceController,
-                  hintText: 'سعر نصف الجملة (ل.س)',
-                  icon: Icons.store_outlined,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                ),
-                const SizedBox(height: 12),
+              // 6. سعر نصف الجملة
+              _buildInputField(
+                controller: _halfWholesalePriceController,
+                label: 'سعر نصف الجملة (ل.س)',
+                icon: Icons.storefront_outlined,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 16),
 
-                // 7. سعر الجملة
-                _buildInputField(
-                  controller: _wholesalePriceController,
-                  hintText: 'سعر الجملة (ل.س)',
-                  icon: Icons.location_city_outlined,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                ),
-                const SizedBox(height: 28),
+              // 7. سعر الجملة
+              _buildInputField(
+                controller: _wholesalePriceController,
+                label: 'سعر الجملة (ل.س)',
+                icon: Icons.business_outlined,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 30),
 
-                // زر حفظ المنتج
-                SizedBox(
-                  height: 52,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0D47A1),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                      elevation: 2,
-                    ),
-                    onPressed: _saveProduct,
-                    icon: const Icon(Icons.save_outlined, color: Colors.white),
-                    label: const Text(
-                      'حفظ المنتج',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+              // زر حفظ المنتج
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0052CC),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
                     ),
                   ),
+                  onPressed: _isSaving ? null : _saveProduct,
+                  icon: _isSaving
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save_outlined, color: Colors.white),
+                  label: Text(
+                    _isSaving ? 'جاري الحفظ...' : 'حفظ المنتج',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -187,59 +215,38 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Widget _buildInputField({
     required TextEditingController controller,
-    required String hintText,
+    required String label,
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
-      decoration: _inputDecoration(hintText: hintText, icon: icon),
-      validator: (value) {
-        if (value == null || value.trim().isEmpty) {
-          return 'هذا الحقل مطلوب';
-        }
-        return null;
-      },
+      validator: validator,
+      decoration: _inputDecoration(label, icon),
     );
   }
 
-  InputDecoration _inputDecoration({
-    required String hintText,
-    required IconData icon,
-  }) {
+  InputDecoration _inputDecoration(String label, IconData icon) {
     return InputDecoration(
-      hintText: hintText,
-      hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-      prefixIcon: Icon(icon, color: Colors.grey.shade700),
-      fillColor: Colors.white,
+      labelText: label,
+      prefixIcon: Icon(icon, color: Colors.grey[600]),
       filled: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide(color: Colors.grey.shade300),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide(color: Colors.grey.shade300),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 1.5),
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: Color(0xFF0052CC), width: 2),
       ),
     );
-  }
-
-  void _saveProduct() {
-    if (_formKey.currentState!.validate()) {
-      final String name = _nameController.text;
-      final double purchasePrice = double.tryParse(_purchasePriceController.text) ?? 0;
-
-      // أضف منطق الحفظ الخاص بـ Database / State Management هنا
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم حفظ المنتج: $name بسعر تكلفة $purchasePrice ل.س')),
-      );
-    }
   }
 }

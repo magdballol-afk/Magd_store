@@ -1,101 +1,122 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
+import 'product_movement_screen.dart';
 
 class ProductsScreen extends StatefulWidget {
-  const ProductsScreen({Key? key}) : super(key: key);
+  const ProductsScreen({super.key});
 
   @override
   State<ProductsScreen> createState() => _ProductsScreenState();
 }
 
 class _ProductsScreenState extends State<ProductsScreen> {
-  List<Map<String, dynamic>> _products = [];
+  List<Map<String, dynamic>> _allProducts = [];
+  List<Map<String, dynamic>> _filteredProducts = [];
   bool _isLoading = true;
-
-  // متحكمات الحقول عند إضافة منتج جديد
-  final _nameController = TextEditingController();
-  final _barcodeController = TextEditingController();
-  final _categoryController = TextEditingController();
-  final _quantityController = TextEditingController();
-  final _priceRetailController = TextEditingController();
-  final _priceHalfWholesaleController = TextEditingController();
-  final _priceWholesaleController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _refreshProducts();
+    _loadProducts();
   }
 
-  // جلب كافة المنتجات من قاعدة البيانات
-  Future<void> _refreshProducts() async {
+  Future<void> _loadProducts() async {
     setState(() => _isLoading = true);
-    final data = await DatabaseHelper.instance.getAllProducts();
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final rawData = await db.query('products', orderBy: 'name ASC');
+      setState(() {
+        _allProducts = rawData;
+        _filteredProducts = rawData;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _filterProducts(String query) {
+    final filtered = _allProducts.where((product) {
+      final name = product['name']?.toString().toLowerCase() ?? '';
+      final code = product['code']?.toString().toLowerCase() ?? '';
+      final input = query.toLowerCase();
+      return name.contains(input) || code.contains(input);
+    }).toList();
+
     setState(() {
-      _products = data;
-      _isLoading = false;
+      _filteredProducts = filtered;
     });
   }
 
-  // إضافة منتج جديد
-  Future<void> _addProduct() async {
-    if (_nameController.text.isEmpty) return;
+  // نافذة تعديل خصائص المادة
+  void _showEditProductDialog(Map<String, dynamic> product) {
+    final nameController = TextEditingController(text: product['name']?.toString());
+    final priceController = TextEditingController(text: product['price']?.toString());
+    final quantityController = TextEditingController(text: product['quantity']?.toString());
+    final unitController = TextEditingController(text: product['unit']?.toString() ?? 'قطعة');
 
-    await DatabaseHelper.instance.insertProduct({
-      'name': _nameController.text,
-      'barcode': _barcodeController.text.isEmpty ? null : _barcodeController.text,
-      'category': _categoryController.text,
-      'quantity': double.tryParse(_quantityController.text) ?? 0.0,
-      'price_retail': double.tryParse(_priceRetailController.text) ?? 0.0,
-      'price_half_wholesale': double.tryParse(_priceHalfWholesaleController.text) ?? 0.0,
-      'price_wholesale': double.tryParse(_priceWholesaleController.text) ?? 0.0,
-    });
-
-    _clearControllers();
-    Navigator.of(context).pop();
-    _refreshProducts(); // تحديث القائمة تلقائياً
-  }
-
-  // حذف منتج
-  Future<void> _deleteProduct(int id) async {
-    await DatabaseHelper.instance.deleteProduct(id);
-    _refreshProducts();
-  }
-
-  void _clearControllers() {
-    _nameController.clear();
-    _barcodeController.clear();
-    _categoryController.clear();
-    _quantityController.clear();
-    _priceRetailController.clear();
-    _priceHalfWholesaleController.clear();
-    _priceWholesaleController.clear();
-  }
-
-  void _showAddProductDialog() {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('إضافة مادة جديدة'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'اسم المادة *')),
-              TextField(controller: _barcodeController, decoration: const InputDecoration(labelText: 'الباركود')),
-              TextField(controller: _categoryController, decoration: const InputDecoration(labelText: 'الصنف')),
-              TextField(controller: _quantityController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'الكمية الأولية')),
-              TextField(controller: _priceRetailController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سعر المفرق')),
-              TextField(controller: _priceHalfWholesaleController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سعر نصف الجملة')),
-              TextField(controller: _priceWholesaleController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'سعر الجملة')),
-            ],
+      builder: (context) {
+        return AlertDialog(
+          title: Text('تعديل المادة: ${product['name']}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'اسم المادة', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: priceController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'السعر', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: quantityController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'الكمية المتوفرة', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: unitController,
+                  decoration: const InputDecoration(labelText: 'الوحدة (مثال: قطعة، كيلو)', border: OutlineInputBorder()),
+                ),
+              ],
+            ),
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(onPressed: _addProduct, child: const Text('حفظ')),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final db = await DatabaseHelper.instance.database;
+                await db.update(
+                  'products',
+                  {
+                    'name': nameController.text.trim(),
+                    'price': double.tryParse(priceController.text) ?? 0.0,
+                    'quantity': double.tryParse(quantityController.text) ?? 0.0,
+                    'unit': unitController.text.trim(),
+                  },
+                  where: 'id = ?',
+                  whereArgs: [product['id']],
+                );
+
+                if (mounted) Navigator.pop(context);
+                _loadProducts();
+              },
+              child: const Text('حفظ التعديلات'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -103,35 +124,91 @@ class _ProductsScreenState extends State<ProductsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('إدارة المنتجات والمستودع'),
+        title: const Text('إدارة المنتجات والمواد'),
+        actions: [
+          // زر الانتقال لكشف حركة المادة
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'كشف حركة مادة',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProductMovementScreen()),
+              );
+            },
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddProductDialog,
-        child: const Icon(Icons.add),
+      body: Column(
+        children: [
+          // حقل البحث المتقدم
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: TextField(
+              controller: _searchController,
+              onChanged: _filterProducts,
+              decoration: InputDecoration(
+                labelText: 'بحث عن مادة بالاسم أو الكود...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          _filterProducts('');
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+          
+          // زر كشف حركة المادة المباشر
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 45)),
+              icon: const Icon(Icons.receipt_long),
+              label: const Text('كشف حركة مادة تفصيلي'),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProductMovementScreen()),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // قائمة عرض المواد
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredProducts.isEmpty
+                    ? const Center(child: Text('لا توجد مواد مطابقة للبحث'))
+                    : ListView.builder(
+                        itemCount: _filteredProducts.length,
+                        itemBuilder: (context, index) {
+                          final item = _filteredProducts[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            child: ListTile(
+                              title: Text(
+                                item['name'] ?? '',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              subtitle: Text(
+                                'الكمية: ${item['quantity'] ?? 0} ${item['unit'] ?? ''} | السعر: ${item['price'] ?? 0}',
+                              ),
+                              trailing: const Icon(Icons.edit_note, color: Colors.blue),
+                              onTap: () => _showEditProductDialog(item),
+                            );
+                          },
+                        ),
+          ),
+        ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _products.isEmpty
-              ? const Center(child: Text('لا توجد منتجات مسجلة حالياً'))
-              : ListView.builder(
-                  itemCount: _products.length,
-                  itemBuilder: (context, index) {
-                    final item = _products[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      child: ListTile(
-                        title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(
-                          'الكمية: ${item['quantity']} | مفرق: ${item['price_retail']} | جملة: ${item['price_wholesale']}',
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteProduct(item['id']),
-                        ),
-                      ),
-                    );
-                  },
-                ),
     );
   }
 }

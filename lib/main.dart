@@ -1,9 +1,31 @@
 import 'package:flutter/material.dart';
-import 'products_screen.dart';
-import 'cash_journal_screen.dart';
-import 'invoices_screen.dart';
-import 'contacts_screen.dart';
-import 'new_invoice_screen.dart';
+import 'screens/products_screen.dart';
+import 'screens/cash_journal_screen.dart';
+import 'screens/invoices_screen.dart';
+import 'screens/contacts_screen.dart';
+import 'screens/new_invoice_screen.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'إدارة المتجر',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        useMaterial3: false,
+      ),
+      home: const HomeScreen(),
+    );
+  }
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,13 +37,12 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  // القائمة التي تبدل الشاشات عبر الشريط السفلي
   final List<Widget> _screens = [
-    const HomeDashboardView(), // الواجهة الرئيسية (الكروت)
-    const ProductsScreen(),    // شاشة المنتجات
-    const InvoicesScreen(),    // شاشة الفواتير
-    const CashJournalScreen(),  // شاشة الصندوق
-    const ContactsScreen(),    // شاشة الجهات (عملاء/موردين)
+    const HomeDashboardView(),
+    const ProductsScreen(),
+    const InvoicesScreen(),
+    const CashJournalScreen(),
+    const ContactsScreen(),
   ];
 
   @override
@@ -42,9 +63,6 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         },
         items: const [
-          BottomNavigationBarThemeData(
-            // يتم الاعتماد على أيقونات واضحة لجميع القوائم
-          ),
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
             label: 'الرئيسية',
@@ -71,7 +89,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// كروت الصفحة الرئيسية
 class HomeDashboardView extends StatelessWidget {
   const HomeDashboardView({super.key});
 
@@ -84,7 +101,6 @@ class HomeDashboardView extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
-          // كارت إنشاء فاتورة جديدة
           Card(
             elevation: 2,
             child: ListTile(
@@ -101,14 +117,12 @@ class HomeDashboardView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-
-          // كارت المنتجات والمخزون
           Card(
             elevation: 2,
             child: ListTile(
               leading: const Icon(Icons.inventory_2, color: Colors.amber, size: 32),
               title: const Text('إدارة المنتجات والمخزون', style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: const Text('عرض وتعديل المكونات وكشف حركاتها'),
+              subtitle: const Text('عرض وتعديل المواد وكشف حركاتها'),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () {
                 Navigator.push(
@@ -119,8 +133,6 @@ class HomeDashboardView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-
-          // كارت دفتر الصندوق
           Card(
             elevation: 2,
             child: ListTile(
@@ -137,8 +149,6 @@ class HomeDashboardView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-
-          // كارت دليل العملاء والموردين
           Card(
             elevation: 2,
             child: ListTile(

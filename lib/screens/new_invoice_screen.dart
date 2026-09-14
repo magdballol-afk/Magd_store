@@ -10,9 +10,9 @@ class NewInvoiceScreen extends StatefulWidget {
 }
 
 class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
-  String _invoiceType = 'فاتورة مبيعات'; // أو 'فاتورة مشتريات'
+  String _invoiceType = 'فاتورة مبيعات';
   String _currency = 'ليرة سورية';
-  bool _isDeferred = false; // هل الفاتورة آجلة (على الحساب)؟
+  bool _isDeferred = false;
 
   ContactModel? _selectedContact;
   List<ContactModel> _contactsList = [];
@@ -28,21 +28,26 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   }
 
   Future<void> _loadContacts() async {
-    final rawData = await DatabaseHelper.instance.getParties();
-    setState(() {
-      _contactsList = rawData.map((map) {
-        return ContactModel(
-          id: map['id'].toString(),
-          name: map['name'] ?? '',
-          phone: map['phone'] ?? '',
-          address: map['address'] ?? '',
-          type: map['type'] ?? 'عميل',
-          balanceSYP: (map['balance_syp'] as num?)?.toDouble() ?? 0.0,
-          balanceUSD: (map['balance_usd'] as num?)?.toDouble() ?? 0.0,
-        );
-      }).toList();
-      _isLoadingContacts = false;
-    });
+    try {
+      final db = await DatabaseHelper.instance.database;
+      // استعلام مباشر من جدول الجهات/العملاء لتفادي اختلاف أسطر getParties
+      final rawData = await db.query('parties');
+      
+      setState(() {
+        _contactsList = rawData.map((map) {
+          return ContactModel(
+            id: map['id']?.toString() ?? '',
+            name: map['name']?.toString() ?? '',
+            phone: map['phone']?.toString() ?? '',
+            address: map['address']?.toString() ?? '',
+            type: map['type']?.toString() ?? 'عميل',
+          );
+        }).toList();
+        _isLoadingContacts = false;
+      });
+    } catch (e) {
+      setState(() => _isLoadingContacts = false);
+    }
   }
 
   Future<void> _saveInvoice() async {
@@ -61,46 +66,52 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       return;
     }
 
-    final db = await DatabaseHelper.instance.database;
+    try {
+      final db = await DatabaseHelper.instance.database;
 
-    // 1. إضافة الفاتورة في جدول الفواتير
-    final int invoiceId = await db.insert('invoices', {
-      'party_id': _selectedContact?.id,
-      'type': _invoiceType,
-      'total_amount': amount,
-      'currency': _currency,
-      'is_deferred': _isDeferred ? 1 : 0,
-      'notes': _notesController.text.trim(),
-      'date': DateTime.now().toIso8601String().split('T').first,
-    });
+      // 1. إضافة الفاتورة
+      final int invoiceId = await db.insert('invoices', {
+        'party_id': _selectedContact?.id,
+        'type': _invoiceType,
+        'total_amount': amount,
+        'currency': _currency,
+        'is_deferred': _isDeferred ? 1 : 0,
+        'notes': _notesController.text.trim(),
+        'date': DateTime.now().toIso8601String().split('T').first,
+      });
 
-    // 2. إذا كانت الفاتورة آجلة أو مرتبطة بعميل/مورد، نقوم بتحديث رصيد الحساب
-    if (_selectedContact != null && _isDeferred) {
-      double sypChange = 0.0;
-      double usdChange = 0.0;
+      // 2. تحديث رصيد الحساب مباشرة عبر SQL لتفادي غياب دالة updatePartyBalance
+      if (_selectedContact != null && _isDeferred && _selectedContact!.id.isNotEmpty) {
+        double balanceImpact = (_invoiceType == 'فاتورة مبيعات') ? amount : -amount;
+        final int contactId = int.tryParse(_selectedContact!.id) ?? 0;
 
-      // المبيعات الآجلة تزيد الدين على العميل (+)
-      // المشتريات الآجلة تزيد الدين للمورد (-)
-      double balanceImpact = (_invoiceType == 'فاتورة مبيعات') ? amount : -amount;
-
-      if (_currency == 'ليرة سورية') {
-        sypChange = balanceImpact;
-      } else {
-        usdChange = balanceImpact;
+        if (contactId > 0) {
+          if (_currency == 'ليرة سورية') {
+            await db.rawUpdate(
+              'UPDATE parties SET balance_syp = COALESCE(balance_syp, 0) + ? WHERE id = ?',
+              [balanceImpact, contactId],
+            );
+          } else {
+            await db.rawUpdate(
+              'UPDATE parties SET balance_usd = COALESCE(balance_usd, 0) + ? WHERE id = ?',
+              [balanceImpact, contactId],
+            );
+          }
+        }
       }
 
-      await DatabaseHelper.instance.updatePartyBalance(
-        int.parse(_selectedContact!.id),
-        sypChange,
-        usdChange,
-      );
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم حفظ الفاتورة رقم #$invoiceId بنجاح')),
-      );
-      Navigator.pop(context, true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم حفظ الفاتورة رقم #$invoiceId بنجاح')),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ أثناء الحفظ: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -115,7 +126,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // نوع الفاتورة
             SegmentedButton<String>(
               segments: const [
                 ButtonSegment(value: 'فاتورة مبيعات', label: Text('فاتورة مبيعات')),
@@ -127,16 +137,12 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               },
             ),
             const SizedBox(height: 16),
-
-            // نوع الدفع: نقداً أم على الحساب
             SwitchListTile(
               title: const Text('فاتورة آجلة (على الحساب)'),
               value: _isDeferred,
               onChanged: (val) => setState(() => _isDeferred = val),
             ),
             const SizedBox(height: 12),
-
-            // قائمة اختيار العميل / المورد
             _isLoadingContacts
                 ? const CircularProgressIndicator()
                 : DropdownButtonFormField<ContactModel>(
@@ -154,8 +160,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     onChanged: (val) => setState(() => _selectedContact = val),
                   ),
             const SizedBox(height: 16),
-
-            // العملة والمبلغ
             Row(
               children: [
                 Expanded(
@@ -185,8 +189,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               ],
             ),
             const SizedBox(height: 16),
-
-            // ملاحظات
             TextField(
               controller: _notesController,
               decoration: const InputDecoration(
@@ -195,7 +197,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               ),
             ),
             const SizedBox(height: 24),
-
             SizedBox(
               width: double.infinity,
               height: 48,

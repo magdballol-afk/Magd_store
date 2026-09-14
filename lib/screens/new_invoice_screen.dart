@@ -26,7 +26,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   void initState() {
     super.initState();
     if (widget.existingInvoice != null) {
-      // إذا كان هناك فاتورة سابقة للتعديل
       _clientController.text = widget.existingInvoice!['client_name'] ?? '';
     }
   }
@@ -54,7 +53,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     showDialog(
       context: context,
       builder: (ctx) {
-        return StatefulWidget(
+        return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text('إضافة منتج للفاتورة', textAlign: TextAlign.center),
@@ -216,9 +215,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             ),
             Text('المجموع: $_subtotal', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             ElevatedButton(
-              onPressed: () {
-                // حفظ الفاتورة
-              },
+              onPressed: () {},
               child: const Text('حفظ الفاتورة'),
             ),
           ],

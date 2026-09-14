@@ -31,21 +31,10 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     try {
       final db = await DatabaseHelper.instance.database;
       final rawData = await db.query('parties');
-      
+
       setState(() {
         _contactsList = rawData.map((map) {
-          final String rawType = map['type']?.toString() ?? 'عميل';
-          final ContactType cType = (rawType == 'مورد') 
-              ? ContactType.supplier 
-              : ContactType.customer;
-
-          return ContactModel(
-            id: map['id']?.toString(),
-            name: map['name']?.toString() ?? '',
-            phone: map['phone']?.toString() ?? '',
-            address: map['address']?.toString() ?? '',
-            type: cType,
-          );
+          return ContactModel.fromMap(map);
         }).toList();
         _isLoadingContacts = false;
       });
@@ -155,10 +144,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       border: OutlineInputBorder(),
                     ),
                     items: _contactsList.map((contact) {
-                      final String typeLabel = (contact.type == ContactType.supplier) ? 'مورد' : 'عميل';
                       return DropdownMenuItem(
                         value: contact,
-                        child: Text('${contact.name} ($typeLabel)'),
+                        child: Text(contact.name),
                       );
                     }).toList(),
                     onChanged: (val) => setState(() => _selectedContact = val),

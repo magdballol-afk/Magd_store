@@ -1,15 +1,51 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 
-// ... (باقي الكود والكلاس الأساسي للـ State)
+class NewInvoiceScreen extends StatefulWidget {
+  final Map<String, dynamic>? existingInvoice;
 
-  // دالة إظهار نافذة إضافة منتج للفاتورة مع البحث المتقدم
+  const NewInvoiceScreen({Key? key, this.existingInvoice}) : super(key: key);
+
+  @override
+  State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();
+}
+
+class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
+  String _selectedCurrency = 'ليرة سورية';
+  String _selectedDealType = 'مفرق';
+  final List<Map<String, dynamic>> _invoiceItems = [];
+
+  final TextEditingController _clientController = TextEditingController();
+  final TextEditingController _discountController = TextEditingController(text: '0.0');
+  final TextEditingController _paidController = TextEditingController();
+
+  double _subtotal = 0.0;
+  double _total = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.existingInvoice != null) {
+      // إذا كان هناك فاتورة سابقة للتعديل
+      _clientController.text = widget.existingInvoice!['client_name'] ?? '';
+    }
+  }
+
+  void _calculateTotals() {
+    double sum = 0.0;
+    for (var item in _invoiceItems) {
+      sum += (item['total'] as double);
+    }
+    setState(() {
+      _subtotal = sum;
+      double discount = double.tryParse(_discountController.text) ?? 0.0;
+      _total = sum - discount;
+    });
+  }
+
   void _showAddProductDialog() async {
-    // 1. جلب كافة المنتجات من قاعدة البيانات المحلية لاستخدامها في البحث
     final allProducts = await DatabaseHelper.instance.getAllProducts();
-
     Map<String, dynamic>? selectedProduct;
-    final TextEditingController productSearchController = TextEditingController();
     final TextEditingController priceController = TextEditingController();
     final TextEditingController quantityController = TextEditingController(text: '1');
 
@@ -26,11 +62,9 @@ import '../database/database_helper.dart';
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // حقل البحث المتقدم مع الإكمال التلقائي
                     Autocomplete<Map<String, dynamic>>(
                       displayStringForOption: (option) => option['name'] as String,
                       optionsBuilder: (TextEditingValue textEditingValue) {
-                        // عدم إظهار اقتراحات حتى يكتب المستخدم حرفين على الأقل
                         if (textEditingValue.text.length < 2) {
                           return const Iterable<Map<String, dynamic>>.empty();
                         }
@@ -43,8 +77,6 @@ import '../database/database_helper.dart';
                       },
                       onSelected: (Map<String, dynamic> selection) {
                         selectedProduct = selection;
-                        
-                        // تحديد السعر الافتراضي بناءً على نوع التعامل (مفرق / نصف جملة / جملة)
                         double defaultPrice = (selection['price_retail'] as num?)?.toDouble() ?? 0.0;
                         if (_selectedDealType == 'نصف جملة') {
                           defaultPrice = (selection['price_half_wholesale'] as num?)?.toDouble() ?? defaultPrice;
@@ -82,7 +114,7 @@ import '../database/database_helper.dart';
                                   final option = options.elementAt(index);
                                   return ListTile(
                                     title: Text(option['name']),
-                                    subtitle: Text('الكمية المتاحة: ${option['quantity']} | السعر: ${option['price_retail']}'),
+                                    subtitle: Text('الكمية: ${option['quantity']} | السعر: ${option['price_retail']}'),
                                     onTap: () => onSelected(option),
                                   );
                                 },
@@ -93,8 +125,6 @@ import '../database/database_helper.dart';
                       },
                     ),
                     const SizedBox(height: 12),
-
-                    // حقل السعر (قابلة للتعديل)
                     TextField(
                       controller: priceController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -104,8 +134,6 @@ import '../database/database_helper.dart';
                       ),
                     ),
                     const SizedBox(height: 12),
-
-                    // حقل الكمية
                     TextField(
                       controller: quantityController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -124,15 +152,12 @@ import '../database/database_helper.dart';
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    final String name = selectedProduct != null 
-                        ? selectedProduct!['name'] 
-                        : productSearchController.text;
+                    final String name = selectedProduct != null ? selectedProduct!['name'] : '';
                     final double? price = double.tryParse(priceController.text);
                     final double? qty = double.tryParse(quantityController.text);
 
                     if (name.isNotEmpty && price != null && qty != null && qty > 0) {
                       setState(() {
-                        // إضافة المنتج إلى قائمة مواد الفاتورة
                         _invoiceItems.add({
                           'product_id': selectedProduct?['id'],
                           'product_name': name,
@@ -140,7 +165,7 @@ import '../database/database_helper.dart';
                           'quantity': qty,
                           'total': price * qty,
                         });
-                        _calculateTotals(); // دالة اعادة حساب مجاميع الفاتورة
+                        _calculateTotals();
                       });
                       Navigator.pop(ctx);
                     }
@@ -154,3 +179,51 @@ import '../database/database_helper.dart';
       },
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('فاتورة جديدة')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            TextField(
+              controller: _clientController,
+              decoration: const InputDecoration(
+                labelText: 'اسم العميل',
+                prefixIcon: Icon(Icons.person_search),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: _showAddProductDialog,
+              icon: const Icon(Icons.add_shopping_cart),
+              label: const Text('إضافة منتج للفاتورة'),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _invoiceItems.length,
+                itemBuilder: (context, index) {
+                  final item = _invoiceItems[index];
+                  return ListTile(
+                    title: Text(item['product_name']),
+                    subtitle: Text('الكمية: ${item['quantity']} × ${item['price']}'),
+                    trailing: Text('${item['total']}'),
+                  );
+                },
+              ),
+            ),
+            Text('المجموع: $_subtotal', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ElevatedButton(
+              onPressed: () {
+                // حفظ الفاتورة
+              },
+              child: const Text('حفظ الفاتورة'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

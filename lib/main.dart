@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-// استيراد الشاشات
 import 'screens/products_screen.dart';
 import 'screens/new_invoice_screen.dart';
 import 'screens/invoices_screen.dart';
@@ -22,8 +21,6 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'نظام إدارة المحل',
       debugShowCheckedModeBanner: false,
-      
-      // إعدادات اللغة العربية والاتجاه من اليمين لليسار (RTL)
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -66,7 +63,6 @@ class HomeScreen extends StatelessWidget {
               title: 'فاتورة جديدة',
               icon: Icons.add_shopping_cart,
               color: Colors.blue,
-              // السطر المصحح بدون const
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => NewInvoiceScreen()),

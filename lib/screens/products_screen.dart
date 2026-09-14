@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
-import 'product_movement_screen.dart';
+import 'item_movement_filter_screen.dart'; // الملف الموجود في مشروعك
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -21,6 +21,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
     _loadProducts();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // جلب المنتجات من قاعدة البيانات
   Future<void> _loadProducts() async {
     setState(() => _isLoading = true);
     try {
@@ -36,6 +43,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
   }
 
+  // فلترة المنتجات حسب النص المكتوب في حقل البحث
   void _filterProducts(String query) {
     final filtered = _allProducts.where((product) {
       final name = product['name']?.toString().toLowerCase() ?? '';
@@ -60,31 +68,43 @@ class _ProductsScreenState extends State<ProductsScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('تعديل المادة: ${product['name']}'),
+          title: Text('تعديل المادة: ${product['name'] ?? ''}'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: nameController,
-                  decoration: const InputDecoration(labelText: 'اسم المادة', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'اسم المادة',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: priceController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'السعر', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'السعر',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: quantityController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'الكمية المتوفرة', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'الكمية المتوفرة',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: unitController,
-                  decoration: const InputDecoration(labelText: 'الوحدة (مثال: قطعة، كيلو)', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'الوحدة (مثال: قطعة، كيلو)',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ],
             ),
@@ -120,22 +140,26 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
+  // الانتقال إلى شاشة كشف حركة المادة
+  void _navigateToItemMovement() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ItemMovementFilterScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('إدارة المنتجات والمواد'),
         actions: [
-          // زر الانتقال لكشف حركة المادة
           IconButton(
             icon: const Icon(Icons.history),
             tooltip: 'كشف حركة مادة',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ProductMovementScreen()),
-              );
-            },
+            onPressed: _navigateToItemMovement,
           ),
         ],
       ),
@@ -159,29 +183,28 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         },
                       )
                     : null,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
           ),
-          
-          // زر كشف حركة المادة المباشر
+
+          // زر كشف حركة المادة السريع
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 45)),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 45),
+              ),
               icon: const Icon(Icons.receipt_long),
               label: const Text('كشف حركة مادة تفصيلي'),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const ProductMovementScreen()),
-                );
-              },
+              onPressed: _navigateToItemMovement,
             ),
           ),
           const SizedBox(height: 8),
 
-          // قائمة عرض المواد
+          // قائمة عرض المنتجات والمواد
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -192,7 +215,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         itemBuilder: (context, index) {
                           final item = _filteredProducts[index];
                           return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
                             child: ListTile(
                               title: Text(
                                 item['name'] ?? '',

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../models/contact_model.dart';
+import '../database/database_helper.dart';
 
 class CashJournalScreen extends StatefulWidget {
   const CashJournalScreen({super.key});
@@ -8,550 +10,304 @@ class CashJournalScreen extends StatefulWidget {
 }
 
 class _CashJournalScreenState extends State<CashJournalScreen> {
-  DateTime _selectedDate = DateTime.now();
-  bool _isPayment = true; // true: مدفوعات, false: مقبوضات
-  String _selectedCurrency = 'SYP'; // 'SYP' أو 'USD'
+  double _totalCashSYP = 0.0;
+  double _totalCashUSD = 0.0;
+  bool _isLoading = true;
 
-  final TextEditingController _accountController = TextEditingController();
-  final TextEditingController _amountController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
-
-  int? _editingIndex;
-
-  final List<Map<String, dynamic>> _movements = [
-    {
-      'account': 'مجد',
-      'amount': 10.0,
-      'currency': 'SYP',
-      'isPayment': true,
-      'description': 'بدون بيان',
-    },
-    {
-      'account': 'مجد بلول',
-      'amount': 12.0,
-      'currency': 'SYP',
-      'isPayment': true,
-      'description': 'بدون بيان',
-    },
-  ];
-
-  void _saveOrUpdateMovement() {
-    final account = _accountController.text.trim();
-    final amountText = _amountController.text.trim();
-    final description = _descriptionController.text.trim();
-
-    if (account.isEmpty || amountText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يرجى إدخال اسم الحساب والمبلغ')),
-      );
-      return;
-    }
-
-    final amount = double.tryParse(amountText) ?? 0.0;
-
-    setState(() {
-      if (_editingIndex != null) {
-        _movements[_editingIndex!] = {
-          'account': account,
-          'amount': amount,
-          'currency': _selectedCurrency,
-          'isPayment': _isPayment,
-          'description': description.isEmpty ? 'بدون بيان' : description,
-        };
-        _editingIndex = null;
-      } else {
-        _movements.add({
-          'account': account,
-          'amount': amount,
-          'currency': _selectedCurrency,
-          'isPayment': _isPayment,
-          'description': description.isEmpty ? 'بدون بيان' : description,
-        });
-      }
-
-      _accountController.clear();
-      _amountController.clear();
-      _descriptionController.clear();
-    });
-  }
-
-  void _startEditing(int index) {
-    final item = _movements[index];
-    setState(() {
-      _editingIndex = index;
-      _isPayment = item['isPayment'];
-      _selectedCurrency = item['currency'] ?? 'SYP';
-      _accountController.text = item['account'];
-      _amountController.text = item['amount'].toString();
-      _descriptionController.text = item['description'] == 'بدون بيان' ? '' : item['description'];
-    });
-  }
-
-  void _deleteMovement(int index) {
-    setState(() {
-      if (_editingIndex == index) {
-        _editingIndex = null;
-        _accountController.clear();
-        _amountController.clear();
-        _descriptionController.clear();
-      }
-      _movements.removeAt(index);
-    });
-  }
-
-  void _cancelEditing() {
-    setState(() {
-      _editingIndex = null;
-      _accountController.clear();
-      _amountController.clear();
-      _descriptionController.clear();
-    });
-  }
-
-  // حسابات الليرة السورية
-  double get _totalReceiptsSyp => _movements
-      .where((m) => m['isPayment'] == false && m['currency'] == 'SYP')
-      .fold(0.0, (sum, item) => sum + (item['amount'] as double));
-
-  double get _totalPaymentsSyp => _movements
-      .where((m) => m['isPayment'] == true && m['currency'] == 'SYP')
-      .fold(0.0, (sum, item) => sum + (item['amount'] as double));
-
-  double get _netAmountSyp => _totalReceiptsSyp - _totalPaymentsSyp;
-
-  // حسابات الدولار
-  double get _totalReceiptsUsd => _movements
-      .where((m) => m['isPayment'] == false && m['currency'] == 'USD')
-      .fold(0.0, (sum, item) => sum + (item['amount'] as double));
-
-  double get _totalPaymentsUsd => _movements
-      .where((m) => m['isPayment'] == true && m['currency'] == 'USD')
-      .fold(0.0, (sum, item) => sum + (item['amount'] as double));
-
-  double get _netAmountUsd => _totalReceiptsUsd - _totalPaymentsUsd;
+  List<Map<String, dynamic>> _journalEntries = [];
+  List<ContactModel> _contactsList = [];
 
   @override
-  Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF4F7FA),
-        appBar: AppBar(
-          centerTitle: true,
-          elevation: 0,
-          backgroundColor: const Color(0xFF0083B0),
-          title: const Text(
-            'إدخال وتعديل يومية صندوق',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
-          ),
-        ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // اختيار التاريخ
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back_ios, size: 18),
-                        onPressed: () {
-                          setState(() {
-                            _selectedDate = _selectedDate.subtract(const Duration(days: 1));
-                          });
-                        },
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.calendar_today_outlined, size: 18, color: Color(0xFF0083B0)),
-                          const SizedBox(width: 8),
-                          Text(
-                            "${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}",
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.arrow_forward_ios, size: 18),
-                        onPressed: () {
-                          setState(() {
-                            _selectedDate = _selectedDate.add(const Duration(days: 1));
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
+  void initState() {
+    super.initState();
+    _refreshData();
+  }
 
-              // نموذج الإدخال
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: _editingIndex != null ? Border.all(color: Colors.orange, width: 2) : null,
-                ),
+  Future<void> _refreshData() async {
+    setState(() => _isLoading = true);
+    await Future.wait([
+      _loadCashBalances(),
+      _loadJournalEntries(),
+      _loadContacts(),
+    ]);
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadCashBalances() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final rawEntries = await db.query('cash_journal');
+
+      double syp = 0.0;
+      double usd = 0.0;
+
+      for (var entry in rawEntries) {
+        final double amount = (entry['amount'] as num?)?.toDouble() ?? 0.0;
+        final String type = entry['type']?.toString() ?? 'إيداع';
+        final String currency = entry['currency']?.toString() ?? 'ليرة سورية';
+
+        bool isInflow = (type == 'إيداع' || type == 'سند قبض');
+
+        if (currency == 'ليرة سورية') {
+          syp += isInflow ? amount : -amount;
+        } else {
+          usd += isInflow ? amount : -amount;
+        }
+      }
+
+      _totalCashSYP = syp;
+      _totalCashUSD = usd;
+    } catch (e) {
+      debugPrint('خطأ في تحميل رصيد الصندوق: $e');
+    }
+  }
+
+  Future<void> _loadJournalEntries() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final rawData = await db.query('cash_journal', orderBy: 'id DESC');
+      _journalEntries = rawData;
+    } catch (e) {
+      debugPrint('خطأ في تحميل حركات الصندوق: $e');
+    }
+  }
+
+  Future<void> _loadContacts() async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final rawData = await db.query('parties');
+
+      _contactsList = rawData.map((map) {
+        return ContactModel.fromMap(map);
+      }).toList();
+    } catch (e) {
+      debugPrint('خطأ في تحميل الجهات: $e');
+    }
+  }
+
+  void _showAddTransactionDialog() {
+    String entryType = 'سند قبض';
+    String currency = 'ليرة سورية';
+    ContactModel? selectedContact;
+    final TextEditingController amountController = TextEditingController();
+    final TextEditingController notesController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulWidget(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('إضافة حركة صندوق جديدة'),
+              content: SingleChildScrollView(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (_editingIndex != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'جاري تعديل حركة...',
-                              style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                            TextButton.icon(
-                              onPressed: _cancelEditing,
-                              icon: const Icon(Icons.cancel, size: 16, color: Colors.grey),
-                              label: const Text('إلغاء التعديل', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                            )
-                          ],
-                        ),
+                    DropdownButtonFormField<String>(
+                      value: entryType,
+                      decoration: const InputDecoration(labelText: 'نوع الحركة', border: OutlineInputBorder()),
+                      items: const [
+                        DropdownMenuItem(value: 'سند قبض', child: Text('سند قبض (قبض من عميل/مصدر)')),
+                        DropdownMenuItem(value: 'سند صرف', child: Text('سند صرف (دفعة لمورد/مصروف)')),
+                      ],
+                      onChanged: (val) => setDialogState(() => entryType = val!),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<ContactModel>(
+                      value: selectedContact,
+                      decoration: const InputDecoration(
+                        labelText: 'مرتبط بـ (عميل/مورد) - اختياري',
+                        border: OutlineInputBorder(),
                       ),
-                    
-                    // اختيار نوع الحركة (مقبوضات / مدفوعات)
+                      items: _contactsList.map((contact) {
+                        return DropdownMenuItem(
+                          value: contact,
+                          child: Text(contact.name),
+                        );
+                      }).toList(),
+                      onChanged: (val) => setDialogState(() => selectedContact = val),
+                    ),
+                    const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => _isPayment = false),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: !_isPayment ? Colors.green.shade50 : Colors.grey.shade100,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: !_isPayment ? Colors.green : Colors.transparent),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.arrow_downward, color: !_isPayment ? Colors.green : Colors.grey, size: 18),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'مقبوضات',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: !_isPayment ? Colors.green : Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          flex: 2,
+                          child: TextField(
+                            controller: amountController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(labelText: 'المبلغ', border: OutlineInputBorder()),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => _isPayment = true),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: _isPayment ? Colors.red.shade50 : Colors.grey.shade100,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: _isPayment ? Colors.red : Colors.transparent),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.arrow_upward, color: _isPayment ? Colors.red : Colors.grey, size: 18),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'مدفوعات',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: _isPayment ? Colors.red : Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          flex: 1,
+                          child: DropdownButtonFormField<String>(
+                            value: currency,
+                            decoration: const InputDecoration(border: OutlineInputBorder()),
+                            items: const [
+                              DropdownMenuItem(value: 'ليرة سورية', child: Text('ل.س')),
+                              DropdownMenuItem(value: 'دولار (\$)', child: Text('\$')),
+                            ],
+                            onChanged: (val) => setDialogState(() => currency = val!),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-
-                    // اسم الحساب
                     TextField(
-                      controller: _accountController,
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.account_balance_wallet_outlined, size: 20),
-                        hintText: 'اسم الحساب (العميل / المورد / ...)',
-                        contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // حقل المبلغ مع اختيار العملة
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _amountController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: InputDecoration(
-                              prefixIcon: Icon(
-                                _selectedCurrency == 'USD' ? Icons.attach_money : Icons.money_outlined,
-                                size: 20,
-                              ),
-                              hintText: 'المبلغ',
-                              contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade400),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedCurrency,
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'SYP',
-                                  child: Text('ل.س', style: TextStyle(fontWeight: FontWeight.bold)),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'USD',
-                                  child: Text('\$', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                ),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() => _selectedCurrency = val);
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-
-                    // البيان
-                    TextField(
-                      controller: _descriptionController,
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.description_outlined, size: 20),
-                        hintText: 'البيان / ملاحظات',
-                        contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // زر الإضافة / التحديث
-                    SizedBox(
-                      width: double.infinity,
-                      height: 46,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _editingIndex != null ? Colors.orange : const Color(0xFF0083B0),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onPressed: _saveOrUpdateMovement,
-                        icon: Icon(_editingIndex != null ? Icons.check : Icons.add_circle_outline, color: Colors.white),
-                        label: Text(
-                          _editingIndex != null ? 'تحديث الحركة' : 'إضافة الحركة الصندوقية',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
-                        ),
-                      ),
+                      controller: notesController,
+                      decoration: const InputDecoration(labelText: 'البيان / ملاحظات', border: OutlineInputBorder()),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-
-              const Text(
-                'حركات اليوم المسجلة',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-              ),
-              const SizedBox(height: 10),
-
-              // قائمة الحركات المسجلة
-              _movements.isEmpty
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(20.0),
-                        child: Text('لا توجد حركات مسجلة لهذا اليوم', style: TextStyle(color: Colors.grey)),
-                      ),
-                    )
-                  : ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _movements.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final item = _movements[index];
-                        final isPayment = item['isPayment'] as bool;
-                        final amount = item['amount'] as double;
-                        final currency = (item['currency'] ?? 'SYP') == 'USD' ? '\$' : 'ل.س';
-
-                        return Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade200),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item['account'],
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A)),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      item['description'],
-                                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    "${isPayment ? '-' : '+'}${amount.toStringAsFixed(1)} $currency",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: isPayment ? Colors.red : Colors.green,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      InkWell(
-                                        onTap: () => _startEditing(index),
-                                        child: const Padding(
-                                          padding: EdgeInsets.all(4.0),
-                                          child: Icon(Icons.edit_outlined, size: 18, color: Colors.blue),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      InkWell(
-                                        onTap: () => _deleteMovement(index),
-                                        child: const Padding(
-                                          padding: EdgeInsets.all(4.0),
-                                          child: Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-              const SizedBox(height: 20),
-
-              // ملخص الحركة مقسم حسب العملة
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('إلغاء'),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'الملخص (الليرة السورية):',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0083B0)),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('إجمالي المقبوضات:', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                        Text('${_totalReceiptsSyp.toStringAsFixed(1)} ل.س', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 12)),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('إجمالي المدفوعات:', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                        Text('${_totalPaymentsSyp.toStringAsFixed(1)} ل.س', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 12)),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('صافي الصندوق (ل.س):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        Text(
-                          '${_netAmountSyp.toStringAsFixed(1)} ل.س',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: _netAmountSyp >= 0 ? Colors.green : Colors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 24),
-                    const Text(
-                      'الملخص (الدولار \$):',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0083B0)),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('إجمالي المقبوضات:', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                        Text('${_totalReceiptsUsd.toStringAsFixed(1)} \$', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 12)),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('إجمالي المدفوعات:', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                        Text('${_totalPaymentsUsd.toStringAsFixed(1)} \$', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 12)),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('صافي الصندوق (\$):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        Text(
-                          '${_netAmountUsd.toStringAsFixed(1)} \$',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: _netAmountUsd >= 0 ? Colors.green : Colors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                ElevatedButton(
+                  onPressed: () async {
+                    final double amount = double.tryParse(amountController.text) ?? 0.0;
+                    if (amount <= 0) return;
+
+                    final db = await DatabaseHelper.instance.database;
+
+                    await db.insert('cash_journal', {
+                      'party_id': selectedContact?.id,
+                      'type': entryType,
+                      'amount': amount,
+                      'currency': currency,
+                      'notes': notesController.text.trim(),
+                      'date': DateTime.now().toIso8601String().split('T').first,
+                    });
+
+                    final String? contactIdStr = selectedContact?.id;
+                    if (selectedContact != null && contactIdStr != null && contactIdStr.isNotEmpty) {
+                      final int contactId = int.tryParse(contactIdStr) ?? 0;
+                      if (contactId > 0) {
+                        double impact = (entryType == 'سند قبض') ? -amount : amount;
+
+                        if (currency == 'ليرة سورية') {
+                          await db.rawUpdate(
+                            'UPDATE parties SET balance_syp = COALESCE(balance_syp, 0) + ? WHERE id = ?',
+                            [impact, contactId],
+                          );
+                        } else {
+                          await db.rawUpdate(
+                            'UPDATE parties SET balance_usd = COALESCE(balance_usd, 0) + ? WHERE id = ?',
+                            [impact, contactId],
+                          );
+                        }
+                      }
+                    }
+
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      _refreshData();
+                    }
+                  },
+                  child: const Text('حفظ'),
                 ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('دفتر الصندوق (الخزينة)'),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showAddTransactionDialog,
+        icon: const Icon(Icons.add_card),
+        label: const Text('حركة جديدة'),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(16.0),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Theme.of(context).primaryColor),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'إجمالي رصيد الصندوق الحالي',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          Text(
+                            '${_totalCashSYP.toStringAsFixed(0)} ل.س',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: _totalCashSYP >= 0 ? Colors.green : Colors.red,
+                            ),
+                          ),
+                          Text(
+                            '${_totalCashUSD.toStringAsFixed(2)} \$',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: _totalCashUSD >= 0 ? Colors.green : Colors.red,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: _journalEntries.isEmpty
+                      ? const Center(child: Text('لا توجد حركات صندوق مسجلة'))
+                      : ListView.builder(
+                          itemCount: _journalEntries.length,
+                          itemBuilder: (context, index) {
+                            final item = _journalEntries[index];
+                            final bool isPositive = (item['type'] == 'سند قبض' || item['type'] == 'إيداع');
+                            final double amount = (item['amount'] as num?)?.toDouble() ?? 0.0;
+                            final String currencySymbol = item['currency'] == 'ليرة سورية' ? 'ل.س' : '\$';
+
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: isPositive ? Colors.green.shade100 : Colors.red.shade100,
+                                child: Icon(
+                                  isPositive ? Icons.arrow_downward : Icons.arrow_upward,
+                                  color: isPositive ? Colors.green : Colors.red,
+                                ),
+                              ),
+                              title: Text('${item['type']} - ${item['notes'] ?? 'بدون ملاحظات'}'),
+                              subtitle: Text('التاريخ: ${item['date']}'),
+                              trailing: Text(
+                                '${isPositive ? "+" : "-"}${amount.toStringAsFixed(0)} $currencySymbol',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: isPositive ? Colors.green : Colors.red,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
     );
   }
 }

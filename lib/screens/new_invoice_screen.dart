@@ -30,17 +30,21 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   Future<void> _loadContacts() async {
     try {
       final db = await DatabaseHelper.instance.database;
-      // استعلام مباشر من جدول الجهات/العملاء لتفادي اختلاف أسطر getParties
       final rawData = await db.query('parties');
       
       setState(() {
         _contactsList = rawData.map((map) {
+          final String rawType = map['type']?.toString() ?? 'عميل';
+          final ContactType cType = (rawType == 'مورد') 
+              ? ContactType.supplier 
+              : ContactType.customer;
+
           return ContactModel(
-            id: map['id']?.toString() ?? '',
+            id: map['id']?.toString(),
             name: map['name']?.toString() ?? '',
             phone: map['phone']?.toString() ?? '',
             address: map['address']?.toString() ?? '',
-            type: map['type']?.toString() ?? 'عميل',
+            type: cType,
           );
         }).toList();
         _isLoadingContacts = false;
@@ -69,7 +73,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     try {
       final db = await DatabaseHelper.instance.database;
 
-      // 1. إضافة الفاتورة
       final int invoiceId = await db.insert('invoices', {
         'party_id': _selectedContact?.id,
         'type': _invoiceType,
@@ -80,10 +83,10 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         'date': DateTime.now().toIso8601String().split('T').first,
       });
 
-      // 2. تحديث رصيد الحساب مباشرة عبر SQL لتفادي غياب دالة updatePartyBalance
-      if (_selectedContact != null && _isDeferred && _selectedContact!.id.isNotEmpty) {
+      final String? contactIdStr = _selectedContact?.id;
+      if (_selectedContact != null && _isDeferred && contactIdStr != null && contactIdStr.isNotEmpty) {
         double balanceImpact = (_invoiceType == 'فاتورة مبيعات') ? amount : -amount;
-        final int contactId = int.tryParse(_selectedContact!.id) ?? 0;
+        final int contactId = int.tryParse(contactIdStr) ?? 0;
 
         if (contactId > 0) {
           if (_currency == 'ليرة سورية') {
@@ -152,9 +155,10 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       border: OutlineInputBorder(),
                     ),
                     items: _contactsList.map((contact) {
+                      final String typeLabel = (contact.type == ContactType.supplier) ? 'مورد' : 'عميل';
                       return DropdownMenuItem(
                         value: contact,
-                        child: Text('${contact.name} (${contact.type})'),
+                        child: Text('${contact.name} ($typeLabel)'),
                       );
                     }).toList(),
                     onChanged: (val) => setState(() => _selectedContact = val),

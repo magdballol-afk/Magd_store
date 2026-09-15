@@ -11,37 +11,43 @@ class CashJournalScreen extends StatefulWidget {
 class _CashJournalScreenState extends State<CashJournalScreen> {
   List<Map<String, dynamic>> _entries = [];
   bool _isLoading = true;
-  double _totalIncome = 0.0;
-  double _totalExpense = 0.0;
+
+  double _totalIn = 0.0;
+  double _totalOut = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _loadEntries();
+    _loadJournal();
   }
 
-  Future<void> _loadEntries() async {
+  Future<void> _loadJournal() async {
     setState(() => _isLoading = true);
     try {
       final db = await DatabaseHelper.instance.database;
-      final data = await db.query('cash_journal', orderBy: 'date DESC');
-      
-      double income = 0.0;
-      double expense = 0.0;
 
-      for (var item in data) {
-        double amt = (item['amount'] ?? 0.0).toDouble();
-        if (amt >= 0) {
-          income += amt;
+      final results = await db.query('journal_entries', orderBy: 'date DESC');
+
+      double inSum = 0.0;
+      double outSum = 0.0;
+
+      for (var item in results) {
+        // تحويل آمن لتجنب خطأ toDouble على Object
+        double amt = (item['amount'] as num?)?.toDouble() ?? 0.0;
+                     
+        String type = (item['type'] ?? '').toString();
+
+        if (type == 'in' || type == 'قبض' || type == 'مقبوضات') {
+          inSum += amt;
         } else {
-          expense += amt.abs();
+          outSum += amt;
         }
       }
 
       setState(() {
-        _entries = data;
-        _totalIncome = income;
-        _totalExpense = expense;
+        _entries = results;
+        _totalIn = inSum;
+        _totalOut = outSum;
         _isLoading = false;
       });
     } catch (e) {
@@ -49,179 +55,83 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     }
   }
 
-  void _showAddEntryDialog(bool isIncome) {
-    final amountController = TextEditingController();
-    final descController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(isIncome ? 'إضافة سند قبض (+)' : 'إضافة سند صرف (-)'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: amountController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'المبلغ',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: descController,
-                  decoration: const InputDecoration(
-                    labelText: 'البيان / الوصف',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('إلغاء'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                double? val = double.tryParse(amountController.text.trim());
-                if (val == null || val <= 0) return;
-
-                double finalAmount = isIncome ? val : -val;
-                final db = await DatabaseHelper.instance.database;
-                await db.insert('cash_journal', {
-                  'description': descController.text.trim().isEmpty 
-                      ? (isIncome ? 'سند قبض' : 'سند صرف')
-                      : descController.text.trim(),
-                  'amount': finalAmount,
-                  'date': DateTime.now().toString().split('.')[0],
-                });
-
-                if (mounted) Navigator.pop(context);
-                _loadEntries();
-              },
-              child: const Text('حفظ'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildSummaryCard() {
-    double balance = _totalIncome - _totalExpense;
-    return Card(
-      elevation: 3,
-      margin: const EdgeInsets.all(12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('إجمالي المقبوضات:', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                Text('+$_totalIncome ل.س', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('إجمالي المدفوعات:', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                Text('-$_totalExpense ل.س', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const Divider(height: 20, thickness: 1),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('رصيد الصندوق الحالي:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                Text(
-                  '$balance ل.س',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: balance >= 0 ? Colors.blue.shade800 : Colors.red.shade800,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    double netBalance = _totalIn - _totalOut;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('دفتر الصندوق والتدفقات'),
+        title: const Text('دفتر الصندوق'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                _buildSummaryCard(),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                          onPressed: () => _showAddEntryDialog(true),
-                          icon: const Icon(Icons.add),
-                          label: const Text('قبض'),
+                Card(
+                  margin: const EdgeInsets.all(12),
+                  elevation: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        Column(
+                          children: [
+                            const Text('المقبوضات', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text('$_totalIn', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                          onPressed: () => _showAddEntryDialog(false),
-                          icon: const Icon(Icons.remove),
-                          label: const Text('دفع'),
+                        Container(height: 30, width: 1, color: Colors.grey.shade300),
+                        Column(
+                          children: [
+                            const Text('المدفوعات', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text('$_totalOut', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ],
                         ),
-                      ),
-                    ],
+                        Container(height: 30, width: 1, color: Colors.grey.shade300),
+                        Column(
+                          children: [
+                            const Text('الرصيد الصافي', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text('$netBalance', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 10),
                 Expanded(
                   child: _entries.isEmpty
-                      ? const Center(child: Text('لا توجد حركة في الصندوق حالياً'))
+                      ? const Center(child: Text('لا توجد قيود مسجلة في الصندوق'))
                       : ListView.builder(
                           itemCount: _entries.length,
                           itemBuilder: (context, index) {
-                            final entry = _entries[index];
-                            final double amount = (entry['amount'] ?? 0.0).toDouble();
-                            final isIncome = amount >= 0;
+                            final item = _entries[index];
+                            final String type = (item['type'] ?? '').toString();
+                            final bool isIn = type == 'in' || type == 'قبض' || type == 'مقبوضات';
+                            
+                            double amt = (item['amount'] as num?)?.toDouble() ?? 0.0;
 
                             return Card(
                               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                               child: ListTile(
                                 leading: CircleAvatar(
-                                  backgroundColor: isIncome ? Colors.green.shade100 : Colors.red.shade100,
+                                  backgroundColor: isIn ? Colors.green.shade100 : Colors.red.shade100,
                                   child: Icon(
-                                    isIncome ? Icons.arrow_downward : Icons.arrow_upward,
-                                    color: isIncome ? Colors.green : Colors.red,
+                                    isIn ? Icons.arrow_downward : Icons.arrow_upward,
+                                    color: isIn ? Colors.green : Colors.red,
                                   ),
                                 ),
-                                title: Text(entry['description'] ?? 'قيد صندوق'),
-                                subtitle: Text(entry['date'] ?? ''),
+                                title: Text(item['description'] ?? 'قيد صندوق'),
+                                subtitle: Text('التاريخ: ${item['date'] ?? ''}'),
                                 trailing: Text(
-                                  '$amount ل.س',
+                                  '$amt',
                                   style: TextStyle(
-                                    color: isIncome ? Colors.green : Colors.red,
+                                    color: isIn ? Colors.green : Colors.red,
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 15,
+                                    fontSize: 16,
                                   ),
                                 ),
                               ),

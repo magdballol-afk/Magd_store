@@ -167,7 +167,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                 SegmentedButton<String>(
                   segments: const [
                     ButtonSegment(value: 'ليرة سورية', label: Text('ليرة سورية')),
-                    ButtonSegment(value: 'دولار ($)', label: Text('دولار ($)')),
+                    ButtonSegment(value: 'دولار (\$)', label: Text('دولار (\$)')),
                   ],
                   selected: {_currency},
                   onSelectionChanged: (val) {

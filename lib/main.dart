@@ -1,3 +1,5 @@
+import 'package:sqflite/sqflite.dart';
+
 import 'package:flutter/material.dart';
 import 'database/database_helper.dart';
 import 'screens/products_screen.dart';

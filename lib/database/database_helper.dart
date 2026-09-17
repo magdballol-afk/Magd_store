@@ -186,3 +186,23 @@ class DatabaseHelper {
     await saveInvoiceWithDetails(invoiceData, items);
   }
 }
+// أضف هذه الدوال في DatabaseHelper لدعم ContactModel
+Future<int> updateContact(ContactModel contact) async {
+  final db = await database;
+  return await db.update(
+    'contacts',
+    contact.toJson(),
+    where: 'id = ?',
+    whereArgs: [contact.id],
+  );
+}
+
+Future<int> deleteContact(int id) async {
+  final db = await database;
+  return await db.delete(
+    'contacts',
+    where: 'id = ?',
+    whereArgs: [id],
+  );
+}
+

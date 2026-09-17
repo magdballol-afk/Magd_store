@@ -22,7 +22,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 2,
+      version: 3, // تم رفع الإصدار إلى 3 لاستيعاب التعديلات الجديدة
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -52,7 +52,9 @@ class DatabaseHelper {
         name TEXT NOT NULL,
         phone TEXT,
         address TEXT,
-        balance REAL DEFAULT 0.0
+        balance REAL DEFAULT 0.0,
+        balance_syr REAL DEFAULT 0.0,
+        balance_usd REAL DEFAULT 0.0
       )
     ''');
   }
@@ -60,6 +62,11 @@ class DatabaseHelper {
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE products ADD COLUMN buy_price REAL DEFAULT 0.0');
+    }
+    
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE contacts ADD COLUMN balance_syr REAL DEFAULT 0.0');
+      await db.execute('ALTER TABLE contacts ADD COLUMN balance_usd REAL DEFAULT 0.0');
     }
   }
 

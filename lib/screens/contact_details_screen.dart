@@ -21,8 +21,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    _currentSYP = widget.contact.balanceSYP;
-    _currentUSD = widget.contact.balanceUSD;
+    _currentSYP = widget.contact.balanceSyr;
+    _currentUSD = widget.contact.balanceUsd;
     _loadAccountStatement();
   }
 
@@ -41,32 +41,35 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
       // جلب حركات دفتر الصندوق المرتبطة بهذا العميل/المورد
       final cashEntries = await db.query(
-        'cash_journal',
-        where: 'party_id = ?',
-        whereArgs: [widget.contact.id],
+        'journal_entries',
+        where: 'description LIKE ?',
+        whereArgs: ['%${widget.contact.name}%'],
       );
 
       List<Map<String, dynamic>> combined = [];
 
       for (var inv in invoices) {
         combined.add({
-          'date': inv['date'] ?? '',
-          'title': inv['type'] ?? 'فاتورة',
-          'amount': (inv['total_amount'] as num?)?.toDouble() ?? 0.0,
+          'date': inv['created_at'] ?? '',
+          'title': 'فاتورة مبيعات',
+          'amount': (inv['net_total'] as num?)?.toDouble() ?? 0.0,
           'currency': inv['currency'] ?? 'ليرة سورية',
-          'isDebit': inv['type'] == 'فاتورة مبيعات', // المبيعات تزيد على العميل
+          'isDebit': true, // الفاتورة تزيد على العميل
           'subtitle': 'فاتورة رقم #${inv['id']}',
         });
       }
 
       for (var cash in cashEntries) {
+        final String type = (cash['type'] ?? '').toString();
+        final bool isDebit = type == 'دفعة' || type == 'سند دفع';
+
         combined.add({
           'date': cash['date'] ?? '',
           'title': cash['type'] ?? 'دفعة مالية',
           'amount': (cash['amount'] as num?)?.toDouble() ?? 0.0,
-          'currency': cash['currency'] ?? 'ليرة سورية',
-          'isDebit': cash['type'] == 'سند دفع', // الدفع يقلل الدين
-          'subtitle': cash['notes'] ?? 'سند صندوق',
+          'currency': 'ليرة سورية',
+          'isDebit': isDebit,
+          'subtitle': cash['description'] ?? 'سند صندوق',
         });
       }
 
@@ -96,7 +99,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     final amountController = TextEditingController();
     final notesController = TextEditingController();
     String selectedCurrency = 'ليرة سورية';
-    String paymentType = widget.contact.type == 'عميل' ? 'سند قبض' : 'سند دفع';
+    String paymentType = 'سند قبض';
 
     showDialog(
       context: context,
@@ -145,12 +148,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     final db = await DatabaseHelper.instance.database;
 
                     // إضافة الحركة إلى دفتر الصندوق
-                    await db.insert('cash_journal', {
-                      'party_id': widget.contact.id,
-                      'type': paymentType,
+                    await db.insert('journal_entries', {
+                      'description': '${notesController.text.trim()} - العميل: ${widget.contact.name}',
                       'amount': amount,
-                      'currency': selectedCurrency,
-                      'notes': notesController.text.trim(),
+                      'type': paymentType,
                       'date': DateTime.now().toIso8601String().split('T').first,
                     });
 
@@ -158,7 +159,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     double sypChange = 0.0;
                     double usdChange = 0.0;
 
-                    // سند القبض يقلل من دين العميل، وسند الدفع يقلل من حساب المورد
                     double adjustment = (paymentType == 'سند قبض') ? -amount : amount;
 
                     if (selectedCurrency == 'ليرة سورية') {
@@ -167,11 +167,19 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                       usdChange = adjustment;
                     }
 
-                    await DatabaseHelper.instance.updatePartyBalance(
-                      int.parse(widget.contact.id),
-                      sypChange,
-                      usdChange,
-                    );
+                    if (widget.contact.id != null) {
+                      if (selectedCurrency == 'ليرة سورية') {
+                        await db.rawUpdate(
+                          'UPDATE contacts SET balance_syr = balance_syr + ?, balance = balance + ? WHERE id = ?',
+                          [sypChange, sypChange, widget.contact.id],
+                        );
+                      } else {
+                        await db.rawUpdate(
+                          'UPDATE contacts SET balance_usd = balance_usd + ? WHERE id = ?',
+                          [usdChange, widget.contact.id],
+                        );
+                      }
+                    }
 
                     setState(() {
                       _currentSYP += sypChange;
@@ -217,9 +225,9 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
             ),
             child: Column(
               children: [
-                Text(
-                  'رصيد الحساب (${widget.contact.type})',
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                const Text(
+                  'رصيد الحساب (عميل)',
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -262,7 +270,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
               ),
               onPressed: _showPaymentDialog,
               icon: const Icon(Icons.add_card),
-              label: Text(widget.contact.type == 'عميل' ? 'قبض دفعة من العميل' : 'تسديد دفعة للمورد'),
+              label: const Text('قبض دفعة من العميل'),
             ),
           ),
           const SizedBox(height: 10),

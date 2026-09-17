@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
+import '../models/contact_model.dart';
+import 'contact_details_screen.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -9,7 +11,7 @@ class ContactsScreen extends StatefulWidget {
 }
 
 class _ContactsScreenState extends State<ContactsScreen> {
-  List<Map<String, dynamic>> _contacts = [];
+  List<ContactModel> _contacts = [];
   bool _isLoading = true;
 
   @override
@@ -21,10 +23,9 @@ class _ContactsScreenState extends State<ContactsScreen> {
   Future<void> _loadContacts() async {
     setState(() => _isLoading = true);
     try {
-      final db = await DatabaseHelper.instance.database;
-      final rawData = await db.query('parties', orderBy: 'name ASC');
+      final contacts = await DatabaseHelper.instance.getContacts();
       setState(() {
-        _contacts = rawData;
+        _contacts = contacts;
         _isLoading = false;
       });
     } catch (e) {
@@ -35,7 +36,6 @@ class _ContactsScreenState extends State<ContactsScreen> {
   void _showAddContactDialog() {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
-    String selectedType = 'عميل';
 
     showDialog(
       context: context,
@@ -55,18 +55,6 @@ class _ContactsScreenState extends State<ContactsScreen> {
                   keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(labelText: 'رقم الهاتف'),
                 ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedType,
-                  items: const [
-                    DropdownMenuItem(value: 'عميل', child: Text('عميل')),
-                    DropdownMenuItem(value: 'مورد', child: Text('مورد')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) selectedType = val;
-                  },
-                  decoration: const InputDecoration(labelText: 'نوع الجهة'),
-                ),
               ],
             ),
           ),
@@ -78,14 +66,16 @@ class _ContactsScreenState extends State<ContactsScreen> {
             ElevatedButton(
               onPressed: () async {
                 if (nameController.text.trim().isEmpty) return;
-                final db = await DatabaseHelper.instance.database;
-                await db.insert('parties', {
-                  'name': nameController.text.trim(),
-                  'phone': phoneController.text.trim(),
-                  'type': selectedType,
-                  'balance_syp': 0.0,
-                  'balance_usd': 0.0,
-                });
+                
+                final newContact = ContactModel(
+                  name: nameController.text.trim(),
+                  phone: phoneController.text.trim(),
+                  balanceSyr: 0.0,
+                  balanceUsd: 0.0,
+                );
+
+                await DatabaseHelper.instance.insertContact(newContact);
+                
                 if (mounted) Navigator.pop(context);
                 _loadContacts();
               },
@@ -118,13 +108,22 @@ class _ContactsScreenState extends State<ContactsScreen> {
                     return Card(
                       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       child: ListTile(
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ContactDetailsScreen(contact: item),
+                            ),
+                          );
+                          _loadContacts();
+                        },
                         leading: CircleAvatar(
-                          child: Text(item['name']?[0] ?? 'C'),
+                          child: Text(item.name.isNotEmpty ? item.name[0] : 'C'),
                         ),
-                        title: Text(item['name'] ?? ''),
-                        subtitle: Text('الهاتف: ${item['phone'] ?? "غير محدد"} | النوع: ${item['type'] ?? "عميل"}'),
+                        title: Text(item.name),
+                        subtitle: Text('الهاتف: ${item.phone.isNotEmpty ? item.phone : "غير محدد"}'),
                         trailing: Text(
-                          '${item['balance_syp'] ?? 0} ل.س',
+                          '${item.balanceSyr} ل.س',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),

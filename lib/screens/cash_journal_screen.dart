@@ -26,6 +26,17 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     try {
       final db = await DatabaseHelper.instance.database;
 
+      // إنشاء جدول journal_entries إن لم يكن موجوداً لضمان عدم حدوث استثناء (Exception)
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS journal_entries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          description TEXT,
+          amount REAL NOT NULL,
+          type TEXT NOT NULL,
+          date TEXT NOT NULL
+        )
+      ''');
+
       final results = await db.query('journal_entries', orderBy: 'date DESC');
 
       double inSum = 0.0;

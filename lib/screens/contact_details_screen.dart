@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-class ContactDetailsScreen extends StatefulWidget {
-  final Map<String, dynamic> contact;
+class ContactDetailsScreen extends StatelessWidget {
+  final dynamic contact;
 
   const ContactDetailsScreen({
     super.key,
@@ -9,27 +9,28 @@ class ContactDetailsScreen extends StatefulWidget {
   });
 
   @override
-  State<ContactDetailsScreen> createState() => _ContactDetailsScreenState();
-}
-
-class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
-  @override
   Widget build(BuildContext context) {
+    // استخراج البيانات سواء كان الكائن Map أو Model
+    final String name = contact is Map ? (contact['name'] ?? '') : (contact.name ?? '');
+    final String phone = contact is Map ? (contact['phone'] ?? 'غير محدد') : (contact.phone ?? 'غير محدد');
+    final double balance = contact is Map 
+        ? ((contact['balance'] as num?)?.toDouble() ?? 0.0) 
+        : ((contact.balance as num?)?.toDouble() ?? 0.0);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.contact['name'] ?? 'تفاصيل جهة الاتصال'),
+        title: Text(name.isNotEmpty ? name : 'تفاصيل جهة الاتصال'),
         backgroundColor: const Color(0xFF0284C7),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Card(
               child: ListTile(
                 leading: const Icon(Icons.person, color: Color(0xFF0284C7)),
-                title: Text(widget.contact['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('الهاتف: ${widget.contact['phone'] ?? 'غير محدد'}'),
+                title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('الهاتف: $phone'),
               ),
             ),
             const SizedBox(height: 12),
@@ -37,7 +38,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
               child: ListTile(
                 leading: const Icon(Icons.account_balance_wallet, color: Colors.orange),
                 title: const Text('الرصيد / الدين'),
-                subtitle: Text('${widget.contact['balance'] ?? 0.0} ل.س'),
+                subtitle: Text('$balance ل.س'),
               ),
             ),
           ],

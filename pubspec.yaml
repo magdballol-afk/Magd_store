@@ -12,11 +12,18 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+
+  # الطباعة الحرارية عبر البلوتوث
   print_bluetooth_thermal: ^1.1.0
 
+  # إدارة قواعد البيانات والملفات
   sqflite: ^2.3.0
   path: ^1.8.3
   path_provider: ^2.1.1
+
+  # المكتبات المضافة للروابط والمشاركة
+  url_launcher: ^6.2.5
+  share_plus: ^7.2.1
 
 dev_dependencies:
   flutter_test:

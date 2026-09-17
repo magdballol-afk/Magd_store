@@ -12,20 +12,22 @@ class Product {
     this.id,
     required this.name,
     this.barcode,
-    required this.retailPrice,
-    required this.wholesalePrice,
-    required this.costPrice,
+    double? retailPrice,
+    double? wholesalePrice,
+    double? costPrice,
+    double? buyPrice,        // ممرر اختياري للتوافق مع الشاشات القديمة
     double? price,
-    required this.quantity,
-  }) : price = price ?? retailPrice;
+    double? quantity,
+    double? stockQuantity,   // ممرر اختياري للتوافق مع الشاشات القديمة
+  })  : costPrice = costPrice ?? buyPrice ?? 0.0,
+        retailPrice = retailPrice ?? price ?? 0.0,
+        wholesalePrice = wholesalePrice ?? retailPrice ?? price ?? 0.0,
+        price = price ?? retailPrice ?? 0.0,
+        quantity = quantity ?? stockQuantity ?? 0.0;
 
-  // 1. ميزة للتوافق مع الشاشات التي تستخدم buyPrice (تعيد سعر التكلفة)
   double get buyPrice => costPrice;
-
-  // 2. ميزة للتوافق مع الشاشات التي تستخدم stockQuantity (تعيد الكمية)
   double get stockQuantity => quantity;
 
-  // تحويل البيانات القادمة من قاعدة البيانات إلى Object
   factory Product.fromJson(Map<String, dynamic> json) {
     final double retail = (json['retail_price'] as num?)?.toDouble() ?? 
                          (json['price'] as num?)?.toDouble() ?? 
@@ -48,10 +50,8 @@ class Product {
     );
   }
 
-  // دعم التسمية الشهيرة مع sqflite
   factory Product.fromMap(Map<String, dynamic> map) => Product.fromJson(map);
 
-  // تحويل البيانات إلى Map للحفظ والتعديل في DB
   Map<String, dynamic> toJson() {
     return {
       if (id != null) 'id': id,
@@ -60,35 +60,12 @@ class Product {
       'retail_price': retailPrice,
       'wholesale_price': wholesalePrice,
       'cost_price': costPrice,
-      'buy_price': costPrice,         // حفظ التكلفة مع الاسمين لضمان عدم حدوث خطأ استعلام
+      'buy_price': costPrice,
       'price': price,
       'quantity': quantity,
-      'stock_quantity': quantity,     // حفظ الكمية مع الاسمين
+      'stock_quantity': quantity,
     };
   }
 
   Map<String, dynamic> toMap() => toJson();
-
-  // إنشاء نسخة جديدة مع إمكانية تعديل حقول محددة
-  Product copyWith({
-    int? id,
-    String? name,
-    String? barcode,
-    double? retailPrice,
-    double? wholesalePrice,
-    double? costPrice,
-    double? price,
-    double? quantity,
-  }) {
-    return Product(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      barcode: barcode ?? this.barcode,
-      retailPrice: retailPrice ?? this.retailPrice,
-      wholesalePrice: wholesalePrice ?? this.wholesalePrice,
-      costPrice: costPrice ?? this.costPrice,
-      price: price ?? this.price,
-      quantity: quantity ?? this.quantity,
-    );
-  }
 }

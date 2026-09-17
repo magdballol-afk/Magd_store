@@ -5,7 +5,6 @@ import '../models/product.dart';
 class NewInvoiceScreen extends StatefulWidget {
   final Map<String, dynamic>? existingInvoice;
 
-  // تصحيح المُنشئ هنا ليتوافق مع أحدث إصدارات Flutter وبدون أخطاء Syntax
   const NewInvoiceScreen({
     super.key,
     this.existingInvoice,
@@ -20,7 +19,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   final List<Map<String, dynamic>> _invoiceItems = [];
 
   String? _selectedContact;
-  String _invoiceType = 'مبيعات'; // أو 'مشتريات'
+  String _invoiceType = 'مبيعات';
   double _discount = 0.0;
   double _paidAmount = 0.0;
 
@@ -38,19 +37,12 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     setState(() => _isLoading = true);
     try {
       final db = await DatabaseHelper.instance.database;
-
-      // جلب العملاء/الموردين
       final contactsData = await db.query('contacts');
-
-      // جلب المنتجات
       final productsData = await db.query('products');
 
       setState(() {
         _contacts = contactsData;
-        _products = productsData.map((item) {
-          // تصحيح جلب أسعار وشروط إنشاء كائن Product ليتوافق مع الموديل
-          return Product.fromJson(item);
-        }).toList();
+        _products = productsData.map((item) => Product.fromJson(item)).toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -71,9 +63,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     return total < 0 ? 0.0 : total;
   }
 
-  double get _remainingAmount {
-    return _grandTotal - _paidAmount;
-  }
+  double get _remainingAmount => _grandTotal - _paidAmount;
 
   void _addProductToInvoice(Product product) {
     setState(() {
@@ -115,7 +105,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
       final invoiceId = await db.insert('sales_invoices', invoiceData);
 
-      // حفظ عناصر الفاتورة
       for (var item in _invoiceItems) {
         await db.insert('invoice_items', {
           'invoice_id': invoiceId,
@@ -126,7 +115,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           'total': (item['price'] as double) * (item['quantity'] as double),
         });
 
-        // تحديث الكمية والمخزون
         if (_invoiceType == 'مبيعات') {
           await db.rawUpdate(
             'UPDATE products SET stock_quantity = stock_quantity - ?, quantity = quantity - ? WHERE id = ?',
@@ -169,7 +157,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // نوع الفاتورة والعميل
                           Row(
                             children: [
                               Expanded(
@@ -208,8 +195,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                             ],
                           ),
                           const SizedBox(height: 16),
-
-                          // اختيار المنتجات
                           const Text('إضافة منتجات:', style: TextStyle(fontWeight: FontWeight.bold)),
                           const SizedBox(height: 8),
                           SizedBox(
@@ -230,8 +215,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                             ),
                           ),
                           const Divider(height: 32),
-
-                          // قائمة عناصر الفاتورة المختارة
                           const Text('عناصر الفاتورة:', style: TextStyle(fontWeight: FontWeight.bold)),
                           const SizedBox(height: 8),
                           ListView.builder(
@@ -275,8 +258,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                             },
                           ),
                           const Divider(height: 32),
-
-                          // ملخص المبالغ والخصم
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -342,14 +323,13 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     ),
                   ),
 
-                  // زر الحفظ
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0284C7),
-                        padding: const EdgeInsets.vertical: 14,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onPressed: _saveInvoice,
                       child: const Text('حفظ الفاتورة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),

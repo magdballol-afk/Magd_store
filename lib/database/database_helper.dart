@@ -43,7 +43,6 @@ class DatabaseHelper {
       )
     ''');
 
-    
     // 2. جدول العملاء/الأطراف (يدعم الرصيد بالليرة والدولار)
     await db.execute('''
       CREATE TABLE contacts (
@@ -83,6 +82,17 @@ class DatabaseHelper {
         FOREIGN KEY (invoice_id) REFERENCES invoices (id) ON DELETE CASCADE
       )
     ''');
+
+    // 5. جدول دفتر الصندوق (journal_entries)
+    await db.execute('''
+      CREATE TABLE journal_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        description TEXT,
+        amount REAL NOT NULL,
+        type TEXT NOT NULL,
+        date TEXT NOT NULL
+      )
+    ''');
   }
 
   // --- عمليات الأطراف / العملاء ---
@@ -108,6 +118,25 @@ class DatabaseHelper {
     return await db.insert('contacts', contact.toJson());
   }
 
+  Future<int> updateContact(ContactModel contact) async {
+    final db = await database;
+    return await db.update(
+      'contacts',
+      contact.toJson(),
+      where: 'id = ?',
+      whereArgs: [contact.id],
+    );
+  }
+
+  Future<int> deleteContact(int id) async {
+    final db = await database;
+    return await db.delete(
+      'contacts',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   // --- عمليات المنتجات ---
 
   Future<List<Product>> getProducts() async {
@@ -129,6 +158,25 @@ class DatabaseHelper {
   Future<int> insertProduct(Product product) async {
     final db = await database;
     return await db.insert('products', product.toJson());
+  }
+
+  Future<int> updateProduct(Product product) async {
+    final db = await database;
+    return await db.update(
+      'products',
+      product.toJson(),
+      where: 'id = ?',
+      whereArgs: [product.id],
+    );
+  }
+
+  Future<int> deleteProduct(int id) async {
+    final db = await database;
+    return await db.delete(
+      'products',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   // --- عمليات الفواتير والحفظ التفصيلي ---
@@ -182,48 +230,8 @@ class DatabaseHelper {
     });
   }
 
-  // أضف هذه الدوال في DatabaseHelper لإدارة المنتجات بالكامل
-Future<int> updateProduct(Product product) async {
-  final db = await database;
-  return await db.update(
-    'products',
-    product.toJson(),
-    where: 'id = ?',
-    whereArgs: [product.id],
-  );
-}
-
-Future<int> deleteProduct(int id) async {
-  final db = await database;
-  return await db.delete(
-    'products',
-    where: 'id = ?',
-    whereArgs: [id],
-  );
-}
-
   // دالة توافق سابقة
   Future<void> insertInvoice(Map<String, dynamic> invoiceData, List items) async {
     await saveInvoiceWithDetails(invoiceData, items);
   }
 }
-// أضف هذه الدوال في DatabaseHelper لدعم ContactModel
-Future<int> updateContact(ContactModel contact) async {
-  final db = await database;
-  return await db.update(
-    'contacts',
-    contact.toJson(),
-    where: 'id = ?',
-    whereArgs: [contact.id],
-  );
-}
-
-Future<int> deleteContact(int id) async {
-  final db = await database;
-  return await db.delete(
-    'contacts',
-    where: 'id = ?',
-    whereArgs: [id],
-  );
-}
-

@@ -6,7 +6,7 @@ class Product {
   final double wholesalePrice; // سعر الجملة
   final double costPrice;      // سعر التكلفة
   final double price;          // السعر المعتمد الافتراضي
-  final double quantity;
+  final double quantity;       // الكمية بالمخزن
 
   Product({
     this.id,
@@ -19,12 +19,22 @@ class Product {
     required this.quantity,
   }) : price = price ?? retailPrice;
 
+  // 1. ميزة للتوافق مع الشاشات التي تستخدم buyPrice (تعيد سعر التكلفة)
+  double get buyPrice => costPrice;
+
+  // 2. ميزة للتوافق مع الشاشات التي تستخدم stockQuantity (تعيد الكمية)
+  double get stockQuantity => quantity;
+
   // تحويل البيانات القادمة من قاعدة البيانات إلى Object
   factory Product.fromJson(Map<String, dynamic> json) {
     final double retail = (json['retail_price'] as num?)?.toDouble() ?? 
-                         (json['price'] as num?)?.toDouble() ?? 0.0;
+                         (json['price'] as num?)?.toDouble() ?? 
+                         (json['sell_price'] as num?)?.toDouble() ?? 0.0;
     final double wholesale = (json['wholesale_price'] as num?)?.toDouble() ?? retail;
-    final double cost = (json['cost_price'] as num?)?.toDouble() ?? 0.0;
+    final double cost = (json['cost_price'] as num?)?.toDouble() ?? 
+                       (json['buy_price'] as num?)?.toDouble() ?? 0.0;
+    final double qty = (json['quantity'] as num?)?.toDouble() ?? 
+                       (json['stock_quantity'] as num?)?.toDouble() ?? 0.0;
 
     return Product(
       id: json['id'] as int?,
@@ -34,9 +44,12 @@ class Product {
       wholesalePrice: wholesale,
       costPrice: cost,
       price: retail,
-      quantity: (json['quantity'] as num?)?.toDouble() ?? 0.0,
+      quantity: qty,
     );
   }
+
+  // دعم التسمية الشهيرة مع sqflite
+  factory Product.fromMap(Map<String, dynamic> map) => Product.fromJson(map);
 
   // تحويل البيانات إلى Map للحفظ والتعديل في DB
   Map<String, dynamic> toJson() {
@@ -47,10 +60,14 @@ class Product {
       'retail_price': retailPrice,
       'wholesale_price': wholesalePrice,
       'cost_price': costPrice,
+      'buy_price': costPrice,         // حفظ التكلفة مع الاسمين لضمان عدم حدوث خطأ استعلام
       'price': price,
       'quantity': quantity,
+      'stock_quantity': quantity,     // حفظ الكمية مع الاسمين
     };
   }
+
+  Map<String, dynamic> toMap() => toJson();
 
   // إنشاء نسخة جديدة مع إمكانية تعديل حقول محددة
   Product copyWith({

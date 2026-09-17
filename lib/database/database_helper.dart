@@ -7,7 +7,6 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
 
-  // منشئ افتراضي لضمان التوافق مع DatabaseHelper()
   DatabaseHelper();
 
   DatabaseHelper._init();
@@ -23,14 +22,14 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 2, // تم رفع الإصدار لتفعيل التحديث الآلي (onUpgrade)
+      version: 2,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future _createDB(Database db, int version) async {
-    // 1. جدول المنتجات (يدعم أسعار المفرق، الجملة، الشراء والتكلفة)
+    // 1. جدول المنتجات
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,12 +44,54 @@ class DatabaseHelper {
         stock_quantity REAL
       )
     ''');
+
+    // 2. جدول الحسابات / العملاء
+    await db.execute('''
+      CREATE TABLE contacts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT,
+        address TEXT,
+        balance REAL DEFAULT 0.0
+      )
+    ''');
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // إضافة العمود المفقود buy_price لقواعد البيانات الموجودة على الأجهزة سابقاً
       await db.execute('ALTER TABLE products ADD COLUMN buy_price REAL DEFAULT 0.0');
     }
+  }
+
+  // --- دوال الحسابات والعملاء (Contacts) ---
+
+  Future<int> insertContact(Contact contact) async {
+    final db = await instance.database;
+    return await db.insert('contacts', contact.toMap());
+  }
+
+  Future<List<Contact>> getContacts() async {
+    final db = await instance.database;
+    final result = await db.query('contacts');
+    return result.map((json) => Contact.fromMap(json)).toList();
+  }
+
+  Future<int> updateContact(Contact contact) async {
+    final db = await instance.database;
+    return await db.update(
+      'contacts',
+      contact.toMap(),
+      where: 'id = ?',
+      whereArgs: [contact.id],
+    );
+  }
+
+  Future<int> deleteContact(int id) async {
+    final db = await instance.database;
+    return await db.delete(
+      'contacts',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 }

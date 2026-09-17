@@ -22,7 +22,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 3, // تم رفع الإصدار إلى 3 لاستيعاب التعديلات الجديدة
+      version: 4, // تم التحديث إلى الإصدار 4
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -57,6 +57,34 @@ class DatabaseHelper {
         balance_usd REAL DEFAULT 0.0
       )
     ''');
+
+    // 3. جدول الفواتير
+    await db.execute('''
+      CREATE TABLE sales_invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contact_name TEXT,
+        type TEXT,
+        date TEXT,
+        subtotal REAL,
+        discount REAL,
+        total_amount REAL,
+        paid_amount REAL,
+        remaining_amount REAL
+      )
+    ''');
+
+    // 4. جدول عناصر الفاتورة
+    await db.execute('''
+      CREATE TABLE invoice_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_id INTEGER,
+        product_name TEXT,
+        quantity REAL,
+        price REAL,
+        total REAL,
+        FOREIGN KEY (invoice_id) REFERENCES sales_invoices (id) ON DELETE CASCADE
+      )
+    ''');
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -67,6 +95,34 @@ class DatabaseHelper {
     if (oldVersion < 3) {
       await db.execute('ALTER TABLE contacts ADD COLUMN balance_syr REAL DEFAULT 0.0');
       await db.execute('ALTER TABLE contacts ADD COLUMN balance_usd REAL DEFAULT 0.0');
+    }
+
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE sales_invoices (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          contact_name TEXT,
+          type TEXT,
+          date TEXT,
+          subtotal REAL,
+          discount REAL,
+          total_amount REAL,
+          paid_amount REAL,
+          remaining_amount REAL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE invoice_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          invoice_id INTEGER,
+          product_name TEXT,
+          quantity REAL,
+          price REAL,
+          total REAL,
+          FOREIGN KEY (invoice_id) REFERENCES sales_invoices (id) ON DELETE CASCADE
+        )
+      ''');
     }
   }
 

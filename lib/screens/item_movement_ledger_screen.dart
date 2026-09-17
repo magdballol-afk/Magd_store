@@ -46,11 +46,11 @@ class _ItemMovementLedgerScreenState extends State<ItemMovementLedgerScreen> {
       String query = '''
         SELECT 
           ii.quantity, ii.price,
-          i.type as invoice_type, i.date as invoice_date, i.id as invoice_id,
-          p.name as party_name
+          i.type as invoice_type, i.created_at as invoice_date, i.id as invoice_id,
+          c.name as party_name
         FROM invoice_items ii
         INNER JOIN invoices i ON ii.invoice_id = i.id
-        LEFT JOIN parties p ON i.party_id = p.id
+        LEFT JOIN contacts c ON i.party_id = c.id
         WHERE ii.product_id = ?
       ''';
 
@@ -61,7 +61,12 @@ class _ItemMovementLedgerScreenState extends State<ItemMovementLedgerScreen> {
         args.add(widget.partyId);
       }
 
-      query += ' ORDER BY i.date DESC';
+      // إضافة فلترة الفترة الزمنية
+      query += ' AND i.created_at >= ? AND i.created_at <= ?';
+      args.add(widget.startDate.toIso8601String().split('T').first);
+      args.add('${widget.endDate.toIso8601String().split('T').first} 23:59:59');
+
+      query += ' ORDER BY i.id DESC';
 
       final results = await db.rawQuery(query, args);
 
@@ -71,9 +76,9 @@ class _ItemMovementLedgerScreenState extends State<ItemMovementLedgerScreen> {
       double outVal = 0.0;
 
       for (var item in results) {
-        double qty = (item['quantity'] ?? 0.0).toDouble();
-        double price = (item['price'] ?? 0.0).toDouble();
-        String type = (item['invoice_type'] ?? '').toString();
+        double qty = (item['quantity'] as num?)?.toDouble() ?? 0.0;
+        double price = (item['price'] as num?)?.toDouble() ?? 0.0;
+        String type = (item['invoice_type'] ?? 'مبيعات').toString();
 
         bool isSale = type == 'sale' || type == 'مبيعات';
 
@@ -186,11 +191,12 @@ class _ItemMovementLedgerScreenState extends State<ItemMovementLedgerScreen> {
                           itemCount: _movements.length,
                           itemBuilder: (context, index) {
                             final item = _movements[index];
-                            final String type = (item['invoice_type'] ?? '').toString();
+                            final String type = (item['invoice_type'] ?? 'مبيعات').toString();
                             final bool isSale = type == 'sale' || type == 'مبيعات';
-                            final double qty = (item['quantity'] ?? 0.0).toDouble();
-                            final double price = (item['price'] ?? 0.0).toDouble();
+                            final double qty = (item['quantity'] as num?)?.toDouble() ?? 0.0;
+                            final double price = (item['price'] as num?)?.toDouble() ?? 0.0;
                             final double total = qty * price;
+                            final String formattedDate = (item['invoice_date'] ?? '').toString().split('T').first;
 
                             return Card(
                               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -206,7 +212,7 @@ class _ItemMovementLedgerScreenState extends State<ItemMovementLedgerScreen> {
                                   '${isSale ? "مبيعات" : "مشتريات"} - فاتورة #${item['invoice_id']}',
                                   style: const TextStyle(fontWeight: FontWeight.bold),
                                 ),
-                                subtitle: Text('الجهة: ${item['party_name'] ?? "عام"} | التاريخ: ${item['invoice_date'] ?? ""}'),
+                                subtitle: Text('الجهة: ${item['party_name'] ?? "عام"} | التاريخ: $formattedDate'),
                                 trailing: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   crossAxisAlignment: CrossAxisAlignment.end,

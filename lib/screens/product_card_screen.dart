@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../database/database_helper.dart';
+import '../models/product.dart';
 
 class ProductCardScreen extends StatefulWidget {
-  final Map<String, dynamic> product;
+  final Product product;
 
   const ProductCardScreen({super.key, required this.product});
 
@@ -13,49 +15,49 @@ class _ProductCardScreenState extends State<ProductCardScreen> {
   bool _isEditing = false;
 
   late TextEditingController _nameController;
-  late TextEditingController _categoryController;
-  late TextEditingController _priceController;
+  late TextEditingController _buyPriceController;
+  late TextEditingController _wholesalePriceController;
+  late TextEditingController _retailPriceController;
   late TextEditingController _stockController;
-  late TextEditingController _barcodeController;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.product['name']);
-    _categoryController = TextEditingController(text: widget.product['category']);
-    _priceController = TextEditingController(text: widget.product['price'].toString());
-    _stockController = TextEditingController(text: widget.product['stock'].toString());
-    _barcodeController = TextEditingController(text: widget.product['barcode'] ?? '');
+    _nameController = TextEditingController(text: widget.product.name);
+    _buyPriceController = TextEditingController(text: widget.product.buyPrice.toString());
+    _wholesalePriceController = TextEditingController(text: widget.product.wholesalePrice.toString());
+    _retailPriceController = TextEditingController(text: widget.product.retailPrice.toString());
+    _stockController = TextEditingController(text: widget.product.stockQuantity.toString());
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _categoryController.dispose();
-    _priceController.dispose();
+    _buyPriceController.dispose();
+    _wholesalePriceController.dispose();
+    _retailPriceController.dispose();
     _stockController.dispose();
-    _barcodeController.dispose();
     super.dispose();
   }
 
-  void _saveChanges() {
-    final updatedData = {
-      'id': widget.product['id'],
-      'name': _nameController.text,
-      'category': _categoryController.text,
-      'price': double.tryParse(_priceController.text) ?? widget.product['price'],
-      'stock': int.tryParse(_stockController.text) ?? widget.product['stock'],
-      'status': (int.tryParse(_stockController.text) ?? 0) > 10
-          ? 'متوفر'
-          : ((int.tryParse(_stockController.text) ?? 0) > 0 ? 'قارب على الانتهاء' : 'نفذت الكمية'),
-      'barcode': _barcodeController.text,
-    };
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم حفظ التعديلات بنجاح')),
+  Future<void> _saveChanges() async {
+    final updatedProduct = Product(
+      id: widget.product.id,
+      name: _nameController.text.trim(),
+      buyPrice: double.tryParse(_buyPriceController.text) ?? widget.product.buyPrice,
+      wholesalePrice: double.tryParse(_wholesalePriceController.text) ?? widget.product.wholesalePrice,
+      retailPrice: double.tryParse(_retailPriceController.text) ?? widget.product.retailPrice,
+      stockQuantity: double.tryParse(_stockController.text) ?? widget.product.stockQuantity,
     );
 
-    Navigator.pop(context, updatedData);
+    await DatabaseHelper.instance.updateProduct(updatedProduct);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حفظ التعديلات بنجاح')),
+      );
+      Navigator.pop(context, true);
+    }
   }
 
   Widget _buildField({
@@ -129,7 +131,6 @@ class _ProductCardScreenState extends State<ProductCardScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // بطاقة رأسية توضح رمز المادة وحالتها
             Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: Padding(
@@ -152,7 +153,7 @@ class _ProductCardScreenState extends State<ProductCardScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'معرف المادة: ${widget.product['id']}',
+                            'معرف المادة: ${widget.product.id ?? "جديد"}',
                             style: const TextStyle(color: Colors.grey, fontSize: 13),
                           ),
                         ],
@@ -164,21 +165,27 @@ class _ProductCardScreenState extends State<ProductCardScreen> {
             ),
             const SizedBox(height: 20),
 
-            // حقول بيانات المادة
             _buildField(
               label: 'اسم المادة:',
               controller: _nameController,
               icon: Icons.label_outline,
             ),
             _buildField(
-              label: 'الصنف / التصنيف:',
-              controller: _categoryController,
-              icon: Icons.category_outlined,
+              label: 'سعر الشراء:',
+              controller: _buyPriceController,
+              icon: Icons.shopping_bag_outlined,
+              keyboardType: TextInputType.number,
             ),
             _buildField(
-              label: 'السعر (ل.س):',
-              controller: _priceController,
-              icon: Icons.monetization_on_outlined,
+              label: 'سعر الجملة:',
+              controller: _wholesalePriceController,
+              icon: Icons.storefront_outlined,
+              keyboardType: TextInputType.number,
+            ),
+            _buildField(
+              label: 'سعر المفرق:',
+              controller: _retailPriceController,
+              icon: Icons.sell_outlined,
               keyboardType: TextInputType.number,
             ),
             _buildField(
@@ -187,15 +194,9 @@ class _ProductCardScreenState extends State<ProductCardScreen> {
               icon: Icons.storage_outlined,
               keyboardType: TextInputType.number,
             ),
-            _buildField(
-              label: 'الباركود:',
-              controller: _barcodeController,
-              icon: Icons.qr_code,
-            ),
 
             const SizedBox(height: 20),
 
-            // زر الحفظ أو التعديل
             SizedBox(
               width: double.infinity,
               height: 48,

@@ -36,50 +36,83 @@ class _ContactsScreenState extends State<ContactsScreen> {
   void _showAddContactDialog() {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
 
     showDialog(
       context: context,
-      builder: (context) {
+      barrierDismissible: false,
+      builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('إضافة جهة جديدة'),
+          title: const Text('إضافة جهة جديدة', textAlign: TextAlign.right),
           content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'اسم الجهة / الشخص'),
-                ),
-                TextField(
-                  controller: phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'رقم الهاتف'),
-                ),
-              ],
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: 'اسم الجهة / الشخص *'),
+                    validator: (val) {
+                      if (val == null || val.trim().isEmpty) {
+                        return 'يرجى إدخال الاسم';
+                      }
+                      return null;
+                    },
+                  ),
+                  TextFormField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(labelText: 'رقم الهاتف'),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('إلغاء'),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0284C7),
+              ),
               onPressed: () async {
-                if (nameController.text.trim().isEmpty) return;
-                
-                final newContact = ContactModel(
-                  name: nameController.text.trim(),
-                  phone: phoneController.text.trim(),
-                  balanceSyr: 0.0,
-                  balanceUsd: 0.0,
-                );
+                if (formKey.currentState!.validate()) {
+                  try {
+                    final newContact = ContactModel(
+                      name: nameController.text.trim(),
+                      phone: phoneController.text.trim(),
+                      balanceSyr: 0.0,
+                      balanceUsd: 0.0,
+                    );
 
-                await DatabaseHelper.instance.insertContact(newContact);
-                
-                if (mounted) Navigator.pop(context);
-                _loadContacts();
+                    await DatabaseHelper.instance.insertContact(newContact);
+
+                    if (dialogContext.mounted) {
+                      Navigator.pop(dialogContext);
+                    }
+                    _loadContacts();
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تمت إضافة الجهة بنجاح')),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('خطأ أثناء الحفظ: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                }
               },
-              child: const Text('حفظ'),
+              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -92,10 +125,12 @@ class _ContactsScreenState extends State<ContactsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('دليل العملاء والموردين'),
+        backgroundColor: const Color(0xFF0284C7),
       ),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: const Color(0xFF0284C7),
         onPressed: _showAddContactDialog,
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add, color: Colors.white),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -118,13 +153,17 @@ class _ContactsScreenState extends State<ContactsScreen> {
                           _loadContacts();
                         },
                         leading: CircleAvatar(
-                          child: Text(item.name.isNotEmpty ? item.name[0] : 'C'),
+                          backgroundColor: const Color(0xFF0284C7),
+                          child: Text(
+                            item.name.isNotEmpty ? item.name[0] : 'C',
+                            style: const TextStyle(color: Colors.white),
+                          ),
                         ),
-                        title: Text(item.name),
+                        title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text('الهاتف: ${item.phone.isNotEmpty ? item.phone : "غير محدد"}'),
                         trailing: Text(
                           '${item.balanceSyr} ل.س',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
                         ),
                       ),
                     );

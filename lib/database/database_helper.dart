@@ -43,6 +43,7 @@ class DatabaseHelper {
       )
     ''');
 
+    
     // 2. جدول العملاء/الأطراف (يدعم الرصيد بالليرة والدولار)
     await db.execute('''
       CREATE TABLE contacts (
@@ -180,6 +181,26 @@ class DatabaseHelper {
       }
     });
   }
+
+  // أضف هذه الدوال في DatabaseHelper لإدارة المنتجات بالكامل
+Future<int> updateProduct(Product product) async {
+  final db = await database;
+  return await db.update(
+    'products',
+    product.toJson(),
+    where: 'id = ?',
+    whereArgs: [product.id],
+  );
+}
+
+Future<int> deleteProduct(int id) async {
+  final db = await database;
+  return await db.delete(
+    'products',
+    where: 'id = ?',
+    whereArgs: [id],
+  );
+}
 
   // دالة توافق سابقة
   Future<void> insertInvoice(Map<String, dynamic> invoiceData, List items) async {

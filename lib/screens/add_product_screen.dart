@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
+import '../models/product.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({Key? key}) : super(key: key);
@@ -39,19 +40,24 @@ class _AddProductScreenState extends State<AddProductScreen> {
     setState(() => _isSaving = true);
 
     try {
-      final productData = {
-        'name': _nameController.text.trim(),
-        'barcode': _barcodeController.text.trim().isEmpty ? null : _barcodeController.text.trim(),
-        'category': _selectedCategory ?? 'عام',
-        'quantity': double.tryParse(_quantityController.text) ?? 0.0,
-        'price_cost': double.tryParse(_costPriceController.text) ?? 0.0,
-        'price_retail': double.tryParse(_retailPriceController.text) ?? 0.0,
-        'price_half_wholesale': double.tryParse(_halfWholesalePriceController.text) ?? 0.0,
-        'price_wholesale': double.tryParse(_wholesalePriceController.text) ?? 0.0,
-      };
+      final double retailPrice = double.tryParse(_retailPriceController.text) ?? 0.0;
+      final double wholesalePrice = double.tryParse(_wholesalePriceController.text) ?? 0.0;
+      final double costPrice = double.tryParse(_costPriceController.text) ?? 0.0;
+      final double quantity = double.tryParse(_quantityController.text) ?? 0.0;
 
-      // إدراج البيانات في قاعدة البيانات SQLite عبر الهيلبر
-      await DatabaseHelper.instance.insertProduct(productData);
+      // إنشاء كائن Product متوافق مع نموذج البيانات وقاعدة البيانات
+      final newProduct = Product(
+        name: _nameController.text.trim(),
+        barcode: _barcodeController.text.trim().isEmpty ? null : _barcodeController.text.trim(),
+        costPrice: costPrice,
+        retailPrice: retailPrice,
+        wholesalePrice: wholesalePrice,
+        price: retailPrice, // السعر المعتمد الافتراضي
+        quantity: quantity,
+      );
+
+      // إدراج الكائن في قاعدة البيانات SQLite عبر الهيلبر
+      await DatabaseHelper.instance.insertProduct(newProduct);
 
       if (!mounted) return;
 
@@ -62,7 +68,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         ),
       );
 
-      // العودة للشاشة السابقة بعد الحفظ
+      // العودة للشاشة السابقة بعد الحفظ وإرجاع true لتحديث الشاشة السابقة
       Navigator.pop(context, true);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

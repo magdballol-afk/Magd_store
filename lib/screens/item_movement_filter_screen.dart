@@ -32,7 +32,9 @@ class _ItemMovementFilterScreenState extends State<ItemMovementFilterScreen> {
     try {
       final db = await DatabaseHelper.instance.database;
       final prods = await db.query('products', orderBy: 'name ASC');
-      final parts = await db.query('parties', orderBy: 'name ASC');
+      
+      // التعديل هنا: جلب البيانات من جدول contacts المعتمد في DatabaseHelper
+      final parts = await db.query('contacts', orderBy: 'name ASC');
 
       setState(() {
         _products = prods;
@@ -125,10 +127,9 @@ class _ItemMovementFilterScreenState extends State<ItemMovementFilterScreen> {
                         child: Text('جميع الحسابات (كافة العملاء والموردين)'),
                       ),
                       ..._parties.map((p) {
-                        final String type = p['type']?.toString() ?? '';
                         return DropdownMenuItem(
                           value: p,
-                          child: Text('${p['name']} ${type.isNotEmpty ? "($type)" : ""}'),
+                          child: Text(p['name']?.toString() ?? ''),
                         );
                       }),
                     ],

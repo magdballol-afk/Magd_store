@@ -10,7 +10,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('app_database.db');
+    _database = await _initDB('app_database_v3.db');
     return _database!;
   }
 
@@ -18,17 +18,15 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    // رفع رقم الإصدار إلى 2 لإجبار التحديث وإنشاء الجداول الجديد
     return await openDatabase(
       path,
-      version: 2,
+      version: 1,
       onCreate: _createDB,
-      onUpgrade: _onUpgrade,
     );
   }
 
   Future _createDB(Database db, int version) async {
-    // 1. جدول جهات الاتصال
+    // 1. جدول العملاء والموردين
     await db.execute('''
       CREATE TABLE contacts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,7 +38,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // 2. جدول المنتجات
+    // 2. جدول المنتجات والمواد
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,13 +47,14 @@ class DatabaseHelper {
         retail_price REAL DEFAULT 0.0,
         wholesale_price REAL DEFAULT 0.0,
         cost_price REAL DEFAULT 0.0,
+        buy_price REAL DEFAULT 0.0,
         price REAL DEFAULT 0.0,
         quantity REAL DEFAULT 0.0,
         stock_quantity REAL DEFAULT 0.0
       )
     ''');
 
-    // 3. جدول فواتير المبيعات/المشتريات
+    // 3. جدول الفواتير
     await db.execute('''
       CREATE TABLE sales_invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,36 +81,6 @@ class DatabaseHelper {
         total REAL
       )
     ''');
-  }
-
-  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS sales_invoices (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          contact_name TEXT,
-          type TEXT,
-          date TEXT,
-          subtotal REAL,
-          discount REAL,
-          total_amount REAL,
-          paid_amount REAL,
-          remaining_amount REAL
-        )
-      ''');
-
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS invoice_items (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          invoice_id INTEGER,
-          product_id INTEGER,
-          product_name TEXT,
-          quantity REAL,
-          unit_price REAL,
-          total REAL
-        )
-      ''');
-    }
   }
 
   Future<List<ContactModel>> getContacts() async {

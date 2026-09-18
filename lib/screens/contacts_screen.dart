@@ -29,6 +29,59 @@ class _ContactsScreenState extends State<ContactsScreen> {
     });
   }
 
+  // نافذة إضافة عميل جديد من زر +
+  void _showAddContactDialog() {
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController();
+    final balanceController = TextEditingController(text: '0');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('إضافة حساب جديد'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'الاسم الكامل', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'رقم الهاتف', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: balanceController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'الرصيد الأولي (ل.س)', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameController.text.trim().isNotEmpty) {
+                final db = await DatabaseHelper.instance.database;
+                await db.insert('contacts', {
+                  'name': nameController.text.trim(),
+                  'phone': phoneController.text.trim(),
+                  'balance_syr': double.tryParse(balanceController.text) ?? 0.0,
+                });
+                if (mounted) Navigator.pop(context);
+                _loadContacts();
+              }
+            },
+            child: const Text('حفظ الحساب'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -79,6 +132,11 @@ class _ContactsScreenState extends State<ContactsScreen> {
                     );
                   },
                 ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: const Color(0xFF0284C7),
+        onPressed: _showAddContactDialog, // ربط زر + بفتح نافذة الإضافة
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
     );
   }
 }

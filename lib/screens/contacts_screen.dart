@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
-import 'contact_detail_screen.dart'; // استيراد الملف بالشكل الصحيح
+import 'contact_details_screen.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -67,14 +67,13 @@ class _ContactsScreenState extends State<ContactsScreen> {
                           ),
                         ),
                         onTap: () async {
-                          // التوجيه الصحيح إلى ContactDetailScreen بدون S الزائدة
                           await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => ContactDetailScreen(contact: item),
                             ),
                           );
-                          _loadContacts(); // إعادة التحميل عند العودة لتحديث الرصيد
+                          _loadContacts();
                         },
                       ),
                     );
@@ -83,4 +82,3 @@ class _ContactsScreenState extends State<ContactsScreen> {
     );
   }
 }
-. 

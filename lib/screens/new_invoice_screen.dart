@@ -10,14 +10,13 @@ class NewInvoiceScreen extends StatefulWidget {
 
 class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   String _invoiceType = 'مبيعات';
-  
+
   List<Map<String, dynamic>> _contacts = [];
   List<Map<String, dynamic>> _products = [];
-  
+
   Map<String, dynamic>? _selectedContact;
   Map<String, dynamic>? _selectedProduct;
 
-  // عناصر الفاتورة مع متحكم بالسعر لكل مادة لتعديله بسهولة
   final List<Map<String, dynamic>> _cartItems = [];
 
   final TextEditingController _discountController = TextEditingController(text: '0');
@@ -47,18 +46,16 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
   void _addProductToCart(Map<String, dynamic> product) {
     final existingIndex = _cartItems.indexWhere((item) => item['id'] == product['id']);
-    
+
     setState(() {
       if (existingIndex >= 0) {
-        // إذا كانت المادة موجودة سابقاً نكتفي بزيادة الكمية
-        _cartItems[existingIndex]['quantity'] += 1.0;
+        _cartItems[existingIndex]['quantity'] = ((_cartItems[existingIndex]['quantity'] as num) + 1.0).toDouble();
       } else {
-        // تحديد السعر الافتراضي بحسب نوع الفاتورة
         double price = 0.0;
         if (_invoiceType == 'مبيعات') {
-          price = (product['retail_price'] ?? product['price'] ?? 0.0).toDouble();
+          price = ((product['retail_price'] ?? product['price'] ?? 0.0) as num).toDouble();
         } else {
-          price = (product['buy_price'] ?? product['cost_price'] ?? 0.0).toDouble();
+          price = ((product['buy_price'] ?? product['cost_price'] ?? 0.0) as num).toDouble();
         }
 
         _cartItems.add({
@@ -76,7 +73,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   double _calculateSubtotal() {
     double sum = 0.0;
     for (var item in _cartItems) {
-      sum += (item['price'] * item['quantity']);
+      final price = (item['price'] as num).toDouble();
+      final qty = (item['quantity'] as num).toDouble();
+      sum += (price * qty);
     }
     return sum;
   }
@@ -98,14 +97,12 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
     final db = await DatabaseHelper.instance.database;
 
-    // 1. حساب القيم المالية
     final subtotal = _calculateSubtotal();
     final discount = double.tryParse(_discountController.text) ?? 0.0;
     final totalAmount = subtotal - discount;
     final paidAmount = double.tryParse(_paidController.text) ?? 0.0;
-    final remainingAmount = totalAmount - paidAmount; // المبلغ المتبقي (الذمة)
+    final remainingAmount = totalAmount - paidAmount;
 
-    // 2. إدخال الفاتورة في جدول sales_invoices
     final invoiceId = await db.insert('sales_invoices', {
       'contact_name': _selectedContact!['name'],
       'type': _invoiceType,
@@ -117,25 +114,26 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       'remaining_amount': remainingAmount,
     });
 
-    // 3. إدخال عناصر الفاتورة وتحديث كمية المخزون لكل مادة
     for (var item in _cartItems) {
+      final double price = (item['price'] as num).toDouble();
+      final double qty = (item['quantity'] as num).toDouble();
+
       await db.insert('invoice_items', {
         'invoice_id': invoiceId,
         'product_id': item['id'],
         'product_name': item['name'],
-        'quantity': item['quantity'],
-        'unit_price': item['price'],
-        'total': item['price'] * item['quantity'],
+        'quantity': qty,
+        'unit_price': price,
+        'total': price * qty,
       });
 
-      // تحديث كمية المادة في المخزن
       final prodResult = await db.query('products', where: 'id = ?', whereArgs: [item['id']]);
       if (prodResult.isNotEmpty) {
-        double currentStock = (prodResult.first['stock_quantity'] ?? prodResult.first['quantity'] ?? 0.0).toDouble();
+        double currentStock = ((prodResult.first['stock_quantity'] ?? prodResult.first['quantity'] ?? 0.0) as num).toDouble();
         if (_invoiceType == 'مبيعات') {
-          currentStock -= (item['quantity'] as double);
+          currentStock -= qty;
         } else {
-          currentStock += (item['quantity'] as double);
+          currentStock += qty;
         }
 
         await db.update(
@@ -150,14 +148,11 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       }
     }
 
-    // 4. تحديث رصيد العميل / المورد في جدول contacts
     if (remainingAmount != 0) {
       final contactResult = await db.query('contacts', where: 'id = ?', whereArgs: [_selectedContact!['id']]);
       if (contactResult.isNotEmpty) {
-        double currentBalance = (contactResult.first['balance_syr'] ?? contactResult.first['balance'] ?? 0.0).toDouble();
+        double currentBalance = ((contactResult.first['balance_syr'] ?? contactResult.first['balance'] ?? 0.0) as num).toDouble();
 
-        // في المبيعات: المتبقي يزيد من ذمة العميل (مدين +)
-        // في المشتريات: المتبقي ينقص الذمة / ينزل لحساب المورد (دائن -)
         if (_invoiceType == 'مبيعات') {
           currentBalance += remainingAmount;
         } else {
@@ -180,7 +175,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم حفظ الفاتورة وتحديث رصيد العميل بنجاح')),
       );
-      Navigator.pop(context, true); // إرجاع true لتحديث قائمة الفواتير
+      Navigator.pop(context, true);
     }
   }
 
@@ -214,7 +209,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // اختيار نوع الفاتورة والعميل/المورد
                   Row(
                     children: [
                       Expanded(
@@ -254,7 +248,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // البحث عن مادة وتحديدها
                   DropdownButtonFormField<Map<String, dynamic>>(
                     value: _selectedProduct,
                     hint: const Text('بحث عن مادة لإضافتها...'),
@@ -282,11 +275,12 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                   const SizedBox(height: 8),
 
-                  // قائمة العناصر القابلة لتعديل السعر والكمية والحذف
                   _cartItems.isEmpty
-                      ? const Center(
+                      ? const Padding(
                           padding: EdgeInsets.symmetric(vertical: 20),
-                          child: Text('لم يتم إضافة أي مادة بعد', style: TextStyle(color: Colors.grey)),
+                          child: Center(
+                            child: Text('لم يتم إضافة أي مادة بعد', style: TextStyle(color: Colors.grey)),
+                          ),
                         )
                       : ListView.builder(
                           shrinkWrap: true,
@@ -295,6 +289,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                           itemBuilder: (context, index) {
                             final item = _cartItems[index];
                             final priceController = item['priceController'] as TextEditingController;
+                            final double price = (item['price'] as num).toDouble();
+                            final double qty = (item['quantity'] as num).toDouble();
 
                             return Card(
                               margin: const EdgeInsets.symmetric(vertical: 6),
@@ -313,7 +309,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                           ),
                                         ),
-                                        // زر الحذف بجانب المادة
                                         IconButton(
                                           icon: const Icon(Icons.delete_outline, color: Colors.red),
                                           onPressed: () {
@@ -327,7 +322,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                     const SizedBox(height: 8),
                                     Row(
                                       children: [
-                                        // تعديل السعر المفرد
                                         Expanded(
                                           flex: 2,
                                           child: TextField(
@@ -346,7 +340,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                           ),
                                         ),
                                         const SizedBox(width: 10),
-                                        // أزرار التحكم بالكمية
                                         Expanded(
                                           flex: 3,
                                           child: Row(
@@ -356,8 +349,8 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                                 icon: const Icon(Icons.remove_circle_outline, color: Colors.orange),
                                                 onPressed: () {
                                                   setState(() {
-                                                    if (item['quantity'] > 1) {
-                                                      item['quantity'] -= 1.0;
+                                                    if (qty > 1) {
+                                                      item['quantity'] = qty - 1.0;
                                                     } else {
                                                       _cartItems.removeAt(index);
                                                     }
@@ -365,14 +358,14 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                                 },
                                               ),
                                               Text(
-                                                '${item['quantity']}',
+                                                '$qty',
                                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                               ),
                                               IconButton(
                                                 icon: const Icon(Icons.add_circle_outline, color: Colors.green),
                                                 onPressed: () {
                                                   setState(() {
-                                                    item['quantity'] += 1.0;
+                                                    item['quantity'] = qty + 1.0;
                                                   });
                                                 },
                                               ),
@@ -385,7 +378,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                     Align(
                                       alignment: Alignment.centerLeft,
                                       child: Text(
-                                        'الإجمالي: ${(item['price'] * item['quantity']).toStringAsFixed(2)} ل.س',
+                                        'الإجمالي: ${(price * qty).toStringAsFixed(2)} ل.س',
                                         style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0284C7)),
                                       ),
                                     ),
@@ -398,7 +391,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
                   const Divider(height: 30, thickness: 1.5),
 
-                  // الإجماليات والخصم والمدفوع
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [

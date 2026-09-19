@@ -42,7 +42,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     });
   }
 
-  // إضافة حركة جديدة
+  // إضافة حركة جديدة وتحديث رصيد العميل
   Future<void> _submitTransaction() async {
     final double? amount = double.tryParse(_amountController.text);
     if (amount == null || amount <= 0) {
@@ -54,14 +54,23 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
 
     final String formattedDate = _selectedDate.toString().split(' ')[0];
 
-    await DatabaseHelper.instance.addCashTransaction(
-      contactId: _selectedContactId,
-      contactName: _selectedContactName,
-      type: _transactionType,
-      amount: amount,
-      notes: _notesController.text,
-      date: formattedDate,
-    );
+    // إعداد الخريطة لضمان توافقها المباشر مع DatabaseHelper
+    final Map<String, dynamic> row = {
+      'contact_id': _selectedContactId,
+      'contact_name': _selectedContactName,
+      'type': _transactionType,
+      'amount': amount,
+      'notes': _notesController.text,
+      'date': formattedDate,
+    };
+
+    await DatabaseHelper.instance.addCashTransaction(row);
+
+    // تحديث رصيد العميل مباشرة
+    if (_selectedContactId != null) {
+      double adjustment = (_transactionType == 'income') ? -amount : amount;
+      await DatabaseHelper.instance.updateContactBalance(_selectedContactId, adjustment);
+    }
 
     _amountController.clear();
     _notesController.clear();
@@ -108,7 +117,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
 
       // 1. عكس التأثير المالي على رصيد العميل
       if (contactId != null) {
-        // إذا كان قبض (income) فإن الحذف يزيد الدين أو يقلل الدائن، والعكس صحيح
         double adjustment = (type == 'income') ? amount : -amount;
         await DatabaseHelper.instance.updateContactBalance(contactId, adjustment);
       }
@@ -230,15 +238,18 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                       await DatabaseHelper.instance.updateContactBalance(editContactId, applyNew);
                     }
 
-                    // 3. تحديث الحركة في قاعدة البيانات
-                    await DatabaseHelper.instance.updateCashTransaction(
-                      id: item['id'],
-                      contactId: editContactId,
-                      contactName: editContactName,
-                      type: editType,
-                      amount: newAmount,
-                      notes: editNotesController.text,
-                    );
+                    // 3. تحديث الحركة في قاعدة البيانات باختيار الخريطة
+                    final Map<String, dynamic> row = {
+                      'id': item['id'],
+                      'contact_id': editContactId,
+                      'contact_name': editContactName,
+                      'type': editType,
+                      'amount': newAmount,
+                      'notes': editNotesController.text,
+                      'date': item['date'] ?? _selectedDate.toString().split(' ')[0],
+                    };
+
+                    await DatabaseHelper.instance.updateCashTransaction(row);
 
                     if (mounted) {
                       Navigator.of(ctx).pop();

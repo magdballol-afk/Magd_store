@@ -28,7 +28,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     _loadData();
   }
 
-  // جلب البيانات وتحويل القوائم بأمان بدون استخدام toMap()
+  // جلب البيانات
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final contactsData = await DatabaseHelper.instance.getContacts();
@@ -42,6 +42,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     });
   }
 
+  // إضافة حركة جديدة
   Future<void> _submitTransaction() async {
     final double? amount = double.tryParse(_amountController.text);
     if (amount == null || amount <= 0) {
@@ -72,10 +73,189 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تسجيل الحركة وإضافة الرصيد بنجاح')),
+        const SnackBar(content: Text('تم تسجيل الحركة وتحديث رصيد العميل بنجاح')),
       );
       _loadData();
     }
+  }
+
+  // حذف حركة صندوق وتعديل رصيد العميل
+  Future<void> _deleteTransaction(Map<String, dynamic> item) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تأكيد الحذف'),
+        content: const Text('هل أنت أحدث برغبتك في حذف هذه الحركة؟ سيتم تعديل رصيد العميل تلقائياً.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('حذف', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final int transactionId = item['id'];
+      final int? contactId = item['contact_id'];
+      final double amount = ((item['amount'] ?? 0.0) as num).toDouble();
+      final String type = item['type'] ?? 'income';
+
+      // 1. عكس التأثير المالي على رصيد العميل
+      if (contactId != null) {
+        // إذا كان قبض (income) فإن الحذف يزيد الدين أو يقلل الدائن، والعكس صحيح
+        double adjustment = (type == 'income') ? amount : -amount;
+        await DatabaseHelper.instance.updateContactBalance(contactId, adjustment);
+      }
+
+      // 2. حذف الحركة من جدول الحركات
+      await DatabaseHelper.instance.deleteCashTransaction(transactionId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حذف الحركة وتحديث رصيد العميل')),
+        );
+        _loadData();
+      }
+    }
+  }
+
+  // تعديل حركة صندوق وتعديل رصيد العميل
+  Future<void> _editTransaction(Map<String, dynamic> item) async {
+    final TextEditingController editAmountController = TextEditingController(text: item['amount'].toString());
+    final TextEditingController editNotesController = TextEditingController(text: item['notes'] ?? '');
+    String editType = item['type'] ?? 'income';
+    int? editContactId = item['contact_id'];
+    String editContactName = item['contact_name'] ?? 'عام / غير محدد';
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('تعديل حركة الصندوق'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: RadioListTile<String>(
+                            title: const Text('قبض'),
+                            value: 'income',
+                            groupValue: editType,
+                            onChanged: (val) => setDialogState(() => editType = val!),
+                          ),
+                        ),
+                        Expanded(
+                          child: RadioListTile<String>(
+                            title: const Text('دفع'),
+                            value: 'expense',
+                            groupValue: editType,
+                            onChanged: (val) => setDialogState(() => editType = val!),
+                          ),
+                        ),
+                      ],
+                    ),
+                    DropdownButtonFormField<int?>(
+                      value: editContactId,
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text('عام / غير محدد'),
+                        ),
+                        ..._contacts.map((c) => DropdownMenuItem<int?>(
+                              value: c['id'],
+                              child: Text(c['name'] ?? ''),
+                            )),
+                      ],
+                      onChanged: (val) {
+                        setDialogState(() {
+                          editContactId = val;
+                          if (val == null) {
+                            editContactName = 'عام / غير محدد';
+                          } else {
+                            final c = _contacts.firstWhere((element) => element['id'] == val);
+                            editContactName = c['name'] ?? 'عام / غير محدد';
+                          }
+                        });
+                      },
+                      decoration: const InputDecoration(labelText: 'الجهة / اسم العميل'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: editAmountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'المبلغ'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: editNotesController,
+                      decoration: const InputDecoration(labelText: 'البيان / ملاحظات'),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('إلغاء'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5C6BC0)),
+                  onPressed: () async {
+                    final double? newAmount = double.tryParse(editAmountController.text);
+                    if (newAmount == null || newAmount <= 0) return;
+
+                    final double oldAmount = ((item['amount'] ?? 0.0) as num).toDouble();
+                    final String oldType = item['type'] ?? 'income';
+                    final int? oldContactId = item['contact_id'];
+
+                    // 1. إعادة تسوية رصيد العميل القديم
+                    if (oldContactId != null) {
+                      double reverseOld = (oldType == 'income') ? oldAmount : -oldAmount;
+                      await DatabaseHelper.instance.updateContactBalance(oldContactId, reverseOld);
+                    }
+
+                    // 2. تطبيق تأثير الحركة الجديدة على رصيد العميل الجديد
+                    if (editContactId != null) {
+                      double applyNew = (editType == 'income') ? -newAmount : newAmount;
+                      await DatabaseHelper.instance.updateContactBalance(editContactId, applyNew);
+                    }
+
+                    // 3. تحديث الحركة في قاعدة البيانات
+                    await DatabaseHelper.instance.updateCashTransaction(
+                      id: item['id'],
+                      contactId: editContactId,
+                      contactName: editContactName,
+                      type: editType,
+                      amount: newAmount,
+                      notes: editNotesController.text,
+                    );
+
+                    if (mounted) {
+                      Navigator.of(ctx).pop();
+                      _loadData();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم تعديل الحركة وتحديث الرصيد بنجاح')),
+                      );
+                    }
+                  },
+                  child: const Text('حفظ التعديلات', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   double get _totalIncome {
@@ -354,13 +534,26 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                                 subtitle: Text(item['notes'] != null && item['notes'].toString().isNotEmpty
                                     ? item['notes']
                                     : (isIncome ? 'دفعة مقبوضة' : 'دفعة مدفوعة')),
-                                trailing: Text(
-                                  amount.toStringAsFixed(2),
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: isIncome ? Colors.green : Colors.red,
-                                  ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      amount.toStringAsFixed(2),
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: isIncome ? Colors.green : Colors.red,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                                      onPressed: () => _editTransaction(item),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                      onPressed: () => _deleteTransaction(item),
+                                    ),
+                                  ],
                                 ),
                               ),
                             );

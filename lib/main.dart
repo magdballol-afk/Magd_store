@@ -120,7 +120,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               Expanded(
                 child: _buildStatCard(
                   title: 'إحصائيات المبيعات ال...',
-                  value: '33 ل.س',
+                  value: '33',
                   badgeText: 'مبيعات اليوم',
                   badgeColor: Colors.green.shade50,
                   badgeTextColor: Colors.green,
@@ -158,7 +158,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               Expanded(
                 child: _buildStatCard(
                   title: 'حسابات العملاء',
-                  value: '-21 ل.س',
+                  value: '-21',
                   badgeText: 'إجمالي الأرصدة',
                   badgeColor: Colors.purple.shade50,
                   badgeTextColor: Colors.purple,
@@ -192,7 +192,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                 title: '+ فاتورة جديدة',
                 color: const Color(0xFF00B0FF),
                 onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInvoiceScreen()));
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInvoiceScreen(type: 'sale')));
                 },
               ),
               // تفعيل زر حركة الصندوق المكتمل

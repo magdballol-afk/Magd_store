@@ -80,9 +80,14 @@ class DatabaseHelper {
     return await db.query('products');
   }
 
-  Future<int> insertProduct(Map<String, dynamic> product) async {
+  // دعم كائنات Product وقواميس Map بديناميكية تامة لمنع خطأ التجميع
+  Future<int> insertProduct(dynamic product) async {
     final db = await instance.database;
-    return await db.insert('products', product);
+    if (product is Map<String, dynamic>) {
+      return await db.insert('products', product);
+    } else {
+      return await db.insert('products', product.toMap());
+    }
   }
 
   // --- عمليات الجهات / العملاء ---

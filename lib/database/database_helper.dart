@@ -20,14 +20,14 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2, // رفع الإصدار لتطبيقه على الجدول في التطبيق
+      version: 2, // ترقية إصدار قاعدة البيانات لدعم الأعمدة الجديدة
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
   }
 
   Future _createDB(Database db, int version) async {
-    // إنشاء جدول المنتجات بجميع الأعمدة المطلوبة
+    // إنشاء جدول المنتجات بالهيكلية الكاملة لمنع استثناءات الأعمدة المفقودة والسعر الـ null
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,6 +44,7 @@ class DatabaseHelper {
       )
     ''');
 
+    // إنشاء جدول العملاء والموردين
     await db.execute('''
       CREATE TABLE contacts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,6 +55,7 @@ class DatabaseHelper {
       )
     ''');
 
+    // إنشاء جدول الفواتير
     await db.execute('''
       CREATE TABLE sales_invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,6 +71,7 @@ class DatabaseHelper {
       )
     ''');
 
+    // إنشاء جدول حركات الصندوق
     await db.execute('''
       CREATE TABLE cash_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,16 +85,34 @@ class DatabaseHelper {
     ''');
   }
 
-  // التحديث التلقائي للأعمدة في حال كان التطبيق مثبتاً مسبقاً
+  // معالجة التحديث التلقائي للجداول عند ترفيع نسخة قاعدة البيانات
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
-      await db.execute('ALTER TABLE products ADD COLUMN retail_price REAL');
-      await db.execute('ALTER TABLE products ADD COLUMN wholesale_price REAL');
-      await db.execute('ALTER TABLE products ADD COLUMN cost_price REAL');
-      await db.execute('ALTER TABLE products ADD COLUMN price REAL');
-      await db.execute('ALTER TABLE products ADD COLUMN stock_quantity REAL');
-      await db.execute('ALTER TABLE products ADD COLUMN category TEXT');
+      // إضافة الأعمدة الناقصة لجدول المنتجات
+      final tableInfo = await db.rawQuery("PRAGMA table_info(products)");
+      final existingColumns = tableInfo.map((c) => c['name'] as String).toList();
+
+      if (!existingColumns.contains('barcode')) {
+        await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
+      }
+      if (!existingColumns.contains('retail_price')) {
+        await db.execute('ALTER TABLE products ADD COLUMN retail_price REAL');
+      }
+      if (!existingColumns.contains('wholesale_price')) {
+        await db.execute('ALTER TABLE products ADD COLUMN wholesale_price REAL');
+      }
+      if (!existingColumns.contains('cost_price')) {
+        await db.execute('ALTER TABLE products ADD COLUMN cost_price REAL');
+      }
+      if (!existingColumns.contains('price')) {
+        await db.execute('ALTER TABLE products ADD COLUMN price REAL');
+      }
+      if (!existingColumns.contains('stock_quantity')) {
+        await db.execute('ALTER TABLE products ADD COLUMN stock_quantity REAL');
+      }
+      if (!existingColumns.contains('category')) {
+        await db.execute('ALTER TABLE products ADD COLUMN category TEXT');
+      }
     }
   }
 
@@ -101,12 +122,14 @@ class DatabaseHelper {
     return await db.query('products');
   }
 
+  // إدخال المنتج بمرونة تقبل Map أو كائن Product لتفادي أخطاء التجميع
   Future<int> insertProduct(dynamic product) async {
     final db = await instance.database;
     if (product is Map<String, dynamic>) {
       return await db.insert('products', product);
     } else {
-      return await db.insert('products', product.toMap());
+      // تحويل الكائن تلقائياً عبر toMap() إذا كان كائن نموذج Product
+      return await db.insert('products', (product as dynamic).toMap());
     }
   }
 
@@ -142,6 +165,7 @@ class DatabaseHelper {
       'date': date,
     });
 
+    // تحديث رصيد الحساب المتبقي تلقائياً لدى العميل/المورد
     if (contactId != null) {
       final double remaining = total - paid;
       if (remaining != 0) {

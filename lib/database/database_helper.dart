@@ -72,16 +72,25 @@ class DatabaseHelper {
   // 1. المنتجات (Products)
   // ==========================================
 
-  Future<int> insertProduct({
-    required String name,
-    required double price,
+  // يدعم التمرير إما كـ Map كمُعامل أول أو كـ Named Arguments
+  Future<int> insertProduct([
+    Map<String, dynamic>? productData, {
+    String? name,
+    double? price,
     dynamic quantity,
   }) async {
     final db = await instance.database;
-    final double qty = (quantity is num) ? quantity.toDouble() : double.tryParse(quantity.toString()) ?? 0.0;
+    if (productData != null) {
+      return await db.insert('products', productData);
+    }
+
+    final double qty = (quantity is num)
+        ? quantity.toDouble()
+        : (double.tryParse(quantity?.toString() ?? '') ?? 0.0);
+
     return await db.insert('products', {
-      'name': name,
-      'price': price,
+      'name': name ?? '',
+      'price': price ?? 0.0,
       'quantity': qty,
     });
   }
@@ -100,12 +109,15 @@ class DatabaseHelper {
     return await db.query('contacts');
   }
 
-  Future<int> updateContactBalance(int? contactId, double adjustment) async {
+  Future<int> updateContactBalance(dynamic contactId, double adjustment) async {
     if (contactId == null) return 0;
+    final int? id = (contactId is int) ? contactId : int.tryParse(contactId.toString());
+    if (id == null) return 0;
+
     final db = await instance.database;
     return await db.rawUpdate(
       'UPDATE contacts SET balance = balance + ? WHERE id = ?',
-      [adjustment, contactId],
+      [adjustment, id],
     );
   }
 
@@ -113,22 +125,27 @@ class DatabaseHelper {
   // 3. حركات الصندوق (Cash Transactions)
   // ==========================================
 
-  Future<int> addCashTransaction({
+  Future<int> addCashTransaction([
+    Map<String, dynamic>? transactionData, {
     int? contactId,
-    required String contactName,
-    required String type,
-    required double amount,
+    String? contactName,
+    String? type,
+    double? amount,
     String? notes,
-    required String date,
+    String? date,
   }) async {
     final db = await instance.database;
+    if (transactionData != null) {
+      return await db.insert('cash_transactions', transactionData);
+    }
+
     return await db.insert('cash_transactions', {
       'contact_id': contactId,
-      'contact_name': contactName,
-      'type': type,
-      'amount': amount,
+      'contact_name': contactName ?? '',
+      'type': type ?? '',
+      'amount': amount ?? 0.0,
       'notes': notes,
-      'date': date,
+      'date': date ?? DateTime.now().toIso8601String(),
     });
   }
 
@@ -142,15 +159,26 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> updateCashTransaction({
-    required int id,
+  Future<int> updateCashTransaction([
+    Map<String, dynamic>? transactionData, {
+    int? id,
     int? contactId,
-    required String contactName,
-    required String type,
-    required double amount,
+    String? contactName,
+    String? type,
+    double? amount,
     String? notes,
   }) async {
     final db = await instance.database;
+    if (transactionData != null) {
+      final txId = transactionData['id'];
+      return await db.update(
+        'cash_transactions',
+        transactionData,
+        where: 'id = ?',
+        whereArgs: [txId],
+      );
+    }
+
     return await db.update(
       'cash_transactions',
       {
@@ -178,18 +206,23 @@ class DatabaseHelper {
   // 4. الفواتير (Invoices)
   // ==========================================
 
-  Future<int> addInvoice({
+  Future<int> addInvoice([
+    Map<String, dynamic>? invoiceData, {
     int? contactId,
-    required String contactName,
-    required double totalAmount,
-    required String date,
+    String? contactName,
+    double? totalAmount,
+    String? date,
   }) async {
     final db = await instance.database;
+    if (invoiceData != null) {
+      return await db.insert('invoices', invoiceData);
+    }
+
     return await db.insert('invoices', {
       'contact_id': contactId,
-      'contact_name': contactName,
-      'total_amount': totalAmount,
-      'date': date,
+      'contact_name': contactName ?? '',
+      'total_amount': totalAmount ?? 0.0,
+      'date': date ?? DateTime.now().toIso8601String(),
     });
   }
 

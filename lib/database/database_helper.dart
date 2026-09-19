@@ -1,6 +1,5 @@
-import 'dart:async';
-import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -10,7 +9,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('store_database.db');
+    _database = await _initDB('app_database.db');
     return _database!;
   }
 
@@ -20,229 +19,91 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2, // ترقية إصدار قاعدة البيانات لدعم الأعمدة الجديدة
+      version: 1,
       onCreate: _createDB,
-      onUpgrade: _onUpgrade,
     );
   }
 
-  Future _createDB(Database db, int version) async {
-    // إنشاء جدول المنتجات بالهيكلية الكاملة لمنع استثناءات الأعمدة المفقودة والسعر الـ null
-    await db.execute('''
-      CREATE TABLE products (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        barcode TEXT,
-        retail_price REAL,
-        wholesale_price REAL,
-        cost_price REAL,
-        buy_price REAL,
-        price REAL,
-        quantity REAL,
-        stock_quantity REAL,
-        category TEXT
-      )
-    ''');
-
-    // إنشاء جدول العملاء والموردين
+  Future<void> _createDB(Database db, int version) async {
+    // جدول جهات الاتصال (العملاء والموردين)
     await db.execute('''
       CREATE TABLE contacts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         phone TEXT,
-        balance REAL DEFAULT 0.0,
-        balance_syr REAL DEFAULT 0.0
+        balance REAL NOT NULL DEFAULT 0.0
       )
     ''');
 
-    // إنشاء جدول الفواتير
-    await db.execute('''
-      CREATE TABLE sales_invoices (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        type TEXT NOT NULL,
-        contact_id INTEGER,
-        contact_name TEXT,
-        subtotal REAL,
-        discount REAL,
-        total_amount REAL,
-        paid_amount REAL,
-        remaining_amount REAL,
-        date TEXT
-      )
-    ''');
-
-    // إنشاء جدول حركات الصندوق
+    // جدول حركات الصندوق
     await db.execute('''
       CREATE TABLE cash_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         contact_id INTEGER,
-        contact_name TEXT,
+        contact_name TEXT NOT NULL,
         type TEXT NOT NULL,
         amount REAL NOT NULL,
         notes TEXT,
-        date TEXT
+        date TEXT NOT NULL,
+        FOREIGN KEY (contact_id) REFERENCES contacts (id)
       )
     ''');
   }
 
-  // معالجة التحديث التلقائي للجداول عند ترفيع نسخة قاعدة البيانات
-  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      // إضافة الأعمدة الناقصة لجدول المنتجات
-      final tableInfo = await db.rawQuery("PRAGMA table_info(products)");
-      final existingColumns = tableInfo.map((c) => c['name'] as String).toList();
+  // ==========================================
+  // دوال حركات الصندوق (Cash Transactions)
+  // ==========================================
 
-      if (!existingColumns.contains('barcode')) {
-        await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
-      }
-      if (!existingColumns.contains('retail_price')) {
-        await db.execute('ALTER TABLE products ADD COLUMN retail_price REAL');
-      }
-      if (!existingColumns.contains('wholesale_price')) {
-        await db.execute('ALTER TABLE products ADD COLUMN wholesale_price REAL');
-      }
-      if (!existingColumns.contains('cost_price')) {
-        await db.execute('ALTER TABLE products ADD COLUMN cost_price REAL');
-      }
-      if (!existingColumns.contains('price')) {
-        await db.execute('ALTER TABLE products ADD COLUMN price REAL');
-      }
-      if (!existingColumns.contains('stock_quantity')) {
-        await db.execute('ALTER TABLE products ADD COLUMN stock_quantity REAL');
-      }
-      if (!existingColumns.contains('category')) {
-        await db.execute('ALTER TABLE products ADD COLUMN category TEXT');
-      }
-    }
+  // إضافة حركة صندوق جديدة
+  Future<int> insertCashTransaction(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    return await db.insert('cash_transactions', row);
   }
 
-  // --- عمليات المنتجات ---
-  Future<List<Map<String, dynamic>>> getProducts() async {
+  // قراءة كل حركات الصندوق
+  Future<List<Map<String, dynamic>>> getCashTransactions() async {
     final db = await instance.database;
-    return await db.query('products');
+    return await db.query('cash_transactions', orderBy: 'id DESC');
   }
 
-  // إدخال المنتج بمرونة تقبل Map أو كائن Product لتفادي أخطاء التجميع
-  Future<int> insertProduct(dynamic product) async {
+  // تعديل حركة صندوق
+  Future<int> updateCashTransaction(Map<String, dynamic> row) async {
     final db = await instance.database;
-    if (product is Map<String, dynamic>) {
-      return await db.insert('products', product);
-    } else {
-      // تحويل الكائن تلقائياً عبر toMap() إذا كان كائن نموذج Product
-      return await db.insert('products', (product as dynamic).toMap());
-    }
+    final id = row['id'];
+    return await db.update(
+      'cash_transactions',
+      row,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
-  // --- عمليات الجهات / العملاء ---
-  Future<List<Map<String, dynamic>>> getContacts() async {
+  // حذف حركة صندوق
+  Future<int> deleteCashTransaction(int id) async {
     final db = await instance.database;
-    return await db.query('contacts');
+    return await db.delete(
+      'cash_transactions',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
-  // --- عمليات الفواتير ---
-  Future<int> addInvoice({
-    required String type,
-    required int? contactId,
-    required String contactName,
-    required List<Map<String, dynamic>> items,
-    required double subtotal,
-    required double discount,
-    required double total,
-    required double paid,
-    required String date,
-  }) async {
+  // ==========================================
+  // دوال جهات الاتصال والرصيد (Contacts & Balance)
+  // ==========================================
+
+  // تحديث رصيد الحساب (إضافة/خصم مبلغ)
+  Future<int> updateContactBalance(int contactId, double adjustment) async {
     final db = await instance.database;
-    
-    final id = await db.insert('sales_invoices', {
-      'type': type,
-      'contact_id': contactId,
-      'contact_name': contactName,
-      'subtotal': subtotal,
-      'discount': discount,
-      'total_amount': total,
-      'paid_amount': paid,
-      'remaining_amount': total - paid,
-      'date': date,
-    });
-
-    // تحديث رصيد الحساب المتبقي تلقائياً لدى العميل/المورد
-    if (contactId != null) {
-      final double remaining = total - paid;
-      if (remaining != 0) {
-        final contactResult = await db.query('contacts', where: 'id = ?', whereArgs: [contactId]);
-        if (contactResult.isNotEmpty) {
-          double currentBalance = ((contactResult.first['balance_syr'] ?? contactResult.first['balance'] ?? 0.0) as num).toDouble();
-          
-          if (type == 'sale') {
-            currentBalance += remaining;
-          } else {
-            currentBalance -= remaining;
-          }
-
-          await db.update(
-            'contacts',
-            {
-              'balance_syr': currentBalance,
-              'balance': currentBalance,
-            },
-            where: 'id = ?',
-            whereArgs: [contactId],
-          );
-        }
-      }
-    }
-
-    return id;
+    return await db.rawUpdate(
+      'UPDATE contacts SET balance = balance + ? WHERE id = ?',
+      [adjustment, contactId],
+    );
   }
 
-  // --- عمليات حركة الصندوق ---
-  Future<List<Map<String, dynamic>>> getDailyTransactions(String date) async {
+  // إغلاق قاعدة البيانات
+  Future<void> close() async {
     final db = await instance.database;
-    return await db.query('cash_transactions', where: 'date = ?', whereArgs: [date], orderBy: 'id DESC');
-  }
-
-  Future<int> addCashTransaction({
-    required int? contactId,
-    required String contactName,
-    required String type,
-    required double amount,
-    required String notes,
-    required String date,
-  }) async {
-    final db = await instance.database;
-
-    final id = await db.insert('cash_transactions', {
-      'contact_id': contactId,
-      'contact_name': contactName,
-      'type': type,
-      'amount': amount,
-      'notes': notes,
-      'date': date,
-    });
-
-    if (contactId != null) {
-      final contactResult = await db.query('contacts', where: 'id = ?', whereArgs: [contactId]);
-      if (contactResult.isNotEmpty) {
-        double currentBalance = ((contactResult.first['balance_syr'] ?? contactResult.first['balance'] ?? 0.0) as num).toDouble();
-
-        if (type == 'income') {
-          currentBalance -= amount;
-        } else {
-          currentBalance += amount;
-        }
-
-        await db.update(
-          'contacts',
-          {
-            'balance_syr': currentBalance,
-            'balance': currentBalance,
-          },
-          where: 'id = ?',
-          whereArgs: [contactId],
-        );
-      }
-    }
-
-    return id;
+    db.close();
   }
 }

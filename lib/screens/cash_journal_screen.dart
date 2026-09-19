@@ -96,7 +96,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => StatefulWidget(
+      builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
             title: const Text('تعديل الحركة'),
@@ -395,9 +395,11 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                   const SizedBox(height: 12),
 
                   _dailyTransactions.isEmpty
-                      ? const Center(
+                      ? const Padding(
                           padding: EdgeInsets.symmetric(vertical: 20),
-                          child: Text('لا توجد حركات مسجلة لهذا اليوم'),
+                          child: Center(
+                            child: Text('لا توجد حركات مسجلة لهذا اليوم'),
+                          ),
                         )
                       : ListView.builder(
                           shrinkWrap: true,

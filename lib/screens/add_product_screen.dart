@@ -24,7 +24,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
   String? _selectedCategory;
   bool _isSaving = false;
 
-  // قائمة أصناف تجريبية (يمكن توسيعها حسب الحاجة)
   final List<String> _categories = [
     'مواد غذائية',
     'منظفات',
@@ -33,7 +32,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     'عام',
   ];
 
-  // دالة حفظ المنتج في قاعدة البيانات
   Future<void> _saveProduct() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -45,18 +43,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
       final double costPrice = double.tryParse(_costPriceController.text) ?? 0.0;
       final double quantity = double.tryParse(_quantityController.text) ?? 0.0;
 
-      // إنشاء كائن Product متوافق مع نموذج البيانات وقاعدة البيانات
       final newProduct = Product(
         name: _nameController.text.trim(),
         barcode: _barcodeController.text.trim().isEmpty ? null : _barcodeController.text.trim(),
         costPrice: costPrice,
         retailPrice: retailPrice,
         wholesalePrice: wholesalePrice,
-        price: retailPrice, // السعر المعتمد الافتراضي
+        price: retailPrice,
         quantity: quantity,
       );
 
-      // إدراج الكائن في قاعدة البيانات SQLite عبر الهيلبر
       await DatabaseHelper.instance.insertProduct(newProduct);
 
       if (!mounted) return;
@@ -68,7 +64,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
         ),
       );
 
-      // العودة للشاشة السابقة بعد الحفظ وإرجاع true لتحديث الشاشة السابقة
       Navigator.pop(context, true);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -111,7 +106,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. اسم المنتج
               _buildInputField(
                 controller: _nameController,
                 label: 'اسم المنتج',
@@ -120,7 +114,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 2. اختيار الصنف
               DropdownButtonFormField<String>(
                 value: _selectedCategory,
                 decoration: _inputDecoration('اختر الصنف', Icons.category_outlined),
@@ -131,7 +124,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 3. الكمية الأولية في المخزن
               _buildInputField(
                 controller: _quantityController,
                 label: 'الكمية الأولية في المخزن',
@@ -140,7 +132,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 24),
 
-              // عنوان قسم الأسعار
               const Text(
                 'أسعار البيع والتسعير:',
                 style: TextStyle(
@@ -151,43 +142,38 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 4. سعر الشراء / التكلفة
               _buildInputField(
                 controller: _costPriceController,
-                label: 'سعر الشراء / التكلفة (ل.س)',
+                label: 'سعر الشراء / التكلفة',
                 icon: Icons.shopping_cart_outlined,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 16),
 
-              // 5. سعر المفرق
               _buildInputField(
                 controller: _retailPriceController,
-                label: 'سعر المفرق (ل.س)',
+                label: 'سعر المفرق',
                 icon: Icons.sell_outlined,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 16),
 
-              // 6. سعر نصف الجملة
               _buildInputField(
                 controller: _halfWholesalePriceController,
-                label: 'سعر نصف الجملة (ل.س)',
+                label: 'سعر نصف الجملة',
                 icon: Icons.storefront_outlined,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 16),
 
-              // 7. سعر الجملة
               _buildInputField(
                 controller: _wholesalePriceController,
-                label: 'سعر الجملة (ل.س)',
+                label: 'سعر الجملة',
                 icon: Icons.business_outlined,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 30),
 
-              // زر حفظ المنتج
               SizedBox(
                 width: double.infinity,
                 height: 54,

@@ -1,4 +1,4 @@
-import 'package:sqflite/sqflite.dart';
+import 'package0:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 class DatabaseHelper {
@@ -72,9 +72,16 @@ class DatabaseHelper {
   // 1. المنتجات (Products)
   // ==========================================
 
-  Future<int> insertProduct(Map<String, dynamic> row) async {
+  Future<int> insertProduct(dynamic data, {String? name, double? price, double? quantity}) async {
     final db = await instance.database;
-    return await db.insert('products', row);
+    if (data is Map<String, dynamic>) {
+      return await db.insert('products', data);
+    }
+    return await db.insert('products', {
+      'name': name ?? '',
+      'price': price ?? 0.0,
+      'quantity': quantity ?? 0.0,
+    });
   }
 
   Future<List<Map<String, dynamic>>> getProducts() async {
@@ -107,9 +114,27 @@ class DatabaseHelper {
   // 3. حركات الصندوق (Cash Transactions)
   // ==========================================
 
-  Future<int> addCashTransaction(Map<String, dynamic> transactionData) async {
+  Future<int> addCashTransaction(
+    dynamic data, {
+    int? contactId,
+    String? contactName,
+    String? type,
+    double? amount,
+    String? notes,
+    String? date,
+  }) async {
     final db = await instance.database;
-    return await db.insert('cash_transactions', transactionData);
+    if (data is Map<String, dynamic>) {
+      return await db.insert('cash_transactions', data);
+    }
+    return await db.insert('cash_transactions', {
+      'contact_id': contactId,
+      'contact_name': contactName ?? 'عام / غير محدد',
+      'type': type ?? 'income',
+      'amount': amount ?? 0.0,
+      'notes': notes ?? '',
+      'date': date ?? DateTime.now().toString().split(' ')[0],
+    });
   }
 
   Future<List<Map<String, dynamic>>> getDailyTransactions(String date) async {
@@ -122,12 +147,36 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> updateCashTransaction(Map<String, dynamic> transactionData) async {
+  Future<int> updateCashTransaction(
+    dynamic data, {
+    int? id,
+    int? contactId,
+    String? contactName,
+    String? type,
+    double? amount,
+    String? notes,
+    String? date,
+  }) async {
     final db = await instance.database;
-    final id = transactionData['id'];
+    if (data is Map<String, dynamic>) {
+      final targetId = data['id'];
+      return await db.update(
+        'cash_transactions',
+        data,
+        where: 'id = ?',
+        whereArgs: [targetId],
+      );
+    }
     return await db.update(
       'cash_transactions',
-      transactionData,
+      {
+        'contact_id': contactId,
+        'contact_name': contactName,
+        'type': type,
+        'amount': amount,
+        'notes': notes,
+        'date': date,
+      },
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -146,9 +195,23 @@ class DatabaseHelper {
   // 4. الفواتير (Invoices)
   // ==========================================
 
-  Future<int> addInvoice(Map<String, dynamic> invoiceData) async {
+  Future<int> addInvoice(
+    dynamic data, {
+    int? contactId,
+    String? contactName,
+    double? totalAmount,
+    String? date,
+  }) async {
     final db = await instance.database;
-    return await db.insert('invoices', invoiceData);
+    if (data is Map<String, dynamic>) {
+      return await db.insert('invoices', data);
+    }
+    return await db.insert('invoices', {
+      'contact_id': contactId,
+      'contact_name': contactName ?? 'عام / غير محدد',
+      'total_amount': totalAmount ?? 0.0,
+      'date': date ?? DateTime.now().toString().split(' ')[0],
+    });
   }
 
   Future<void> close() async {

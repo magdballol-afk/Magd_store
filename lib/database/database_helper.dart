@@ -19,8 +19,9 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // رفع الإصدار لدعم الجداول والحقول الجديدة
       onCreate: _createDB,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -61,41 +62,82 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         contact_id INTEGER,
         contact_name TEXT NOT NULL,
+        subtotal REAL NOT NULL DEFAULT 0.0,
+        discount REAL NOT NULL DEFAULT 0.0,
         total_amount REAL NOT NULL,
+        paid_amount REAL NOT NULL DEFAULT 0.0,
+        type TEXT NOT NULL,
         date TEXT NOT NULL,
         FOREIGN KEY (contact_id) REFERENCES contacts (id)
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE invoice_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        product_name TEXT NOT NULL,
+        unit_price REAL NOT NULL,
+        quantity REAL NOT NULL,
+        discount REAL NOT NULL DEFAULT 0.0,
+        total REAL NOT NULL,
+        FOREIGN KEY (invoice_id) REFERENCES invoices (id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products (id)
+      )
+    ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // إضافة حقول الحسم والدفعة المسددة عند الترقية تلقائياً
+      try {
+        await db.execute('ALTER TABLE invoices ADD COLUMN subtotal REAL NOT NULL DEFAULT 0.0');
+        await db.execute('ALTER TABLE invoices ADD COLUMN discount REAL NOT NULL DEFAULT 0.0');
+        await db.execute('ALTER TABLE invoices ADD COLUMN paid_amount REAL NOT NULL DEFAULT 0.0');
+      } catch (_) {}
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS invoice_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          invoice_id INTEGER NOT NULL,
+          product_id INTEGER NOT NULL,
+          product_name TEXT NOT NULL,
+          unit_price REAL NOT NULL,
+          quantity REAL NOT NULL,
+          discount REAL NOT NULL DEFAULT 0.0,
+          total REAL NOT NULL,
+          FOREIGN KEY (invoice_id) REFERENCES invoices (id) ON DELETE CASCADE,
+          FOREIGN KEY (product_id) REFERENCES products (id)
+        )
+      ''');
+    }
   }
 
   // ==========================================
-  // 1. المنتجات (Products)
+  // الدوال الأساسية (إدارة المنتجات والعملاء)
   // ==========================================
 
   Future<int> insertProduct(dynamic data, {String? name, double? price, double? quantity}) async {
     final db = await instance.database;
-    if (data is Map<String, dynamic>) {
-      return await db.insert('products', data);
-    }
-    return await db.insert('products', {
-      'name': name ?? '',
-      'price': price ?? 0.0,
-      'quantity': quantity ?? 0.0,
-    });
+    if (data is Map<String, dynamic>) return await db.insert('products', data);
+    return await db.insert('products', {'name': name ?? '', 'price': price ?? 0.0, 'quantity': quantity ?? 0.0});
   }
 
   Future<List<Map<String, dynamic>>> getProducts() async {
     final db = await instance.database;
-    return await db.query('products');
+    return await db.query('products', orderBy: 'id DESC');
   }
 
-  // ==========================================
-  // 2. جهات الاتصال (Contacts)
-  // ==========================================
+  Future<int> insertContact(dynamic data, {String? name, String? phone, double? balance}) async {
+    final db = await instance.database;
+    if (data is Map<String, dynamic>) return await db.insert('contacts', data);
+    return await db.insert('contacts', {'name': name ?? '', 'phone': phone ?? '', 'balance': balance ?? 0.0});
+  }
 
   Future<List<Map<String, dynamic>>> getContacts() async {
     final db = await instance.database;
-    return await db.query('contacts');
+    return await db.query('contacts', orderBy: 'id DESC');
   }
 
   Future<int> updateContactBalance(dynamic contactId, double adjustment) async {
@@ -111,111 +153,100 @@ class DatabaseHelper {
   }
 
   // ==========================================
-  // 3. حركات الصندوق (Cash Transactions)
+  // إضافة الفاتورة المركبة (مع الحسم والدفعة وحركة المواد والصندوق)
   // ==========================================
 
-  Future<int> addCashTransaction(
-    dynamic data, {
-    int? contactId,
-    String? contactName,
-    String? type,
-    double? amount,
-    String? notes,
-    String? date,
+  Future<int> addFullInvoice({
+    required int? contactId,
+    required String contactName,
+    required String type, // 'sale' أو 'purchase'
+    required double subtotal,
+    required double discount,
+    required double totalAmount,
+    required double paidAmount,
+    required List<Map<String, dynamic>> items,
+    required String date,
   }) async {
     final db = await instance.database;
-    if (data is Map<String, dynamic>) {
-      return await db.insert('cash_transactions', data);
-    }
-    return await db.insert('cash_transactions', {
-      'contact_id': contactId,
-      'contact_name': contactName ?? 'عام / غير محدد',
-      'type': type ?? 'income',
-      'amount': amount ?? 0.0,
-      'notes': notes ?? '',
-      'date': date ?? DateTime.now().toString().split(' ')[0],
-    });
-  }
+    int invoiceId = 0;
 
-  Future<List<Map<String, dynamic>>> getDailyTransactions(String date) async {
-    final db = await instance.database;
-    return await db.query(
-      'cash_transactions',
-      where: 'date LIKE ?',
-      whereArgs: ['$date%'],
-      orderBy: 'id DESC',
-    );
-  }
-
-  Future<int> updateCashTransaction(
-    dynamic data, {
-    int? id,
-    int? contactId,
-    String? contactName,
-    String? type,
-    double? amount,
-    String? notes,
-    String? date,
-  }) async {
-    final db = await instance.database;
-    if (data is Map<String, dynamic>) {
-      final targetId = data['id'];
-      return await db.update(
-        'cash_transactions',
-        data,
-        where: 'id = ?',
-        whereArgs: [targetId],
-      );
-    }
-    return await db.update(
-      'cash_transactions',
-      {
+    await db.transaction((txn) async {
+      // 1. تسجيل الفاتورة الرئيسية
+      invoiceId = await txn.insert('invoices', {
         'contact_id': contactId,
         'contact_name': contactName,
+        'subtotal': subtotal,
+        'discount': discount,
+        'total_amount': totalAmount,
+        'paid_amount': paidAmount,
         'type': type,
-        'amount': amount,
-        'notes': notes,
         'date': date,
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+      });
+
+      // 2. تسجيل عناصر الفاتورة وتحديث مخزون المواد
+      for (var item in items) {
+        await txn.insert('invoice_items', {
+          'invoice_id': invoiceId,
+          'product_id': item['product_id'],
+          'product_name': item['product_name'],
+          'unit_price': item['unit_price'],
+          'quantity': item['quantity'],
+          'discount': item['discount'] ?? 0.0,
+          'total': item['total'],
+        });
+
+        // تعديل الكمية بالمخزن (تزيد بالمشتريات وتنقص بالمبيعات)
+        final double qtyChange = (type == 'sale') ? -item['quantity'] : item['quantity'];
+        await txn.rawUpdate(
+          'UPDATE products SET quantity = quantity + ? WHERE id = ?',
+          [qtyChange, item['product_id']],
+        );
+      }
+
+      // 3. تحديث رصيد الحساب المالي (المتبقي غير المسدد من الفاتورة)
+      final double remaining = totalAmount - paidAmount;
+      if (contactId != null && remaining != 0) {
+        final double balanceChange = (type == 'purchase') ? -remaining : remaining;
+        await txn.rawUpdate(
+          'UPDATE contacts SET balance = balance + ? WHERE id = ?',
+          [balanceChange, contactId],
+        );
+      }
+
+      // 4. تسجيل حركة الصندوق النقدية (في حال تسديد جزء أو كامل الفاتورة)
+      if (paidAmount > 0) {
+        await txn.insert('cash_transactions', {
+          'contact_id': contactId,
+          'contact_name': contactName,
+          'type': (type == 'sale') ? 'income' : 'expense',
+          'amount': paidAmount,
+          'notes': 'دفعة نقدية من فاتورة ${type == 'sale' ? 'مبيعات' : 'مشتريات'} رقم #$invoiceId',
+          'date': date,
+        });
+      }
+    });
+
+    return invoiceId;
   }
 
-  Future<int> deleteCashTransaction(int id) async {
+  // دعم المتطلبات القديمة للأزرار المباشرة
+  Future<int> addInvoice(dynamic data, {int? contactId, String? contactName, double? totalAmount, String? type, String? date}) async {
     final db = await instance.database;
-    return await db.delete(
-      'cash_transactions',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  // ==========================================
-  // 4. الفواتير (Invoices)
-  // ==========================================
-
-  Future<int> addInvoice(
-    dynamic data, {
-    int? contactId,
-    String? contactName,
-    double? totalAmount,
-    String? date,
-  }) async {
-    final db = await instance.database;
-    if (data is Map<String, dynamic>) {
-      return await db.insert('invoices', data);
-    }
+    if (data is Map<String, dynamic>) return await db.insert('invoices', data);
     return await db.insert('invoices', {
       'contact_id': contactId,
       'contact_name': contactName ?? 'عام / غير محدد',
+      'subtotal': totalAmount ?? 0.0,
+      'discount': 0.0,
       'total_amount': totalAmount ?? 0.0,
+      'paid_amount': totalAmount ?? 0.0,
+      'type': type ?? 'sale',
       'date': date ?? DateTime.now().toString().split(' ')[0],
     });
   }
 
-  Future<void> close() async {
+  Future<List<Map<String, dynamic>>> getInvoices() async {
     final db = await instance.database;
-    db.close();
+    return await db.query('invoices', orderBy: 'id DESC');
   }
 }

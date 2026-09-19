@@ -117,7 +117,7 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
                                     const Text('الرصيد الحالي:', style: TextStyle(color: Colors.grey, fontSize: 14)),
                                     const SizedBox(height: 4),
                                     Text(
-                                      '${balance.abs().toStringAsFixed(2)} ل.س',
+                                      balance.abs().toStringAsFixed(2),
                                       style: TextStyle(
                                         fontSize: 22,
                                         fontWeight: FontWeight.bold,
@@ -197,7 +197,7 @@ class _ContactDetailScreenState extends State<ContactDetailScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       Text(
-                                        '${totalAmount.toStringAsFixed(2)} ل.س',
+                                        totalAmount.toStringAsFixed(2),
                                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                       ),
                                       if (remainingAmount > 0)

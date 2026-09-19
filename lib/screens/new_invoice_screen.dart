@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 
 class NewInvoiceScreen extends StatefulWidget {
-  final String type; // 'sale' أو 'purchase'
+  final String type;
 
-  // قيمة افتراضية للمعامل لمنع أخطاء التجميع
   const NewInvoiceScreen({Key? key, this.type = 'sale'}) : super(key: key);
 
   @override
@@ -33,7 +32,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     _loadInitialData();
   }
 
-  // تحميل البيانات وتحويل القوائم بأمان دون استخدام toMap()
   Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
     final contactsData = await DatabaseHelper.instance.getContacts();
@@ -48,9 +46,11 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
   void _addItemToInvoice(Map<String, dynamic> product) {
     final existingIndex = _invoiceItems.indexWhere((item) => item['id'] == product['id']);
-    final double price = widget.type == 'sale'
-        ? ((product['sell_price'] ?? 0) as num).toDouble()
-        : ((product['buy_price'] ?? 0) as num).toDouble();
+    
+    // استخراج السعر بأسماء حقول مخصصة تمنع ظهور null
+    final double rawPrice = widget.type == 'sale'
+        ? ((product['retail_price'] ?? product['sell_price'] ?? product['price'] ?? 0) as num).toDouble()
+        : ((product['cost_price'] ?? product['buy_price'] ?? product['price'] ?? 0) as num).toDouble();
 
     setState(() {
       if (existingIndex >= 0) {
@@ -59,7 +59,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         _invoiceItems.add({
           'id': product['id'],
           'name': product['name'],
-          'price': price,
+          'price': rawPrice,
           'quantity': 1,
         });
       }
@@ -132,7 +132,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // اختيار الحساب / العميل
                         Card(
                           elevation: 2,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -212,7 +211,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                         ),
                         const SizedBox(height: 12),
 
-                        // البحث عن مادة وإضافتها
                         Card(
                           elevation: 2,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -256,7 +254,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                         separatorBuilder: (context, index) => const Divider(height: 1),
                                         itemBuilder: (context, index) {
                                           final option = options.elementAt(index);
-                                          final price = isSale ? option['sell_price'] : option['buy_price'];
+                                          final price = isSale
+                                              ? (option['retail_price'] ?? option['sell_price'] ?? option['price'] ?? 0)
+                                              : (option['cost_price'] ?? option['buy_price'] ?? option['price'] ?? 0);
                                           return ListTile(
                                             title: Text(option['name'] ?? ''),
                                             subtitle: Text('السعر: $price'),
@@ -273,7 +273,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // قائمة المواد المضافة
                         const Text(
                           'مواد الفاتورة:',
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -356,7 +355,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                 ),
 
-                // شريط المبالغ الإجمالية وحفظ الفاتورة
                 Container(
                   padding: const EdgeInsets.all(16.0),
                   decoration: BoxDecoration(

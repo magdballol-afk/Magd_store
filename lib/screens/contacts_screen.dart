@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
-import 'contact_details_screen.dart';
 
 class ContactsScreen extends StatefulWidget {
-  const ContactsScreen({super.key});
+  const ContactsScreen({Key? key}) : super(key: key);
 
   @override
   State<ContactsScreen> createState() => _ContactsScreenState();
@@ -16,69 +15,117 @@ class _ContactsScreenState extends State<ContactsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadContacts();
+    _refreshContacts();
   }
 
-  Future<void> _loadContacts() async {
+  // إعادة تحميل قائمة العملاء من قاعدة البيانات
+  Future<void> _refreshContacts() async {
     setState(() => _isLoading = true);
-    final db = await DatabaseHelper.instance.database;
-    final data = await db.query('contacts', orderBy: 'name ASC');
+    final data = await DatabaseHelper.instance.getContacts();
     setState(() {
       _contacts = data;
       _isLoading = false;
     });
   }
 
-  // نافذة إضافة عميل جديد من زر +
+  // نافذة إضافة عميل جديد
   void _showAddContactDialog() {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
-    final balanceController = TextEditingController(text: '0');
+    final balanceController = TextEditingController(text: '0.0');
+    final formKey = GlobalKey<FormState>();
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('إضافة حساب جديد'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'الاسم الكامل', border: OutlineInputBorder()),
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('إضافة حساب / عميل جديد'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'اسم العميل / الحساب',
+                      prefixIcon: Icon(Icons.person),
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'يرجى إدخال الاسم';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'رقم الهاتف (اختياري)',
+                      prefixIcon: Icon(Icons.phone),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: balanceController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'الرصيد الأولي',
+                      prefixIcon: Icon(Icons.account_balance_wallet),
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value != null && value.isNotEmpty && double.tryParse(value.trim()) == null) {
+                        return 'يرجى إدخال رقم صحيح';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'رقم الهاتف', border: OutlineInputBorder()),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إلغاء'),
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: balanceController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'الرصيد الأولي (ل.س)', border: OutlineInputBorder()),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF5C6BC0),
+              ),
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+
+                final String name = nameController.text.trim();
+                final String phone = phoneController.text.trim();
+                final double balance = double.tryParse(balanceController.text.trim()) ?? 0.0;
+
+                // إضافة العميل لقاعدة البيانات
+                await DatabaseHelper.instance.insertContact({
+                  'name': name,
+                  'phone': phone,
+                  'balance': balance,
+                });
+
+                if (mounted) {
+                  Navigator.pop(context);
+                  _refreshContacts(); // تحديث القائمة
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تمت إضافة العميل بنجاح')),
+                  );
+                }
+              },
+              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
             ),
           ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () async {
-              if (nameController.text.trim().isNotEmpty) {
-                final db = await DatabaseHelper.instance.database;
-                await db.insert('contacts', {
-                  'name': nameController.text.trim(),
-                  'phone': phoneController.text.trim(),
-                  'balance_syr': double.tryParse(balanceController.text) ?? 0.0,
-                });
-                if (mounted) Navigator.pop(context);
-                _loadContacts();
-              }
-            },
-            child: const Text('حفظ الحساب'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -86,56 +133,50 @@ class _ContactsScreenState extends State<ContactsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('جهات الاتصال / الحسابات'),
-        backgroundColor: const Color(0xFF0284C7),
+        title: const Text('إدارة الحسابات والعملاء'),
+        backgroundColor: const Color(0xFF5C6BC0),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _contacts.isEmpty
-              ? const Center(child: Text('لا يوجد حسابات مسجلة حالياً'))
+              ? const Center(child: Text('لا يوجد عملاء مضافون حالياً'))
               : ListView.builder(
                   itemCount: _contacts.length,
                   itemBuilder: (context, index) {
-                    final item = _contacts[index];
-                    final double balance = ((item['balance_syr'] ?? item['balance'] ?? 0.0) as num).toDouble();
+                    final contact = _contacts[index];
+                    final double balance = (contact['balance'] as num?)?.toDouble() ?? 0.0;
 
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       child: ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: Color(0xFF0284C7),
-                          child: Icon(Icons.person, color: Colors.white),
-                        ),
-                        title: Text(item['name'] ?? ''),
-                        subtitle: Text(item['phone'] ?? 'بدون رقم هاتف'),
-                        trailing: Text(
-                          '${balance.abs().toStringAsFixed(2)} ل.س',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: balance > 0
-                                ? Colors.red
-                                : balance < 0
-                                    ? Colors.blue
-                                    : Colors.green,
+                        leading: CircleAvatar(
+                          backgroundColor: const Color(0xFF5C6BC0),
+                          child: Text(
+                            (contact['name'] as String?)?.isNotEmpty == true
+                                ? contact['name'][0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(color: Colors.white),
                           ),
                         ),
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ContactDetailScreen(contact: item),
-                            ),
-                          );
-                          _loadContacts();
-                        },
+                        title: Text(contact['name'] ?? ''),
+                        subtitle: Text(contact['phone'] ?? 'بدون رقم هاتف'),
+                        trailing: Text(
+                          balance.toStringAsFixed(2),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: balance >= 0 ? Colors.green : Colors.red,
+                          ),
+                        ),
                       ),
                     );
                   },
                 ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF0284C7),
-        onPressed: _showAddContactDialog, // ربط زر + بفتح نافذة الإضافة
-        child: const Icon(Icons.add, color: Colors.white),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showAddContactDialog,
+        backgroundColor: const Color(0xFF5C6BC0),
+        icon: const Icon(Icons.person_add, color: Colors.white),
+        label: const Text('إضافة عميل', style: TextStyle(color: Colors.white)),
       ),
     );
   }

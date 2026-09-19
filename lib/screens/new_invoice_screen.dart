@@ -4,7 +4,8 @@ import '../database/database_helper.dart';
 class NewInvoiceScreen extends StatefulWidget {
   final String type; // 'sale' أو 'purchase'
 
-  const NewInvoiceScreen({Key? key, required this.type}) : super(key: key);
+  // جعل المعامل اختياري مع قيمة افتراضية لمنع أخطاء التجميع عند الاستدعاء
+  const NewInvoiceScreen({Key? key, this.type = 'sale'}) : super(key: key);
 
   @override
   State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();

@@ -125,7 +125,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                 ),
                 TextField(
                   controller: editAmountController,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(labelText: 'المبلغ', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 10),
@@ -143,16 +143,55 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
               ElevatedButton(
                 onPressed: () async {
                   final db = await DatabaseHelper.instance.database;
+                  final double oldAmount = ((tx['amount'] ?? 0) as num).toDouble();
+                  final double newAmount = double.tryParse(editAmountController.text) ?? oldAmount;
+                  final String oldType = tx['type'];
+                  final int? contactId = tx['contact_id'];
+
+                  // 1. تحديث جدول الحركات
                   await db.update(
                     'cash_transactions',
                     {
                       'type': editType,
-                      'amount': double.tryParse(editAmountController.text) ?? tx['amount'],
+                      'amount': newAmount,
                       'notes': editNotesController.text,
                     },
                     where: 'id = ?',
                     whereArgs: [tx['id']],
                   );
+
+                  // 2. تحديث رصيد العميل في جدول contacts
+                  if (contactId != null) {
+                    final contactResult = await db.query('contacts', where: 'id = ?', whereArgs: [contactId]);
+                    if (contactResult.isNotEmpty) {
+                      double currentBalance = ((contactResult.first['balance_syr'] ?? contactResult.first['balance'] ?? 0.0) as num).toDouble();
+
+                      // إلغاء تأثير الحركة القديمة
+                      if (oldType == 'income') {
+                        currentBalance += oldAmount; // القبض السابق كان ينقص الدين
+                      } else {
+                        currentBalance -= oldAmount; // الدفع السابق كان يزيد الدين
+                      }
+
+                      // تطبيق تأثير الحركة الجديدة
+                      if (editType == 'income') {
+                        currentBalance -= newAmount;
+                      } else {
+                        currentBalance += newAmount;
+                      }
+
+                      await db.update(
+                        'contacts',
+                        {
+                          'balance_syr': currentBalance,
+                          'balance': currentBalance,
+                        },
+                        where: 'id = ?',
+                        whereArgs: [contactId],
+                      );
+                    }
+                  }
+
                   if (mounted) Navigator.pop(context);
                   _loadData();
                 },
@@ -165,7 +204,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     );
   }
 
-  void _deleteTransaction(int id) {
+  void _deleteTransaction(Map<String, dynamic> tx) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -180,11 +219,42 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               final db = await DatabaseHelper.instance.database;
+              final int id = tx['id'];
+              final double amount = ((tx['amount'] ?? 0) as num).toDouble();
+              final String type = tx['type'];
+              final int? contactId = tx['contact_id'];
+
+              // 1. حذف الحركة من الجدول
               await db.delete(
                 'cash_transactions',
                 where: 'id = ?',
                 whereArgs: [id],
               );
+
+              // 2. عكس التأثير على رصيد العميل
+              if (contactId != null) {
+                final contactResult = await db.query('contacts', where: 'id = ?', whereArgs: [contactId]);
+                if (contactResult.isNotEmpty) {
+                  double currentBalance = ((contactResult.first['balance_syr'] ?? contactResult.first['balance'] ?? 0.0) as num).toDouble();
+
+                  if (type == 'income') {
+                    currentBalance += amount;
+                  } else {
+                    currentBalance -= amount;
+                  }
+
+                  await db.update(
+                    'contacts',
+                    {
+                      'balance_syr': currentBalance,
+                      'balance': currentBalance,
+                    },
+                    where: 'id = ?',
+                    whereArgs: [contactId],
+                  );
+                }
+              }
+
               if (mounted) Navigator.pop(context);
               _loadData();
             },
@@ -439,7 +509,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                                     ),
                                     IconButton(
                                       icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                      onPressed: () => _deleteTransaction(tx['id']),
+                                      onPressed: () => _deleteTransaction(tx),
                                     ),
                                   ],
                                 ),

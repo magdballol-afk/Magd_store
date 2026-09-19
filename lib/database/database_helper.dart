@@ -26,7 +26,6 @@ class DatabaseHelper {
   }
 
   Future _createDB(Database db, int version) async {
-    // جدول المنتجات
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,7 +36,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول الجهات (العملاء والموردين)
     await db.execute('''
       CREATE TABLE contacts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,7 +46,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول الفواتير
     await db.execute('''
       CREATE TABLE sales_invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +61,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول حركات الصندوق
     await db.execute('''
       CREATE TABLE cash_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,6 +78,11 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getProducts() async {
     final db = await instance.database;
     return await db.query('products');
+  }
+
+  Future<int> insertProduct(Map<String, dynamic> product) async {
+    final db = await instance.database;
+    return await db.insert('products', product);
   }
 
   // --- عمليات الجهات / العملاء ---
@@ -104,7 +105,6 @@ class DatabaseHelper {
   }) async {
     final db = await instance.database;
     
-    // 1. إضافة الفاتورة إلى جدول الفواتير
     final id = await db.insert('sales_invoices', {
       'type': type,
       'contact_id': contactId,
@@ -117,7 +117,6 @@ class DatabaseHelper {
       'date': date,
     });
 
-    // 2. تحديث رصيد العميل بناءً على الجزء المتبقي غير المدفوع
     if (contactId != null) {
       final double remaining = total - paid;
       if (remaining != 0) {
@@ -126,9 +125,9 @@ class DatabaseHelper {
           double currentBalance = ((contactResult.first['balance_syr'] ?? contactResult.first['balance'] ?? 0.0) as num).toDouble();
           
           if (type == 'sale') {
-            currentBalance += remaining; // المبيعات الآجلة تزيد الدين
+            currentBalance += remaining;
           } else {
-            currentBalance -= remaining; // المشتريات الآجلة تنقص الدين/تزيد حساب المورد
+            currentBalance -= remaining;
           }
 
           await db.update(
@@ -163,7 +162,6 @@ class DatabaseHelper {
   }) async {
     final db = await instance.database;
 
-    // 1. تسليط الحركة في الصندوق
     final id = await db.insert('cash_transactions', {
       'contact_id': contactId,
       'contact_name': contactName,
@@ -173,16 +171,15 @@ class DatabaseHelper {
       'date': date,
     });
 
-    // 2. تحديث رصيد العميل تلقائياً
     if (contactId != null) {
       final contactResult = await db.query('contacts', where: 'id = ?', whereArgs: [contactId]);
       if (contactResult.isNotEmpty) {
         double currentBalance = ((contactResult.first['balance_syr'] ?? contactResult.first['balance'] ?? 0.0) as num).toDouble();
 
         if (type == 'income') {
-          currentBalance -= amount; // القبض ينقص دين العميل
+          currentBalance -= amount;
         } else {
-          currentBalance += amount; // الدفع يزيد حساب العميل
+          currentBalance += amount;
         }
 
         await db.update(

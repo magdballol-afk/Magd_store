@@ -20,19 +20,27 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // رفع الإصدار لتطبيقه على الجدول في التطبيق
       onCreate: _createDB,
+      onUpgrade: _onUpgrade,
     );
   }
 
   Future _createDB(Database db, int version) async {
+    // إنشاء جدول المنتجات بجميع الأعمدة المطلوبة
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
+        barcode TEXT,
+        retail_price REAL,
+        wholesale_price REAL,
+        cost_price REAL,
         buy_price REAL,
-        sell_price REAL,
-        quantity REAL
+        price REAL,
+        quantity REAL,
+        stock_quantity REAL,
+        category TEXT
       )
     ''');
 
@@ -74,13 +82,25 @@ class DatabaseHelper {
     ''');
   }
 
+  // التحديث التلقائي للأعمدة في حال كان التطبيق مثبتاً مسبقاً
+  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
+      await db.execute('ALTER TABLE products ADD COLUMN retail_price REAL');
+      await db.execute('ALTER TABLE products ADD COLUMN wholesale_price REAL');
+      await db.execute('ALTER TABLE products ADD COLUMN cost_price REAL');
+      await db.execute('ALTER TABLE products ADD COLUMN price REAL');
+      await db.execute('ALTER TABLE products ADD COLUMN stock_quantity REAL');
+      await db.execute('ALTER TABLE products ADD COLUMN category TEXT');
+    }
+  }
+
   // --- عمليات المنتجات ---
   Future<List<Map<String, dynamic>>> getProducts() async {
     final db = await instance.database;
     return await db.query('products');
   }
 
-  // دعم كائنات Product وقواميس Map بديناميكية تامة لمنع خطأ التجميع
   Future<int> insertProduct(dynamic product) async {
     final db = await instance.database;
     if (product is Map<String, dynamic>) {

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 
 class NewInvoiceScreen extends StatefulWidget {
-  const NewInvoiceScreen({Key? key}) : super(key: key);
+  final String? type;
+
+  const NewInvoiceScreen({Key? key, this.type}) : super(key: key);
 
   @override
   State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();
@@ -158,15 +160,16 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       'contact_id': _selectedContactId,
       'contact_name': _selectedContactName ?? 'عام / غير محدد',
       'total_amount': _totalAmount,
+      'type': widget.type ?? 'sale',
       'date': DateTime.now().toString().split(' ')[0],
     };
 
-    // الاستدُعاء يمرر Map لتفادي خطأ Too few positional arguments
     await DatabaseHelper.instance.addInvoice(invoiceData);
 
-    // إذا كان للعميل حساب، يتم تحديث رصيده المالي
+    // تحديث رصيد الحساب المالي بناءً على نوع الفاتورة
     if (_selectedContactId != null) {
-      await DatabaseHelper.instance.updateContactBalance(_selectedContactId, _totalAmount);
+      final double balanceAdjustment = (widget.type == 'purchase') ? -_totalAmount : _totalAmount;
+      await DatabaseHelper.instance.updateContactBalance(_selectedContactId, balanceAdjustment);
     }
 
     setState(() => _isSaving = false);
@@ -181,9 +184,11 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final String titleText = widget.type == 'purchase' ? 'فاتورة شراء جديدة' : 'فاتورة مبيعات جديدة';
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('فاتورة جديدة'),
+        title: Text(titleText),
         backgroundColor: const Color(0xFF5C6BC0),
       ),
       body: _isLoading

@@ -1,219 +1,466 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 
-class ContactDetailScreen extends StatefulWidget {
-  final Map<String, dynamic> contact;
+class ContactDetailsScreen extends StatefulWidget {
+  final int? initialContactId;
 
-  const ContactDetailScreen({super.key, required this.contact});
+  const ContactDetailsScreen({Key? key, this.initialContactId}) : super(key: key);
 
   @override
-  State<ContactDetailScreen> createState() => _ContactDetailScreenState();
+  State<ContactDetailsScreen> createState() => _ContactDetailsScreenState();
 }
 
-class _ContactDetailScreenState extends State<ContactDetailScreen> {
-  Map<String, dynamic> _currentContact = {};
-  List<Map<String, dynamic>> _contactInvoices = [];
+class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
+  List<Map<String, dynamic>> _contacts = [];
+  Map<String, dynamic>? _selectedContact;
+
+  List<Map<String, dynamic>> _combinedStatement = [];
+  List<Map<String, dynamic>> _filteredStatement = [];
+
   bool _isLoading = true;
+
+  // تواريخ الفلترة
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   @override
   void initState() {
     super.initState();
-    _currentContact = widget.contact;
-    _loadContactData();
+    _loadInitialData();
   }
 
-  // إعادة جلب بيانات العميل والفواتير من قاعدة البيانات لتحديث الرصيد
-  Future<void> _loadContactData() async {
+  Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
-    final db = await DatabaseHelper.instance.database;
+    final contactsData = await DatabaseHelper.instance.getContacts();
 
-    // 1. تحديث بيانات العميل لضمان قراءة أحدث رصيد
-    final contactResult = await db.query(
-      'contacts',
-      where: 'id = ?',
-      whereArgs: [widget.contact['id']],
-    );
-
-    if (contactResult.isNotEmpty) {
-      _currentContact = contactResult.first;
+    Map<String, dynamic>? currentContact;
+    if (widget.initialContactId != null && contactsData.isNotEmpty) {
+      try {
+        currentContact = contactsData.firstWhere((c) => c['id'] == widget.initialContactId);
+      } catch (_) {
+        currentContact = contactsData.first;
+      }
+    } else if (contactsData.isNotEmpty) {
+      currentContact = contactsData.first;
     }
 
-    // 2. جلب جميع الفواتير المسجلة للعميل
-    final invoicesResult = await db.query(
-      'sales_invoices',
-      where: 'contact_name = ?',
-      whereArgs: [_currentContact['name']],
-      orderBy: 'id DESC',
-    );
-
     setState(() {
-      _contactInvoices = invoicesResult;
+      _contacts = contactsData;
+      _selectedContact = currentContact;
       _isLoading = false;
     });
+
+    if (_selectedContact != null) {
+      _fetchAccountStatement();
+    }
+  }
+
+  // جلب كافة الفواتير وحركات الصندوق المجمعة للعميل المحدد
+  Future<void> _fetchAccountStatement() async {
+    if (_selectedContact == null) return;
+
+    final contactId = _selectedContact!['id'];
+    final db = await DatabaseHelper.instance.database;
+
+    // 1. جلب الفواتير
+    final invoices = await db.query(
+      'invoices',
+      where: 'contact_id = ?',
+      whereArgs: [contactId],
+    );
+
+    // 2. جلب حركات الصندوق
+    final cashTransactions = await db.query(
+      'cash_transactions',
+      where: 'contact_id = ?',
+      whereArgs: [contactId],
+    );
+
+    List<Map<String, dynamic>> statement = [];
+
+    // تحويل الفواتير
+    for (var inv in invoices) {
+      final String type = inv['type'] == 'purchase' ? 'فاتورة شراء' : 'فاتورة مبيعات';
+      final double total = (inv['total_amount'] as num?)?.toDouble() ?? 0.0;
+      statement.add({
+        'id': inv['id'],
+        'source': 'invoice',
+        'title': '$type #${inv['id']}',
+        'type': inv['type'],
+        'amount': total,
+        'date': inv['date'] ?? '',
+        'raw_date': DateTime.tryParse(inv['date'].toString()) ?? DateTime.now(),
+        'details': inv,
+      });
+    }
+
+    // تحويل حركات الصندوق
+    for (var cash in cashTransactions) {
+      final String type = cash['type'] == 'expense' ? 'سند دفع / مصاريف' : 'سند قبض / إيراد';
+      final double amount = (cash['amount'] as num?)?.toDouble() ?? 0.0;
+      statement.add({
+        'id': cash['id'],
+        'source': 'cash',
+        'title': '$type (صندوق)',
+        'type': cash['type'],
+        'amount': amount,
+        'notes': cash['notes'] ?? '',
+        'date': cash['date'] ?? '',
+        'raw_date': DateTime.tryParse(cash['date'].toString()) ?? DateTime.now(),
+        'details': cash,
+      });
+    }
+
+    // ترتيب الحركات تاريخياً (الأحدث أولاً)
+    statement.sort((a, b) => (b['raw_date'] as DateTime).compareTo(a['raw_date'] as DateTime));
+
+    setState(() {
+      _combinedStatement = statement;
+      _applyDateFilter();
+    });
+  }
+
+  // تطبيق فلترة التاريخ
+  void _applyDateFilter() {
+    setState(() {
+      _filteredStatement = _combinedStatement.where((item) {
+        final itemDate = item['raw_date'] as DateTime;
+        if (_startDate != null && itemDate.isBefore(_startDate!)) return false;
+        if (_endDate != null && itemDate.isAfter(_endDate!.add(const Duration(days: 1)))) return false;
+        return true;
+      }).toList();
+    });
+  }
+
+  // نافذة البحث المتقدم واختيار العميل
+  void _showAdvancedSearchDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        String query = '';
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final filtered = _contacts.where((c) {
+              final name = (c['name'] ?? '').toString().toLowerCase();
+              final phone = (c['phone'] ?? '').toString();
+              return name.contains(query.toLowerCase()) || phone.contains(query);
+            }).toList();
+
+            return AlertDialog(
+              title: const Text('بحث متقدم عن عميل / مورد'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'ابحث بالاسم أو رقم الهاتف...',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (val) => setDialogState(() => query = val),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 250,
+                      child: filtered.isEmpty
+                          ? const Center(child: Text('لا توجد نتائج مطابقة'))
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (context, index) {
+                                final contact = filtered[index];
+                                final double bal = (contact['balance'] as num?)?.toDouble() ?? 0.0;
+                                return ListTile(
+                                  title: Text(contact['name'] ?? ''),
+                                  subtitle: Text(contact['phone'] ?? 'بدون رقم'),
+                                  trailing: Text(
+                                    bal.toStringAsFixed(2),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: bal >= 0 ? Colors.green : Colors.red,
+                                    ),
+                                  ),
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedContact = contact;
+                                    });
+                                    Navigator.pop(context);
+                                    _fetchAccountStatement();
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // تعديل حركة صندوق
+  void _editCashTransactionDialog(Map<String, dynamic> cashItem) {
+    final Map<String, dynamic> cash = cashItem['details'];
+    final amountController = TextEditingController(text: cash['amount'].toString());
+    final notesController = TextEditingController(text: cash['notes'] ?? '');
+    String type = cash['type'] ?? 'income';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('تعديل حركة صندوق'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      value: type,
+                      decoration: const InputDecoration(labelText: 'نوع الحركة', border: OutlineInputBorder()),
+                      items: const [
+                        DropdownMenuItem(value: 'income', child: Text('سند قبض (إيراد)')),
+                        DropdownMenuItem(value: 'expense', child: Text('سند دفع (مصاريف)')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => type = val);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: amountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'المبلغ', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: notesController,
+                      decoration: const InputDecoration(labelText: 'ملاحظات / البيان', border: OutlineInputBorder()),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('إلغاء'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5C6BC0)),
+                  onPressed: () async {
+                    final double? newAmount = double.tryParse(amountController.text.trim());
+                    if (newAmount == null) return;
+
+                    await DatabaseHelper.instance.updateCashTransaction(
+                      {},
+                      id: cash['id'],
+                      contactId: _selectedContact!['id'],
+                      contactName: _selectedContact!['name'],
+                      type: type,
+                      amount: newAmount,
+                      notes: notesController.text.trim(),
+                      date: cash['date'],
+                    );
+
+                    if (mounted) {
+                      Navigator.pop(context);
+                      _loadInitialData(); // تحديث الأرصدة والكشف
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم تعديل حركة الصندوق بنجاح')),
+                      );
+                    }
+                  },
+                  child: const Text('حفظ التعديل', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // اختيار مدى التاريخ للفلترة
+  Future<void> _pickDateRange() async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      initialDateRange: _startDate != null && _endDate != null
+          ? DateTimeRange(start: _startDate!, end: _endDate!)
+          : null,
+    );
+
+    if (picked != null) {
+      setState(() {
+        _startDate = picked.start;
+        _endDate = picked.end;
+      });
+      _applyDateFilter();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // قراءة الرصيد بأمان
-    final double balance = ((_currentContact['balance_syr'] ?? _currentContact['balance'] ?? 0.0) as num).toDouble();
-
-    // تحديد حالة الحساب
-    String statusText = 'الحساب متزن';
-    Color statusColor = Colors.green;
-    IconData statusIcon = Icons.check_circle;
-
-    if (balance > 0) {
-      statusText = 'مدين (مطلوب منه)';
-      statusColor = Colors.red;
-      statusIcon = Icons.arrow_circle_up;
-    } else if (balance < 0) {
-      statusText = 'دائن (له في ذمتنا)';
-      statusColor = Colors.blue;
-      statusIcon = Icons.arrow_circle_down;
-    }
+    final double currentBalance = (_selectedContact?['balance'] as num?)?.toDouble() ?? 0.0;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_currentContact['name'] ?? 'تفاصيل الحساب'),
-        backgroundColor: const Color(0xFF0284C7),
+        title: const Text('كشف حساب وتفاصيل العميل'),
+        backgroundColor: const Color(0xFF5C6BC0),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadContactData,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // كرت ملخص الحساب
-                    Card(
-                      elevation: 3,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
+          : Column(
+              children: [
+                // 1. بطاقة العميل الحالية وحقل البحث المتقدم
+                Card(
+                  margin: const EdgeInsets.all(12),
+                  elevation: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const CircleAvatar(
-                                backgroundColor: Color(0xFF0284C7),
-                                child: Icon(Icons.person, color: Colors.white),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _selectedContact?['name'] ?? 'لم يتم تحديد عميل',
+                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    _selectedContact?['phone'] ?? 'بدون رقم هاتف',
+                                    style: const TextStyle(color: Colors.grey),
+                                  ),
+                                ],
                               ),
-                              title: Text(
-                                _currentContact['name'] ?? '',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                              ),
-                              subtitle: Text('الهاتف: ${_currentContact['phone'] ?? "غير محدد"}'),
                             ),
-                            const Divider(height: 20),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('الرصيد الحالي:', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      balance.abs().toStringAsFixed(2),
-                                      style: TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                        color: statusColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: statusColor.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(statusIcon, color: statusColor, size: 18),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        statusText,
-                                        style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                            ElevatedButton.icon(
+                              onPressed: _showAdvancedSearchDialog,
+                              icon: const Icon(Icons.search, size: 18),
+                              label: const Text('بحث عن عميل'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF5C6BC0),
+                                foregroundColor: Colors.white,
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-                    const Text(
-                      'سجل الفواتير والعمليات:',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // سجل الفواتير
-                    _contactInvoices.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 30),
-                            child: Center(
-                              child: Text(
-                                'لا توجد فواتير مسجلة لهذا الحساب حتى الآن',
-                                style: TextStyle(color: Colors.grey),
+                        const Divider(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('الرصيد الحالي:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                            Text(
+                              currentBalance.toStringAsFixed(2),
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: currentBalance >= 0 ? Colors.green : Colors.red,
                               ),
                             ),
-                          )
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _contactInvoices.length,
-                            itemBuilder: (context, index) {
-                              final invoice = _contactInvoices[index];
-                              final bool isSale = invoice['type'] == 'مبيعات';
-                              final double totalAmount = ((invoice['total_amount'] ?? 0.0) as num).toDouble();
-                              final double remainingAmount = ((invoice['remaining_amount'] ?? 0.0) as num).toDouble();
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
-                              return Card(
-                                margin: const EdgeInsets.symmetric(vertical: 4),
-                                child: ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: isSale ? Colors.green.shade100 : Colors.blue.shade100,
-                                    child: Icon(
-                                      isSale ? Icons.arrow_upward : Icons.arrow_downward,
-                                      color: isSale ? Colors.green : Colors.blue,
-                                    ),
-                                  ),
-                                  title: Text('${invoice['type']} - فاتورة رقم (${invoice['id']})'),
-                                  subtitle: Text(
-                                    'التاريخ: ${invoice['date'] != null ? invoice['date'].toString().split('T')[0] : ""}',
-                                  ),
-                                  trailing: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        totalAmount.toStringAsFixed(2),
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                      ),
-                                      if (remainingAmount > 0)
-                                        Text(
-                                          'متبقي: ${remainingAmount.toStringAsFixed(2)}',
-                                          style: const TextStyle(fontSize: 11, color: Colors.red),
-                                        ),
-                                    ],
+                // 2. زر كشف الحساب والفلترة حسب التاريخ
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _fetchAccountStatement,
+                        icon: const Icon(Icons.receipt_long),
+                        label: const Text('كشف حساب'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF5C6BC0),
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _pickDateRange,
+                        icon: const Icon(Icons.date_range),
+                        label: Text(
+                          _startDate == null ? 'فلترة بالتاريخ' : 'تصفية الفلترة',
+                        ),
+                      ),
+                      if (_startDate != null)
+                        IconButton(
+                          icon: const Icon(Icons.clear, color: Colors.red),
+                          onPressed: () {
+                            setState(() {
+                              _startDate = null;
+                              _endDate = null;
+                            });
+                            _applyDateFilter();
+                          },
+                        )
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // 3. قائمة كشف الحساب والتفاصيل
+                Expanded(
+                  child: _filteredStatement.isEmpty
+                      ? const Center(child: Text('لا توجد حركات تسوق أو صندوق لهذا العميل'))
+                      : ListView.builder(
+                          itemCount: _filteredStatement.length,
+                          itemBuilder: (context, index) {
+                            final item = _filteredStatement[index];
+                            final bool isInvoice = item['source'] == 'invoice';
+
+                            return Card(
+                              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: isInvoice ? Colors.blue.shade100 : Colors.amber.shade100,
+                                  child: Icon(
+                                    isInvoice ? Icons.article : Icons.account_balance_wallet,
+                                    color: isInvoice ? Colors.blue.shade900 : Colors.amber.shade900,
                                   ),
                                 ),
-                              );
-                            },
-                          ),
-                  ],
+                                title: Text(
+                                  item['title'],
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: Text(
+                                  'التاريخ: ${item['date']} ${item['notes'] != null && item['notes'].toString().isNotEmpty ? '\nملاحظة: ${item['notes']}' : ''}',
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      (item['amount'] as double).toStringAsFixed(2),
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    if (!isInvoice)
+                                      IconButton(
+                                        icon: const Icon(Icons.edit, color: Colors.indigo, size: 20),
+                                        onPressed: () => _editCashTransactionDialog(item),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                 ),
-              ),
+              ],
             ),
     );
   }

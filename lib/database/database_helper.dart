@@ -25,17 +25,15 @@ class DatabaseHelper {
   }
 
   Future<void> _createDB(Database db, int version) async {
-    // جدول المنتجات
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         price REAL NOT NULL,
-        quantity INTEGER NOT NULL DEFAULT 0
+        quantity REAL NOT NULL DEFAULT 0
       )
     ''');
 
-    // جدول جهات الاتصال (العملاء والموردين)
     await db.execute('''
       CREATE TABLE contacts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,7 +43,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول حركات الصندوق
     await db.execute('''
       CREATE TABLE cash_transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,7 +56,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول الفواتير
     await db.execute('''
       CREATE TABLE invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,12 +69,21 @@ class DatabaseHelper {
   }
 
   // ==========================================
-  // 1. دوال المنتجات (Products)
+  // 1. المنتجات (Products)
   // ==========================================
 
-  Future<int> insertProduct(Map<String, dynamic> row) async {
+  Future<int> insertProduct({
+    required String name,
+    required double price,
+    dynamic quantity,
+  }) async {
     final db = await instance.database;
-    return await db.insert('products', row);
+    final double qty = (quantity is num) ? quantity.toDouble() : double.tryParse(quantity.toString()) ?? 0.0;
+    return await db.insert('products', {
+      'name': name,
+      'price': price,
+      'quantity': qty,
+    });
   }
 
   Future<List<Map<String, dynamic>>> getProducts() async {
@@ -87,7 +92,7 @@ class DatabaseHelper {
   }
 
   // ==========================================
-  // 2. دوال جهات الاتصال (Contacts)
+  // 2. جهات الاتصال (Contacts)
   // ==========================================
 
   Future<List<Map<String, dynamic>>> getContacts() async {
@@ -95,7 +100,8 @@ class DatabaseHelper {
     return await db.query('contacts');
   }
 
-  Future<int> updateContactBalance(int contactId, double adjustment) async {
+  Future<int> updateContactBalance(int? contactId, double adjustment) async {
+    if (contactId == null) return 0;
     final db = await instance.database;
     return await db.rawUpdate(
       'UPDATE contacts SET balance = balance + ? WHERE id = ?',
@@ -104,12 +110,26 @@ class DatabaseHelper {
   }
 
   // ==========================================
-  // 3. دوال حركات الصندوق (Cash Transactions)
+  // 3. حركات الصندوق (Cash Transactions)
   // ==========================================
 
-  Future<int> addCashTransaction(Map<String, dynamic> row) async {
+  Future<int> addCashTransaction({
+    int? contactId,
+    required String contactName,
+    required String type,
+    required double amount,
+    String? notes,
+    required String date,
+  }) async {
     final db = await instance.database;
-    return await db.insert('cash_transactions', row);
+    return await db.insert('cash_transactions', {
+      'contact_id': contactId,
+      'contact_name': contactName,
+      'type': type,
+      'amount': amount,
+      'notes': notes,
+      'date': date,
+    });
   }
 
   Future<List<Map<String, dynamic>>> getDailyTransactions(String date) async {
@@ -122,12 +142,24 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> updateCashTransaction(Map<String, dynamic> row) async {
+  Future<int> updateCashTransaction({
+    required int id,
+    int? contactId,
+    required String contactName,
+    required String type,
+    required double amount,
+    String? notes,
+  }) async {
     final db = await instance.database;
-    final id = row['id'];
     return await db.update(
       'cash_transactions',
-      row,
+      {
+        'contact_id': contactId,
+        'contact_name': contactName,
+        'type': type,
+        'amount': amount,
+        'notes': notes,
+      },
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -143,17 +175,23 @@ class DatabaseHelper {
   }
 
   // ==========================================
-  // 4. دوال الفواتير (Invoices)
+  // 4. الفواتير (Invoices)
   // ==========================================
 
-  Future<int> addInvoice(Map<String, dynamic> row) async {
+  Future<int> addInvoice({
+    int? contactId,
+    required String contactName,
+    required double totalAmount,
+    required String date,
+  }) async {
     final db = await instance.database;
-    return await db.insert('invoices', row);
+    return await db.insert('invoices', {
+      'contact_id': contactId,
+      'contact_name': contactName,
+      'total_amount': totalAmount,
+      'date': date,
+    });
   }
-
-  // ==========================================
-  // إغلاق قاعدة البيانات
-  // ==========================================
 
   Future<void> close() async {
     final db = await instance.database;

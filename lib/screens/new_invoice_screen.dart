@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
 
 class NewInvoiceScreen extends StatefulWidget {
-  final String type;
-
-  const NewInvoiceScreen({Key? key, this.type = 'sale'}) : super(key: key);
+  const NewInvoiceScreen({Key? key}) : super(key: key);
 
   @override
   State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();
@@ -13,90 +11,165 @@ class NewInvoiceScreen extends StatefulWidget {
 class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  int? _selectedContactId;
-  String _selectedContactName = 'عميل عام';
-  final TextEditingController _contactSearchController = TextEditingController();
-  final TextEditingController _itemSearchController = TextEditingController();
-
   List<Map<String, dynamic>> _contacts = [];
   List<Map<String, dynamic>> _products = [];
-  List<Map<String, dynamic>> _invoiceItems = [];
 
-  double _discount = 0.0;
-  double _paidAmount = 0.0;
+  int? _selectedContactId;
+  String? _selectedContactName;
+
+  // قائمة المواد المضافة للفاتورة
+  final List<Map<String, dynamic>> _invoiceItems = [];
+
   bool _isLoading = true;
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    _loadData();
   }
 
-  Future<void> _loadInitialData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadData() async {
     final contactsData = await DatabaseHelper.instance.getContacts();
     final productsData = await DatabaseHelper.instance.getProducts();
 
     setState(() {
-      _contacts = List<Map<String, dynamic>>.from(contactsData);
-      _products = List<Map<String, dynamic>>.from(productsData);
+      _contacts = contactsData;
+      _products = productsData;
       _isLoading = false;
     });
   }
 
-  void _addItemToInvoice(Map<String, dynamic> product) {
-    final existingIndex = _invoiceItems.indexWhere((item) => item['id'] == product['id']);
-    
-    // استخراج السعر بأسماء حقول مخصصة تمنع ظهور null
-    final double rawPrice = widget.type == 'sale'
-        ? ((product['retail_price'] ?? product['sell_price'] ?? product['price'] ?? 0) as num).toDouble()
-        : ((product['cost_price'] ?? product['buy_price'] ?? product['price'] ?? 0) as num).toDouble();
-
-    setState(() {
-      if (existingIndex >= 0) {
-        _invoiceItems[existingIndex]['quantity'] += 1;
-      } else {
-        _invoiceItems.add({
-          'id': product['id'],
-          'name': product['name'],
-          'price': rawPrice,
-          'quantity': 1,
-        });
-      }
+  // حساب الإجمالي الكلي للفاتورة
+  double get _totalAmount {
+    return _invoiceItems.fold(0.0, (sum, item) {
+      final double price = (item['price'] as num?)?.toDouble() ?? 0.0;
+      final double qty = (item['quantity'] as num?)?.toDouble() ?? 0.0;
+      return sum + (price * qty);
     });
-    _itemSearchController.clear();
   }
 
-  double get _subtotal {
-    return _invoiceItems.fold(0.0, (sum, item) => sum + (item['price'] * item['quantity']));
-  }
+  // نافذة اختيار المادة وتحديد السعر والكمية
+  void _showAddItemDialog() {
+    Map<String, dynamic>? selectedProduct;
+    final priceController = TextEditingController();
+    final quantityController = TextEditingController(text: '1');
 
-  double get _total {
-    final result = _subtotal - _discount;
-    return result < 0 ? 0 : result;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('إضافة مادة للفاتورة'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<Map<String, dynamic>>(
+                      decoration: const InputDecoration(
+                        labelText: 'اختر المادة',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _products.map((prod) {
+                        return DropdownMenuItem<Map<String, dynamic>>(
+                          value: prod,
+                          child: Text(prod['name'] ?? ''),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          selectedProduct = val;
+                          if (val != null) {
+                            priceController.text = (val['price'] ?? 0.0).toString();
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: priceController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'السعر (يمكنك تعديله)',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.attach_money),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: quantityController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'الكمية (تقبل فواصل مثل 1.5)',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.edit_note),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('إلغاء'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (selectedProduct == null) return;
+
+                    final double price = double.tryParse(priceController.text.trim()) ?? 0.0;
+                    final double quantity = double.tryParse(quantityController.text.trim()) ?? 0.0;
+
+                    if (quantity <= 0) return;
+
+                    setState(() {
+                      _invoiceItems.add({
+                        'product_id': selectedProduct!['id'],
+                        'name': selectedProduct!['name'],
+                        'price': price,
+                        'quantity': quantity,
+                      });
+                    });
+
+                    Navigator.pop(context);
+                  },
+                  child: const Text('إضافة'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _saveInvoice() async {
     if (_invoiceItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يرجى إضافة مادة واحدة على الأقل للفاتورة')),
+        const SnackBar(content: Text('يرجى إضافة مادة واحدة على الأقل')),
       );
       return;
     }
 
-    final String formattedDate = DateTime.now().toString().split(' ')[0];
+    setState(() => _isSaving = true);
 
-    await DatabaseHelper.instance.addInvoice(
-      type: widget.type,
-      contactId: _selectedContactId,
-      contactName: _selectedContactName,
-      items: _invoiceItems,
-      subtotal: _subtotal,
-      discount: _discount,
-      total: _total,
-      paid: _paidAmount,
-      date: formattedDate,
-    );
+    final Map<String, dynamic> invoiceData = {
+      'contact_id': _selectedContactId,
+      'contact_name': _selectedContactName ?? 'عام / غير محدد',
+      'total_amount': _totalAmount,
+      'date': DateTime.now().toString().split(' ')[0],
+    };
+
+    // الاستدُعاء يمرر Map لتفادي خطأ Too few positional arguments
+    await DatabaseHelper.instance.addInvoice(invoiceData);
+
+    // إذا كان للعميل حساب، يتم تحديث رصيده المالي
+    if (_selectedContactId != null) {
+      await DatabaseHelper.instance.updateContactBalance(_selectedContactId, _totalAmount);
+    }
+
+    setState(() => _isSaving = false);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -107,345 +180,136 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   }
 
   @override
-  void dispose() {
-    _contactSearchController.dispose();
-    _itemSearchController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final isSale = widget.type == 'sale';
-
     return Scaffold(
       appBar: AppBar(
-        title: Text(isSale ? 'فاتورة مبيعات جديدة' : 'فاتورة مشتريات جديدة'),
-        backgroundColor: isSale ? const Color(0xFF0284C7) : const Color(0xFF059669),
+        title: const Text('فاتورة جديدة'),
+        backgroundColor: const Color(0xFF5C6BC0),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  DropdownButtonFormField<int>(
+                    decoration: const InputDecoration(
+                      labelText: 'اختر الحساب / العميل (اختياري)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                    value: _selectedContactId,
+                    items: _contacts.map((c) {
+                      return DropdownMenuItem<int>(
+                        value: c['id'] as int,
+                        child: Text(c['name'] ?? ''),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        _selectedContactId = val;
+                        _selectedContactName = _contacts.firstWhere(
+                          (element) => element['id'] == val,
+                          orElse: () => {'name': 'عام / غير محدد'},
+                        )['name'];
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'مواد الفاتورة:',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: _showAddItemDialog,
+                        icon: const Icon(Icons.add),
+                        label: const Text('إضافة مادة'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF5C6BC0),
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: _invoiceItems.isEmpty
+                        ? const Center(child: Text('لا توجد مواد مضافة بعد'))
+                        : ListView.builder(
+                            itemCount: _invoiceItems.length,
+                            itemBuilder: (context, index) {
+                              final item = _invoiceItems[index];
+                              final double subtotal = (item['price'] as double) * (item['quantity'] as double);
+
+                              return Card(
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                child: ListTile(
+                                  title: Text(item['name']),
+                                  subtitle: Text('الكمية: ${item['quantity']} × السعر: ${item['price']}'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        subtotal.toStringAsFixed(2),
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red),
+                                        onPressed: () {
+                                          setState(() {
+                                            _invoiceItems.removeAt(index);
+                                          });
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  const Divider(thickness: 2),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: RawAutocomplete<Map<String, dynamic>>(
-                              textEditingController: _contactSearchController,
-                              focusNode: FocusNode(),
-                              optionsBuilder: (TextEditingValue textEditingValue) {
-                                final List<Map<String, dynamic>> allOptions = [
-                                  {'id': null, 'name': isSale ? 'عميل عام' : 'مورد عام'},
-                                  ..._contacts,
-                                ];
-                                if (textEditingValue.text.isEmpty) return allOptions;
-                                return allOptions.where((option) {
-                                  final name = option['name'].toString().toLowerCase();
-                                  return name.contains(textEditingValue.text.toLowerCase());
-                                });
-                              },
-                              displayStringForOption: (option) => option['name'] ?? '',
-                              onSelected: (selection) {
-                                setState(() {
-                                  _selectedContactId = selection['id'];
-                                  _selectedContactName = selection['name'] ?? (isSale ? 'عميل عام' : 'مورد عام');
-                                });
-                              },
-                              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                                return TextField(
-                                  controller: controller,
-                                  focusNode: focusNode,
-                                  decoration: InputDecoration(
-                                    labelText: isSale ? 'اسم العميل' : 'اسم المورد',
-                                    prefixIcon: const Icon(Icons.person),
-                                    suffixIcon: controller.text.isNotEmpty
-                                        ? IconButton(
-                                            icon: const Icon(Icons.clear),
-                                            onPressed: () {
-                                              controller.clear();
-                                              setState(() {
-                                                _selectedContactId = null;
-                                                _selectedContactName = isSale ? 'عميل عام' : 'مورد عام';
-                                              });
-                                            },
-                                          )
-                                        : null,
-                                    border: const OutlineInputBorder(),
-                                  ),
-                                );
-                              },
-                              optionsViewBuilder: (context, onSelected, options) {
-                                return Align(
-                                  alignment: Alignment.topLeft,
-                                  child: Material(
-                                    elevation: 4.0,
-                                    child: Container(
-                                      constraints: const BoxConstraints(maxHeight: 200),
-                                      width: MediaQuery.of(context).size.width - 56,
-                                      child: ListView.separated(
-                                        padding: EdgeInsets.zero,
-                                        shrinkWrap: true,
-                                        itemCount: options.length,
-                                        separatorBuilder: (context, index) => const Divider(height: 1),
-                                        itemBuilder: (context, index) {
-                                          final option = options.elementAt(index);
-                                          return ListTile(
-                                            title: Text(option['name'] ?? ''),
-                                            onTap: () => onSelected(option),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: RawAutocomplete<Map<String, dynamic>>(
-                              textEditingController: _itemSearchController,
-                              focusNode: FocusNode(),
-                              optionsBuilder: (TextEditingValue textEditingValue) {
-                                if (textEditingValue.text.isEmpty) return const [];
-                                return _products.where((product) {
-                                  final name = product['name'].toString().toLowerCase();
-                                  return name.contains(textEditingValue.text.toLowerCase());
-                                });
-                              },
-                              displayStringForOption: (option) => option['name'] ?? '',
-                              onSelected: (selection) => _addItemToInvoice(selection),
-                              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                                return TextField(
-                                  controller: controller,
-                                  focusNode: focusNode,
-                                  decoration: const InputDecoration(
-                                    labelText: 'ابحث عن مادة لإضافتها...',
-                                    prefixIcon: Icon(Icons.search),
-                                    border: OutlineInputBorder(),
-                                  ),
-                                );
-                              },
-                              optionsViewBuilder: (context, onSelected, options) {
-                                return Align(
-                                  alignment: Alignment.topLeft,
-                                  child: Material(
-                                    elevation: 4.0,
-                                    child: Container(
-                                      constraints: const BoxConstraints(maxHeight: 200),
-                                      width: MediaQuery.of(context).size.width - 56,
-                                      child: ListView.separated(
-                                        padding: EdgeInsets.zero,
-                                        shrinkWrap: true,
-                                        itemCount: options.length,
-                                        separatorBuilder: (context, index) => const Divider(height: 1),
-                                        itemBuilder: (context, index) {
-                                          final option = options.elementAt(index);
-                                          final price = isSale
-                                              ? (option['retail_price'] ?? option['sell_price'] ?? option['price'] ?? 0)
-                                              : (option['cost_price'] ?? option['buy_price'] ?? option['price'] ?? 0);
-                                          return ListTile(
-                                            title: Text(option['name'] ?? ''),
-                                            subtitle: Text('السعر: $price'),
-                                            onTap: () => onSelected(option),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
                         const Text(
-                          'مواد الفاتورة:',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          'الإجمالي الكلي:',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(height: 8),
-
-                        _invoiceItems.isEmpty
-                            ? const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 24.0),
-                                child: Center(child: Text('لم يتم إضافة أي مادة بعد')),
-                              )
-                            : ListView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: _invoiceItems.length,
-                                itemBuilder: (context, index) {
-                                  final item = _invoiceItems[index];
-                                  final double itemTotal = item['price'] * item['quantity'];
-
-                                  return Card(
-                                    margin: const EdgeInsets.symmetric(vertical: 4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(8.0),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            flex: 3,
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  item['name'],
-                                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                                ),
-                                                Text('السعر: ${item['price']}'),
-                                              ],
-                                            ),
-                                          ),
-                                          Row(
-                                            children: [
-                                              IconButton(
-                                                icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-                                                onPressed: () {
-                                                  setState(() {
-                                                    if (item['quantity'] > 1) {
-                                                      item['quantity']--;
-                                                    } else {
-                                                      _invoiceItems.removeAt(index);
-                                                    }
-                                                  });
-                                                },
-                                              ),
-                                              Text('${item['quantity']}', style: const TextStyle(fontSize: 16)),
-                                              IconButton(
-                                                icon: const Icon(Icons.add_circle_outline, color: Colors.green),
-                                                onPressed: () {
-                                                  setState(() {
-                                                    item['quantity']++;
-                                                  });
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                          Expanded(
-                                            flex: 2,
-                                            child: Text(
-                                              itemTotal.toStringAsFixed(2),
-                                              textAlign: TextAlign.end,
-                                              style: const TextStyle(fontWeight: FontWeight.bold),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
+                        Text(
+                          _totalAmount.toStringAsFixed(2),
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF5C6BC0),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ),
-
-                Container(
-                  padding: const EdgeInsets.all(16.0),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, -4),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF5C6BC0),
                       ),
-                    ],
+                      onPressed: _isSaving ? null : _saveInvoice,
+                      child: _isSaving
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text(
+                              'حفظ الفاتورة',
+                              style: TextStyle(color: Colors.white, fontSize: 16),
+                            ),
+                    ),
                   ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('المجموع الفرعي:'),
-                          Text(
-                            _subtotal.toStringAsFixed(2),
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(
-                                labelText: 'الخصم',
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              onChanged: (val) {
-                                setState(() {
-                                  _discount = double.tryParse(val) ?? 0.0;
-                                });
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(
-                                labelText: 'المبلغ المدفوع',
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              onChanged: (val) {
-                                setState(() {
-                                  _paidAmount = double.tryParse(val) ?? 0.0;
-                                });
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('الإجمالي النهائي:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          Text(
-                            _total.toStringAsFixed(2),
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: isSale ? const Color(0xFF0284C7) : const Color(0xFF059669),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: isSale ? const Color(0xFF0284C7) : const Color(0xFF059669),
-                          ),
-                          onPressed: _saveInvoice,
-                          child: const Text('حفظ الفاتورة', style: TextStyle(fontSize: 16, color: Colors.white)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
     );
   }

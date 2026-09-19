@@ -4,7 +4,7 @@ import '../database/database_helper.dart';
 class NewInvoiceScreen extends StatefulWidget {
   final String type; // 'sale' أو 'purchase'
 
-  // جعل المعامل اختياري مع قيمة افتراضية لمنع أخطاء التجميع عند الاستدعاء
+  // قيمة افتراضية للمعامل لمنع أخطاء التجميع
   const NewInvoiceScreen({Key? key, this.type = 'sale'}) : super(key: key);
 
   @override
@@ -33,14 +33,15 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     _loadInitialData();
   }
 
+  // تحميل البيانات وتحويل القوائم بأمان دون استخدام toMap()
   Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
     final contactsData = await DatabaseHelper.instance.getContacts();
     final productsData = await DatabaseHelper.instance.getProducts();
 
     setState(() {
-      _contacts = contactsData.map((c) => c.toMap()).toList();
-      _products = productsData.map((p) => p.toMap()).toList();
+      _contacts = List<Map<String, dynamic>>.from(contactsData);
+      _products = List<Map<String, dynamic>>.from(productsData);
       _isLoading = false;
     });
   }
@@ -272,7 +273,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // جدول/قائمة المواد المضافة
+                        // قائمة المواد المضافة
                         const Text(
                           'مواد الفاتورة:',
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -311,7 +312,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                               ],
                                             ),
                                           ),
-                                          // تحكم الكمية
                                           Row(
                                             children: [
                                               IconButton(
@@ -340,7 +340,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                           Expanded(
                                             flex: 2,
                                             child: Text(
-                                              '${itemTotal.toStringAsFixed(2)}',
+                                              itemTotal.toStringAsFixed(2),
                                               textAlign: TextAlign.end,
                                               style: const TextStyle(fontWeight: FontWeight.bold),
                                             ),
@@ -356,7 +356,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                 ),
 
-                // شريط الحسابات والسداد في الأسفل
+                // شريط المبالغ الإجمالية وحفظ الفاتورة
                 Container(
                   padding: const EdgeInsets.all(16.0),
                   decoration: BoxDecoration(

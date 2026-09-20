@@ -86,7 +86,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               content: SizedBox(
                 width: double.maxFinite,
                 child: Column(
-                  mainAxisSize: MinAxisSize.min,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     TextField(
                       decoration: const InputDecoration(
@@ -164,7 +164,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               title: const Text('إضافة مادة للفاتورة'),
               content: SingleChildScrollView(
                 child: Column(
-                  mainAxisSize: MinAxisSize.min,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     if (selectedProduct == null) ...[
                       TextField(

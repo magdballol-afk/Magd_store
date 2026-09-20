@@ -335,7 +335,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       setState(() {
                         _invoiceItems.add({
                           'product_id': selectedProduct!['id'],
-                          'product_name': selectedProduct!['name'],
+                          'product_name': selectedProduct!['name'] ?? 'مادة',
                           'unit_price': price,
                           'quantity': qty,
                           'discount': disc,
@@ -396,9 +396,10 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           await db.insert('invoice_items', {
             'invoice_id': invId,
             'product_id': item['product_id'],
+            'product_name': item['product_name'] ?? item['name'] ?? 'مادة', // تم إضافة الحقل المقيد بشرط NOT NULL
             'unit_price': item['unit_price'],
             'quantity': item['quantity'],
-            'discount': item['discount'],
+            'discount': item['discount'] ?? 0.0,
             'total': item['total'],
           });
         }

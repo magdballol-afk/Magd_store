@@ -3,8 +3,9 @@ import '../database/database_helper.dart';
 
 class NewInvoiceScreen extends StatefulWidget {
   final String? type;
+  final int? invoiceId;
 
-  const NewInvoiceScreen({Key? key, this.type}) : super(key: key);
+  const NewInvoiceScreen({Key? key, this.type, this.invoiceId}) : super(key: key);
 
   @override
   State<NewInvoiceScreen> createState() => _NewInvoiceScreenState();
@@ -85,7 +86,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               content: SizedBox(
                 width: double.maxFinite,
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize: MinAxisSize.min,
                   children: [
                     TextField(
                       decoration: const InputDecoration(
@@ -163,7 +164,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               title: const Text('إضافة مادة للفاتورة'),
               content: SingleChildScrollView(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize: MinAxisSize.min,
                   children: [
                     if (selectedProduct == null) ...[
                       TextField(

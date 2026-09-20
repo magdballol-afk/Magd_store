@@ -44,7 +44,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       _products = productsData;
     });
 
-    // إذا كان الزر مضغوطاً لعرض/تعديل فاتورة قائمة
     if (widget.invoiceId != null) {
       await _loadInvoiceDetails(widget.invoiceId!);
     } else {
@@ -54,11 +53,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     }
   }
 
-  // دالة قراءة وتعبئة بيانات الفاتورة المحددة دون تغيير باقي الأجزاء
   Future<void> _loadInvoiceDetails(int invoiceId) async {
     final db = await DatabaseHelper.instance.database;
 
-    // 1. جلب بيانات رأس الفاتورة
     final invoiceResult = await db.query(
       'invoices',
       where: 'id = ?',
@@ -76,7 +73,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       _invoiceDiscountController.text = (invoice['discount'] ?? 0.0).toString();
       _paidAmountController.text = (invoice['paid_amount'] ?? 0.0).toString();
 
-      // تحديد اسم العميل
       if (_selectedContactId != null) {
         final contactMatch = _contacts.firstWhere(
           (c) => c['id'] == _selectedContactId,
@@ -91,7 +87,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         _selectedContactName = invoice['contact_name']?.toString() ?? 'عام / غير محدد';
       }
 
-      // 2. جلب بنود الفاتورة مع التحويل الآمن للأنواع
       final itemsResult = await db.rawQuery('''
         SELECT ii.*, p.name AS product_name
         FROM invoice_items ii
@@ -122,7 +117,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     });
   }
 
-  // حساب المجموع الفرعي للمواد قبل الحسم الكلي
   double get _subtotal {
     return _invoiceItems.fold(0.0, (sum, item) {
       final total = double.tryParse((item['total'] ?? 0.0).toString()) ?? 0.0;
@@ -130,23 +124,19 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     });
   }
 
-  // الحسم العام على الفاتورة
   double get _overallDiscount {
     return double.tryParse(_invoiceDiscountController.text.trim()) ?? 0.0;
   }
 
-  // الصافي النهائي للفاتورة
   double get _finalTotal {
     final double total = _subtotal - _overallDiscount;
     return total < 0 ? 0.0 : total;
   }
 
-  // الدفعة المسددة
   double get _paidAmount {
     return double.tryParse(_paidAmountController.text.trim()) ?? 0.0;
   }
 
-  // 1. بحث متقدم عن العميل
   void _showContactSearchDialog() {
     showDialog(
       context: context,
@@ -222,7 +212,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     );
   }
 
-  // 2. بحث متقدم وإضافة مادة للفاتورة
   void _showAddItemDialog() {
     Map<String, dynamic>? selectedProduct;
     final priceController = TextEditingController();
@@ -360,7 +349,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     );
   }
 
-  // حفظ أو تحديث الفاتورة بالكامل
+  // حفظ أو تحديث الفاتورة
   Future<void> _saveInvoice() async {
     if (_invoiceItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -371,23 +360,68 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
     setState(() => _isSaving = true);
 
-    await DatabaseHelper.instance.addFullInvoice(
-      contactId: _selectedContactId,
-      contactName: _selectedContactName,
-      type: _invoiceType,
-      subtotal: _subtotal,
-      discount: _overallDiscount,
-      totalAmount: _finalTotal,
-      paidAmount: _paidAmount,
-      items: _invoiceItems,
-      date: DateTime.now().toString().split(' ')[0],
-    );
+    final db = await DatabaseHelper.instance.database;
+
+    // إذا كانت الفاتورة معروضة للتعديل
+    if (widget.invoiceId != null) {
+      final int invId = widget.invoiceId!;
+
+      // 1. تحديث جدول الفواتير الرئيسية بنفس الـ ID
+      await db.update(
+        'invoices',
+        {
+          'contact_id': _selectedContactId,
+          'contact_name': _selectedContactName,
+          'type': _invoiceType,
+          'subtotal': _subtotal,
+          'discount': _overallDiscount,
+          'total': _finalTotal,
+          'paid_amount': _paidAmount,
+          'remaining_amount': _finalTotal - _paidAmount,
+        },
+        where: 'id = ?',
+        whereArgs: [invId],
+      );
+
+      // 2. حذف بنود الفاتورة القديمة وإعادة إضافة البنود المعدلة
+      await db.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invId]);
+
+      for (var item in _invoiceItems) {
+        await db.insert('invoice_items', {
+          'invoice_id': invId,
+          'product_id': item['product_id'],
+          'unit_price': item['unit_price'],
+          'quantity': item['quantity'],
+          'discount': item['discount'],
+          'total': item['total'],
+        });
+      }
+    } else {
+      // إذا كانت فاتورة جديدة كلياً
+      await DatabaseHelper.instance.addFullInvoice(
+        contactId: _selectedContactId,
+        contactName: _selectedContactName,
+        type: _invoiceType,
+        subtotal: _subtotal,
+        discount: _overallDiscount,
+        totalAmount: _finalTotal,
+        paidAmount: _paidAmount,
+        items: _invoiceItems,
+        date: DateTime.now().toString().split(' ')[0],
+      );
+    }
 
     setState(() => _isSaving = false);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حفظ الفاتورة وتحديث الحسابات والصندوق بنجاح')),
+        SnackBar(
+          content: Text(
+            widget.invoiceId != null
+                ? 'تم تحديث الفاتورة بنجاح'
+                : 'تم حفظ الفاتورة وتحديث الحسابات والصندوق بنجاح',
+          ),
+        ),
       );
       Navigator.pop(context, true);
     }
@@ -401,7 +435,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       appBar: AppBar(
         title: Text(
           isEditing
-              ? 'تفاصيل فاتورة #${widget.invoiceId}'
+              ? 'تعديل فاتورة #${widget.invoiceId}'
               : (_invoiceType == 'purchase' ? 'فاتورة شراء جديدة' : 'فاتورة مبيعات جديدة'),
         ),
         backgroundColor: const Color(0xFF5C6BC0),
@@ -412,7 +446,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               padding: const EdgeInsets.all(12.0),
               child: Column(
                 children: [
-                  // 1. تحديد نوع الفاتورة (مبيعات / مشتريات)
                   SegmentedButton<String>(
                     segments: const [
                       ButtonSegment(value: 'sale', label: Text('فاتورة مبيعات'), icon: Icon(Icons.sell)),
@@ -425,7 +458,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // 2. حقل اختيار العميل (بحث متقدم)
                   InkWell(
                     onTap: _showContactSearchDialog,
                     child: InputDecorator(
@@ -442,7 +474,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // 3. رأس قائمة المواد مع زر إضافة مادة
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -460,7 +491,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                   const SizedBox(height: 6),
 
-                  // 4. عرض المواد المضافة
                   Expanded(
                     child: _invoiceItems.isEmpty
                         ? const Center(child: Text('لم يتم إضافة مواد بعد'))
@@ -498,7 +528,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
                   const Divider(thickness: 2),
 
-                  // 5. الحسم الإجمالي والدفعة النقدية
                   Row(
                     children: [
                       Expanded(
@@ -530,7 +559,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                   const SizedBox(height: 10),
 
-                  // 6. ملخص المبالغ المالية
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -550,7 +578,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                   const SizedBox(height: 10),
 
-                  // 7. زر حفظ الفاتورة
                   SizedBox(
                     width: double.infinity,
                     height: 48,

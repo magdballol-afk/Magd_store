@@ -20,8 +20,9 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -60,7 +61,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // 4. جدول الفواتير
+    // 4. جدول الفواتير (يحتوي على total و total_amount و remaining_amount لمنع أي تعارض)
     await db.execute('''
       CREATE TABLE invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,8 +70,10 @@ class DatabaseHelper {
         type TEXT NOT NULL,
         subtotal REAL NOT NULL,
         discount REAL NOT NULL,
-        total_amount REAL NOT NULL,
-        paid_amount REAL NOT NULL,
+        total REAL NOT NULL DEFAULT 0.0,
+        total_amount REAL NOT NULL DEFAULT 0.0,
+        paid_amount REAL NOT NULL DEFAULT 0.0,
+        remaining_amount REAL NOT NULL DEFAULT 0.0,
         date TEXT NOT NULL,
         FOREIGN KEY (contact_id) REFERENCES contacts (id) ON DELETE SET NULL
       )
@@ -93,6 +96,18 @@ class DatabaseHelper {
     ''');
   }
 
+  // معالجة التحديث الهيكلي لقواعد البيانات القائمة
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      try {
+        await db.execute('ALTER TABLE invoices ADD COLUMN total REAL DEFAULT 0.0');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE invoices ADD COLUMN remaining_amount REAL DEFAULT 0.0');
+      } catch (_) {}
+    }
+  }
+
   // ==========================================
   //  قسم إدارة العملاء (Contacts)
   // ==========================================
@@ -107,7 +122,6 @@ class DatabaseHelper {
     return await db.insert('contacts', row);
   }
 
-  // السماح بـ contactId كـ int? لمنع أخطاء Null Safety
   Future<int> updateContactBalance(int? contactId, double adjustmentAmount) async {
     if (contactId == null) return 0;
     final db = await instance.database;
@@ -142,7 +156,6 @@ class DatabaseHelper {
     );
   }
 
-  // استعلام حركة المادة عبر جلب عناصر الفواتير المرتبطة بها
   Future<List<Map<String, dynamic>>> getProductMovements(dynamic productId) async {
     if (productId == null) return [];
     final db = await instance.database;
@@ -220,15 +233,19 @@ class DatabaseHelper {
     final db = await instance.database;
 
     await db.transaction((txn) async {
-      // 1. إدراج رأس الفاتورة
+      final double remaining = totalAmount - paidAmount;
+
+      // 1. إدراج رأس الفاتورة مع تدعيم total و total_amount و remaining_amount
       final invoiceId = await txn.insert('invoices', {
         'contact_id': contactId,
         'contact_name': contactName,
         'type': type,
         'subtotal': subtotal,
         'discount': discount,
+        'total': totalAmount,
         'total_amount': totalAmount,
         'paid_amount': paidAmount,
+        'remaining_amount': remaining,
         'date': date,
       });
 
@@ -257,7 +274,6 @@ class DatabaseHelper {
       }
 
       // 3. تعديل رصيد العميل حسب المتبقي غير المسدد
-      double remaining = totalAmount - paidAmount;
       if (contactId != null && remaining != 0) {
         double balanceAdjustment = (type == 'sale') ? remaining : -remaining;
         await txn.rawUpdate('''
@@ -282,6 +298,118 @@ class DatabaseHelper {
           'notes': notes,
           'date': date,
         });
+      }
+    });
+  }
+
+  // ==========================================
+  //  دالة تعديل الفاتورة بالكامل وتحديث الأرصدة والكميات
+  // ==========================================
+
+  Future<void> updateFullInvoice({
+    required int invoiceId,
+    required int? contactId,
+    required String contactName,
+    required String type,
+    required double subtotal,
+    required double discount,
+    required double totalAmount,
+    required double paidAmount,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    final db = await instance.database;
+
+    await db.transaction((txn) async {
+      // 1. جلب بيانات الفاتورة القديمة للربط وإلغاء تأثيرها
+      final oldInvoiceList = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+      if (oldInvoiceList.isEmpty) return;
+
+      final oldInvoice = oldInvoiceList.first;
+      final String oldType = (oldInvoice['type'] ?? 'sale').toString();
+      final int? oldContactId = oldInvoice['contact_id'] as int?;
+      final double oldTotal = double.tryParse((oldInvoice['total_amount'] ?? oldInvoice['total'] ?? 0.0).toString()) ?? 0.0;
+      final double oldPaid = double.tryParse((oldInvoice['paid_amount'] ?? 0.0).toString()) ?? 0.0;
+      final double oldRemaining = oldTotal - oldPaid;
+
+      // إلغاء تأثير رصيد العميل القديم
+      if (oldContactId != null && oldRemaining != 0) {
+        double reverseAdjustment = (oldType == 'sale') ? -oldRemaining : oldRemaining;
+        await txn.rawUpdate('''
+          UPDATE contacts 
+          SET balance = balance + ? 
+          WHERE id = ?
+        ''', [reverseAdjustment, oldContactId]);
+      }
+
+      // إلغاء كميات عناصر الفاتورة القديمة من المخزن
+      final oldItems = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+      for (var item in oldItems) {
+        final int? prodId = item['product_id'] as int?;
+        final double qty = double.tryParse((item['quantity'] ?? 0.0).toString()) ?? 0.0;
+        if (prodId != null) {
+          double reverseQty = (oldType == 'sale') ? qty : -qty;
+          await txn.rawUpdate('''
+            UPDATE products 
+            SET quantity = quantity + ? 
+            WHERE id = ?
+          ''', [reverseQty, prodId]);
+        }
+      }
+
+      // 2. تحديث بيانات الفاتورة الرئيسية بنفس الـ ID
+      final double remaining = totalAmount - paidAmount;
+      await txn.update(
+        'invoices',
+        {
+          'contact_id': contactId,
+          'contact_name': contactName,
+          'type': type,
+          'subtotal': subtotal,
+          'discount': discount,
+          'total': totalAmount,
+          'total_amount': totalAmount,
+          'paid_amount': paidAmount,
+          'remaining_amount': remaining,
+        },
+        where: 'id = ?',
+        whereArgs: [invoiceId],
+      );
+
+      // 3. مسح بنود الفاتورة القديمة وإضافة البنود المحدثة مع ضبط الكميات الجديدة
+      await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+
+      for (var item in items) {
+        final int? prodId = item['product_id'] as int?;
+        final double qty = double.tryParse((item['quantity'] ?? 0.0).toString()) ?? 0.0;
+
+        await txn.insert('invoice_items', {
+          'invoice_id': invoiceId,
+          'product_id': prodId,
+          'product_name': item['product_name'] ?? 'مادة',
+          'unit_price': item['unit_price'],
+          'quantity': qty,
+          'discount': item['discount'] ?? 0.0,
+          'total': item['total'],
+        });
+
+        if (prodId != null) {
+          double newQtyChange = (type == 'sale') ? -qty : qty;
+          await txn.rawUpdate('''
+            UPDATE products 
+            SET quantity = quantity + ? 
+            WHERE id = ?
+          ''', [newQtyChange, prodId]);
+        }
+      }
+
+      // 4. تطبيق تأثير رصيد العميل الجديد بناءً على المبلغ المتبقي الجديد
+      if (contactId != null && remaining != 0) {
+        double newBalanceAdjustment = (type == 'sale') ? remaining : -remaining;
+        await txn.rawUpdate('''
+          UPDATE contacts 
+          SET balance = balance + ? 
+          WHERE id = ?
+        ''', [newBalanceAdjustment, contactId]);
       }
     });
   }

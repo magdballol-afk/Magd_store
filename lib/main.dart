@@ -55,7 +55,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         onTap: (index) {
           setState(() => _selectedIndex = index);
           if (index == 1) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const InvoicesScreen()));
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const InvoicesListScreen()));
           } else if (index == 2) {
             Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductsScreen()));
           } else if (index == 3) {

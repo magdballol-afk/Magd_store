@@ -107,7 +107,9 @@ class DatabaseHelper {
     return await db.insert('contacts', row);
   }
 
-  Future<int> updateContactBalance(int contactId, double adjustmentAmount) async {
+  // السماح بـ contactId كـ int? لمنع أخطاء Null Safety
+  Future<int> updateContactBalance(int? contactId, double adjustmentAmount) async {
+    if (contactId == null) return 0;
     final db = await instance.database;
     return await db.rawUpdate('''
       UPDATE contacts 
@@ -123,6 +125,43 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getProducts() async {
     final db = await instance.database;
     return await db.query('products', orderBy: 'name ASC');
+  }
+
+  Future<int> insertProduct(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    return await db.insert('products', row);
+  }
+
+  Future<int> updateProduct(int id, Map<String, dynamic> row) async {
+    final db = await instance.database;
+    return await db.update(
+      'products',
+      row,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // استعلام حركة المادة عبر جلب عناصر الفواتير المرتبطة بها
+  Future<List<Map<String, dynamic>>> getProductMovements(dynamic productId) async {
+    if (productId == null) return [];
+    final db = await instance.database;
+    final id = productId is int ? productId : int.tryParse(productId.toString());
+    if (id == null) return [];
+
+    return await db.rawQuery('''
+      SELECT 
+        i.date,
+        i.type,
+        i.contact_name,
+        ii.quantity,
+        ii.unit_price,
+        ii.total
+      FROM invoice_items ii
+      INNER JOIN invoices i ON ii.invoice_id = i.id
+      WHERE ii.product_id = ?
+      ORDER BY i.date DESC, i.id DESC
+    ''', [id]);
   }
 
   // ==========================================
@@ -170,7 +209,7 @@ class DatabaseHelper {
   Future<void> addFullInvoice({
     required int? contactId,
     required String contactName,
-    required String type, // 'sale' أو 'purchase'
+    required String type,
     required double subtotal,
     required double discount,
     required double totalAmount,
@@ -201,11 +240,10 @@ class DatabaseHelper {
           'product_name': item['product_name'],
           'unit_price': item['unit_price'],
           'quantity': item['quantity'],
-          'discount': item['discount'],
+          'discount': item['discount'] ?? 0.0,
           'total': item['total'],
         });
 
-        // تعديل كمية المادة: خصم في المبيعات، وإضافة في المشتريات
         double qtyChange = (item['quantity'] as num).toDouble();
         if (type == 'sale') {
           qtyChange = -qtyChange;
@@ -221,7 +259,6 @@ class DatabaseHelper {
       // 3. تعديل رصيد العميل حسب المتبقي غير المسدد
       double remaining = totalAmount - paidAmount;
       if (contactId != null && remaining != 0) {
-        // في البيع: المتبقي يضاف على العميل (+), في الشراء: المتبقي يخصم/يدان به (-)
         double balanceAdjustment = (type == 'sale') ? remaining : -remaining;
         await txn.rawUpdate('''
           UPDATE contacts 
@@ -230,7 +267,7 @@ class DatabaseHelper {
         ''', [balanceAdjustment, contactId]);
       }
 
-      // 4. تسجيل الدفعة المسددة نقداً في حركة الصندوق تلقائياً
+      // 4. تسجيل الدفعة المسددة نقداً في حركة الصندوق
       if (paidAmount > 0) {
         String cashType = (type == 'sale') ? 'income' : 'expense';
         String notes = (type == 'sale')

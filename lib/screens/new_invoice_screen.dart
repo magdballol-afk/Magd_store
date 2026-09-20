@@ -367,42 +367,19 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     setState(() => _isSaving = true);
 
     try {
-      final db = await DatabaseHelper.instance.database;
-
       if (widget.invoiceId != null) {
-        final int invId = widget.invoiceId!;
-
-        // 1. تحديث بيانات الفاتورة الرئيسية
-        await db.update(
-          'invoices',
-          {
-            'contact_id': _selectedContactId,
-            'contact_name': _selectedContactName,
-            'type': _invoiceType,
-            'subtotal': _subtotal,
-            'discount': _overallDiscount,
-            'total': _finalTotal,
-            'paid_amount': _paidAmount,
-            'remaining_amount': _finalTotal - _paidAmount,
-          },
-          where: 'id = ?',
-          whereArgs: [invId],
+        // تحديث الفاتورة عبر دالة المعاملات المالية الشاملة لخصم الدفعة وتعديل أرصدة الحسابات والصندوق
+        await DatabaseHelper.instance.updateFullInvoice(
+          invoiceId: widget.invoiceId!,
+          contactId: _selectedContactId,
+          contactName: _selectedContactName,
+          type: _invoiceType,
+          subtotal: _subtotal,
+          discount: _overallDiscount,
+          totalAmount: _finalTotal,
+          paidAmount: _paidAmount,
+          items: _invoiceItems,
         );
-
-        // 2. تحديث بنود الفاتورة
-        await db.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invId]);
-
-        for (var item in _invoiceItems) {
-          await db.insert('invoice_items', {
-            'invoice_id': invId,
-            'product_id': item['product_id'],
-            'product_name': item['product_name'] ?? item['name'] ?? 'مادة', // تم إضافة الحقل المقيد بشرط NOT NULL
-            'unit_price': item['unit_price'],
-            'quantity': item['quantity'],
-            'discount': item['discount'] ?? 0.0,
-            'total': item['total'],
-          });
-        }
       } else {
         await DatabaseHelper.instance.addFullInvoice(
           contactId: _selectedContactId,
@@ -422,7 +399,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           SnackBar(
             content: Text(
               widget.invoiceId != null
-                  ? 'تم تحديث الفاتورة بنجاح'
+                  ? 'تم تحديث الفاتورة وتعديل الأرصدة والصندوق بنجاح'
                   : 'تم حفظ الفاتورة وتحديث الحسابات والصندوق بنجاح',
             ),
           ),

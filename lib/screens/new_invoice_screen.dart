@@ -36,20 +36,26 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   }
 
   Future<void> _loadData() async {
-    final contactsData = await DatabaseHelper.instance.getContacts();
-    final productsData = await DatabaseHelper.instance.getProducts();
+    try {
+      final contactsData = await DatabaseHelper.instance.getContacts();
+      final productsData = await DatabaseHelper.instance.getProducts();
 
-    setState(() {
-      _contacts = contactsData;
-      _products = productsData;
-    });
-
-    if (widget.invoiceId != null) {
-      await _loadInvoiceDetails(widget.invoiceId!);
-    } else {
       setState(() {
-        _isLoading = false;
+        _contacts = contactsData;
+        _products = productsData;
       });
+
+      if (widget.invoiceId != null) {
+        await _loadInvoiceDetails(widget.invoiceId!);
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -349,7 +355,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     );
   }
 
-  // حفظ أو تحديث الفاتورة
+  // حفظ أو تحديث الفاتورة مع معالجة آمنة للاستثناءات
   Future<void> _saveInvoice() async {
     if (_invoiceItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -360,70 +366,78 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
     setState(() => _isSaving = true);
 
-    final db = await DatabaseHelper.instance.database;
+    try {
+      final db = await DatabaseHelper.instance.database;
 
-    // إذا كانت الفاتورة معروضة للتعديل
-    if (widget.invoiceId != null) {
-      final int invId = widget.invoiceId!;
+      if (widget.invoiceId != null) {
+        final int invId = widget.invoiceId!;
 
-      // 1. تحديث جدول الفواتير الرئيسية بنفس الـ ID
-      await db.update(
-        'invoices',
-        {
-          'contact_id': _selectedContactId,
-          'contact_name': _selectedContactName,
-          'type': _invoiceType,
-          'subtotal': _subtotal,
-          'discount': _overallDiscount,
-          'total': _finalTotal,
-          'paid_amount': _paidAmount,
-          'remaining_amount': _finalTotal - _paidAmount,
-        },
-        where: 'id = ?',
-        whereArgs: [invId],
-      );
+        // 1. تحديث بيانات الفاتورة الرئيسية
+        await db.update(
+          'invoices',
+          {
+            'contact_id': _selectedContactId,
+            'contact_name': _selectedContactName,
+            'type': _invoiceType,
+            'subtotal': _subtotal,
+            'discount': _overallDiscount,
+            'total': _finalTotal,
+            'paid_amount': _paidAmount,
+            'remaining_amount': _finalTotal - _paidAmount,
+          },
+          where: 'id = ?',
+          whereArgs: [invId],
+        );
 
-      // 2. حذف بنود الفاتورة القديمة وإعادة إضافة البنود المعدلة
-      await db.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invId]);
+        // 2. تحديث بنود الفاتورة
+        await db.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invId]);
 
-      for (var item in _invoiceItems) {
-        await db.insert('invoice_items', {
-          'invoice_id': invId,
-          'product_id': item['product_id'],
-          'unit_price': item['unit_price'],
-          'quantity': item['quantity'],
-          'discount': item['discount'],
-          'total': item['total'],
-        });
+        for (var item in _invoiceItems) {
+          await db.insert('invoice_items', {
+            'invoice_id': invId,
+            'product_id': item['product_id'],
+            'unit_price': item['unit_price'],
+            'quantity': item['quantity'],
+            'discount': item['discount'],
+            'total': item['total'],
+          });
+        }
+      } else {
+        await DatabaseHelper.instance.addFullInvoice(
+          contactId: _selectedContactId,
+          contactName: _selectedContactName,
+          type: _invoiceType,
+          subtotal: _subtotal,
+          discount: _overallDiscount,
+          totalAmount: _finalTotal,
+          paidAmount: _paidAmount,
+          items: _invoiceItems,
+          date: DateTime.now().toString().split(' ')[0],
+        );
       }
-    } else {
-      // إذا كانت فاتورة جديدة كلياً
-      await DatabaseHelper.instance.addFullInvoice(
-        contactId: _selectedContactId,
-        contactName: _selectedContactName,
-        type: _invoiceType,
-        subtotal: _subtotal,
-        discount: _overallDiscount,
-        totalAmount: _finalTotal,
-        paidAmount: _paidAmount,
-        items: _invoiceItems,
-        date: DateTime.now().toString().split(' ')[0],
-      );
-    }
 
-    setState(() => _isSaving = false);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.invoiceId != null
-                ? 'تم تحديث الفاتورة بنجاح'
-                : 'تم حفظ الفاتورة وتحديث الحسابات والصندوق بنجاح',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.invoiceId != null
+                  ? 'تم تحديث الفاتورة بنجاح'
+                  : 'تم حفظ الفاتورة وتحديث الحسابات والصندوق بنجاح',
+            ),
           ),
-        ),
-      );
-      Navigator.pop(context, true);
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ أثناء تنفيذ العملية: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 

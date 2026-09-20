@@ -44,7 +44,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       _products = productsData;
     });
 
-    // إذا تم إرسال معرّف فاتورة (إظهار/تعديل فاتورة موجودة)
+    // إذا كان الزر مضغوطاً لعرض/تعديل فاتورة قائمة
     if (widget.invoiceId != null) {
       await _loadInvoiceDetails(widget.invoiceId!);
     } else {
@@ -54,7 +54,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     }
   }
 
-  // دالة جلب وقراءة بيانات الفاتورة المحددة
+  // دالة قراءة وتعبئة بيانات الفاتورة المحددة دون تغيير باقي الأجزاء
   Future<void> _loadInvoiceDetails(int invoiceId) async {
     final db = await DatabaseHelper.instance.database;
 
@@ -69,7 +69,10 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       final invoice = invoiceResult.first;
 
       _invoiceType = (invoice['type'] ?? 'sale').toString();
-      _selectedContactId = invoice['contact_id'] as int?;
+      _selectedContactId = invoice['contact_id'] != null
+          ? (invoice['contact_id'] as num).toInt()
+          : null;
+
       _invoiceDiscountController.text = (invoice['discount'] ?? 0.0).toString();
       _paidAmountController.text = (invoice['paid_amount'] ?? 0.0).toString();
 
@@ -80,7 +83,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           orElse: () => {},
         );
         if (contactMatch.isNotEmpty) {
-          _selectedContactName = contactMatch['name'] ?? 'عام / غير محدد';
+          _selectedContactName = contactMatch['name']?.toString() ?? 'عام / غير محدد';
         } else {
           _selectedContactName = invoice['contact_name']?.toString() ?? 'عام / غير محدد';
         }
@@ -88,7 +91,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         _selectedContactName = invoice['contact_name']?.toString() ?? 'عام / غير محدد';
       }
 
-      // 2. جلب بنود وعناصر الفاتورة
+      // 2. جلب بنود الفاتورة مع التحويل الآمن للأنواع
       final itemsResult = await db.rawQuery('''
         SELECT ii.*, p.name AS product_name
         FROM invoice_items ii
@@ -98,13 +101,18 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
       _invoiceItems.clear();
       for (var item in itemsResult) {
+        final unitPrice = double.tryParse((item['unit_price'] ?? 0.0).toString()) ?? 0.0;
+        final quantity = double.tryParse((item['quantity'] ?? 0.0).toString()) ?? 0.0;
+        final discount = double.tryParse((item['discount'] ?? 0.0).toString()) ?? 0.0;
+        final total = double.tryParse((item['total'] ?? 0.0).toString()) ?? 0.0;
+
         _invoiceItems.add({
           'product_id': item['product_id'],
           'product_name': item['product_name'] ?? item['item_name'] ?? 'مادة',
-          'unit_price': (item['unit_price'] ?? 0.0).toDouble(),
-          'quantity': (item['quantity'] ?? 0.0).toDouble(),
-          'discount': (item['discount'] ?? 0.0).toDouble(),
-          'total': (item['total'] ?? 0.0).toDouble(),
+          'unit_price': unitPrice,
+          'quantity': quantity,
+          'discount': discount,
+          'total': total,
         });
       }
     }
@@ -116,7 +124,10 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
   // حساب المجموع الفرعي للمواد قبل الحسم الكلي
   double get _subtotal {
-    return _invoiceItems.fold(0.0, (sum, item) => sum + (item['total'] as double));
+    return _invoiceItems.fold(0.0, (sum, item) {
+      final total = double.tryParse((item['total'] ?? 0.0).toString()) ?? 0.0;
+      return sum + total;
+    });
   }
 
   // الحسم العام على الفاتورة

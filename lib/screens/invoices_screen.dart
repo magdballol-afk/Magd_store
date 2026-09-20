@@ -26,10 +26,8 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
     setState(() => _isLoading = true);
     final db = await DatabaseHelper.instance.database;
 
-    // تنسيق التاريخ للبحث في قاعدة البيانات (YYYY-MM-DD)
     final String formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
-    // استعلام الفواتير مع اسم العميل
     String query = '''
       SELECT i.*, c.name AS contact_name 
       FROM invoices i
@@ -60,16 +58,6 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF0288D1),
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
 
     if (picked != null && picked != _selectedDate) {
@@ -80,15 +68,17 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
     }
   }
 
-  void _openInvoiceDetails(int invoiceId) async {
+  void _openInvoice({int? invoiceId, String? type}) async {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => NewInvoiceScreen(invoiceId: invoiceId),
+        builder: (context) => NewInvoiceScreen(
+          invoiceId: invoiceId,
+          type: type,
+        ),
       ),
     );
 
-    // إعادة تحميل البيانات بعد تعديل الفاتورة لتعديل الأرصدة والقائمة
     if (result == true || result == null) {
       _loadInvoices();
     }
@@ -106,13 +96,11 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
       ),
       body: Column(
         children: [
-          // قسم الفلترة حسب التاريخ والنوع
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.grey[100],
             child: Column(
               children: [
-                // اختيار التاريخ
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -133,16 +121,10 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
                       onPressed: _pickDate,
                       icon: const Icon(Icons.edit_calendar, size: 18),
                       label: const Text('تغيير'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF0288D1),
-                        side: const BorderSide(color: Color(0xFF0288D1)),
-                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
-
-                // فلترة نوع الفاتورة
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -195,8 +177,6 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
               ],
             ),
           ),
-
-          // قائمة الفواتير
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -217,94 +197,47 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
 
                           return Card(
                             margin: const EdgeInsets.only(bottom: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
                             elevation: 2,
                             child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
                               leading: CircleAvatar(
                                 backgroundColor: isSale
                                     ? Colors.green.withOpacity(0.15)
                                     : Colors.orange.withOpacity(0.15),
                                 child: Icon(
-                                  isSale
-                                      ? Icons.arrow_upward
-                                      : Icons.arrow_downward,
+                                  isSale ? Icons.arrow_upward : Icons.arrow_downward,
                                   color: isSale ? Colors.green : Colors.orange[800],
                                 ),
                               ),
                               title: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     'فاتورة #${inv['id']}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isSale
-                                          ? Colors.green[50]
-                                          : Colors.orange[50],
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                        color: isSale
-                                            ? Colors.green
-                                            : Colors.orange,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      isSale ? 'مبيعات' : 'مشتريات',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: isSale
-                                            ? Colors.green[800]
-                                            : Colors.orange[800],
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                  Text(
+                                    isSale ? 'مبيعات' : 'مشتريات',
+                                    style: TextStyle(
+                                      color: isSale ? Colors.green[800] : Colors.orange[800],
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ],
                               ),
-                              subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Column(
-                                  crossAxisAlignment: CrossAlignment.start,
-                                  children: [
-                                    Text(
-                                      'الحساب: ${inv['contact_name'] ?? 'بدون حساب'}',
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'الإجمالي: $total',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: isSale
-                                            ? Colors.green[800]
-                                            : Colors.orange[800],
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('الحساب: ${inv['contact_name'] ?? 'بدون حساب'}'),
+                                  Text(
+                                    'الإجمالي: $total',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ],
                               ),
-                              trailing: const Icon(
-                                Icons.chevron_right,
-                                color: Colors.grey,
+                              onTap: () => _openInvoice(
+                                invoiceId: inv['id'] as int?,
+                                type: inv['type'] as String?,
                               ),
-                              onTap: () => _openInvoiceDetails(inv['id']),
                             ),
                           );
                         },
@@ -313,17 +246,7 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const NewInvoiceScreen(),
-            ),
-          );
-          if (result == true) {
-            _loadInvoices();
-          }
-        },
+        onPressed: () => _openInvoice(),
         backgroundColor: const Color(0xFF0288D1),
         child: const Icon(Icons.add),
       ),

@@ -42,6 +42,74 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     setState(() {
       _contacts = contactsData;
       _products = productsData;
+    });
+
+    // إذا تم إرسال معرّف فاتورة (إظهار/تعديل فاتورة موجودة)
+    if (widget.invoiceId != null) {
+      await _loadInvoiceDetails(widget.invoiceId!);
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // دالة جلب وقراءة بيانات الفاتورة المحددة
+  Future<void> _loadInvoiceDetails(int invoiceId) async {
+    final db = await DatabaseHelper.instance.database;
+
+    // 1. جلب بيانات رأس الفاتورة
+    final invoiceResult = await db.query(
+      'invoices',
+      where: 'id = ?',
+      whereArgs: [invoiceId],
+    );
+
+    if (invoiceResult.isNotEmpty) {
+      final invoice = invoiceResult.first;
+
+      _invoiceType = (invoice['type'] ?? 'sale').toString();
+      _selectedContactId = invoice['contact_id'] as int?;
+      _invoiceDiscountController.text = (invoice['discount'] ?? 0.0).toString();
+      _paidAmountController.text = (invoice['paid_amount'] ?? 0.0).toString();
+
+      // تحديد اسم العميل
+      if (_selectedContactId != null) {
+        final contactMatch = _contacts.firstWhere(
+          (c) => c['id'] == _selectedContactId,
+          orElse: () => {},
+        );
+        if (contactMatch.isNotEmpty) {
+          _selectedContactName = contactMatch['name'] ?? 'عام / غير محدد';
+        } else {
+          _selectedContactName = invoice['contact_name']?.toString() ?? 'عام / غير محدد';
+        }
+      } else {
+        _selectedContactName = invoice['contact_name']?.toString() ?? 'عام / غير محدد';
+      }
+
+      // 2. جلب بنود وعناصر الفاتورة
+      final itemsResult = await db.rawQuery('''
+        SELECT ii.*, p.name AS product_name
+        FROM invoice_items ii
+        LEFT JOIN products p ON ii.product_id = p.id
+        WHERE ii.invoice_id = ?
+      ''', [invoiceId]);
+
+      _invoiceItems.clear();
+      for (var item in itemsResult) {
+        _invoiceItems.add({
+          'product_id': item['product_id'],
+          'product_name': item['product_name'] ?? item['item_name'] ?? 'مادة',
+          'unit_price': (item['unit_price'] ?? 0.0).toDouble(),
+          'quantity': (item['quantity'] ?? 0.0).toDouble(),
+          'discount': (item['discount'] ?? 0.0).toDouble(),
+          'total': (item['total'] ?? 0.0).toDouble(),
+        });
+      }
+    }
+
+    setState(() {
       _isLoading = false;
     });
   }
@@ -281,7 +349,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     );
   }
 
-  // حفظ الفاتورة بالكامل
+  // حفظ أو تحديث الفاتورة بالكامل
   Future<void> _saveInvoice() async {
     if (_invoiceItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -316,9 +384,15 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isEditing = widget.invoiceId != null;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_invoiceType == 'purchase' ? 'فاتورة شراء جديدة' : 'فاتورة مبيعات جديدة'),
+        title: Text(
+          isEditing
+              ? 'تفاصيل فاتورة #${widget.invoiceId}'
+              : (_invoiceType == 'purchase' ? 'فاتورة شراء جديدة' : 'فاتورة مبيعات جديدة'),
+        ),
         backgroundColor: const Color(0xFF5C6BC0),
       ),
       body: _isLoading
@@ -386,7 +460,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                               return Card(
                                 margin: const EdgeInsets.symmetric(vertical: 4),
                                 child: ListTile(
-                                  title: Text(item['product_name']),
+                                  title: Text(item['product_name'] ?? 'مادة'),
                                   subtitle: Text(
                                     'الكمية: ${item['quantity']} × السعر: ${item['unit_price']} ${item['discount'] > 0 ? '| حسم: ${item['discount']}' : ''}',
                                   ),
@@ -474,7 +548,10 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       onPressed: _isSaving ? null : _saveInvoice,
                       child: _isSaving
                           ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text('حفظ الفاتورة', style: TextStyle(color: Colors.white, fontSize: 16)),
+                          : Text(
+                              isEditing ? 'تحديث الفاتورة' : 'حفظ الفاتورة',
+                              style: const TextStyle(color: Colors.white, fontSize: 16),
+                            ),
                     ),
                   ),
                 ],

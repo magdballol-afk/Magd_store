@@ -1,11 +1,11 @@
-Name: pro
+name: pro
 description: "A new Flutter project."
 publish_to: 'none'
 
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.0.0
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -33,7 +33,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # مسار ملفات وصور الموارد في التطبيق
+  # مسار الموارد والصور
   assets:
-    - assets/
     - assets/background.png

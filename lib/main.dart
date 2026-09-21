@@ -44,7 +44,10 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
-        title: const Text('إدارة المبيعات والمستودع', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'إدارة المبيعات والمستودع',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         centerTitle: true,
         elevation: 0,
         backgroundColor: const Color(0xFF0277BD),
@@ -81,109 +84,87 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // كرت الذكاء الاصطناعي Top Banner
+          // ==========================================
+          // صورة البانر العلوية مع حواف عصرية وجهات قص منحنية
+          // ==========================================
           Container(
-            padding: const EdgeInsets.all(16),
+            width: double.infinity,
+            height: 140,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0277BD), Color(0xFF00B0FF)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.auto_awesome, color: Colors.white, size: 28),
-                ),
-                const SizedBox(width: 12),
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('إدارة المبيعات والمستودع', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                    SizedBox(height: 4),
-                    Text('تحليلات الذكاء الاصطناعي اليومية', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                  ],
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.asset(
+                'assets/background.png',
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  // واجهة بديلة في حال لم يُعثر على صورة assets/background.png
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0277BD), Color(0xFF00B0FF)],
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.auto_awesome, color: Colors.white, size: 28),
+                        ),
+                        const SizedBox(width: 12),
+                        const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'إدارة المبيعات والمستودع',
+                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'تحليلات الذكاء الاصطناعي اليومية',
+                              style: TextStyle(color: Colors.white70, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
-          /*
           // ==========================================
-          // كروت الإحصائيات الاربعة (معطلة مؤقتاً)
+          // قسم إجراءات سريعة (الأزرار الظاهرة في الصورة)
           // ==========================================
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatCard(
-                  title: 'إحصائيات المبيعات ال...',
-                  value: '33',
-                  badgeText: 'مبيعات اليوم',
-                  badgeColor: Colors.green.shade50,
-                  badgeTextColor: Colors.green,
-                  icon: Icons.trending_up,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildStatCard(
-                  title: 'المخزون الحالي',
-                  value: '10 قطعة',
-                  badgeText: 'المخزون ممتاز',
-                  badgeColor: Colors.green.shade50,
-                  badgeTextColor: Colors.green,
-                  icon: Icons.assignment_outlined,
-                ),
-              ),
-            ],
+          const Text(
+            'إجراءات سريعة',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
           ),
-          const SizedBox(height: 12),
-
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatCard(
-                  title: 'فواتير اليوم',
-                  value: '4 فاتورة',
-                  badgeText: 'عمليات اليوم',
-                  badgeColor: Colors.blue.shade50,
-                  badgeTextColor: Colors.blue,
-                  icon: Icons.receipt_outlined,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildStatCard(
-                  title: 'حسابات العملاء',
-                  value: '-21',
-                  badgeText: 'إجمالي الأرصدة',
-                  badgeColor: Colors.purple.shade50,
-                  badgeTextColor: Colors.purple,
-                  icon: Icons.group_outlined,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          */
-
-          // قسم إجراءات سريعة Quick Actions
-          const Text('إجراءات سريعة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 2.2,
+            mainAxisSpacing: 14,
+            crossAxisSpacing: 14,
+            childAspectRatio: 2.1,
             children: [
               _buildActionButton(
                 title: '+ إضافة منتج',
@@ -199,7 +180,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInvoiceScreen(type: 'sale')));
                 },
               ),
-              // تفعيل زر حركة الصندوق المكتمل
               _buildActionButton(
                 title: 'حركة صندوق',
                 icon: Icons.account_balance_wallet_outlined,
@@ -223,50 +203,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  /*
-  // دالة بناء كرت الإحصائيات (معطلة مؤقتاً)
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required String badgeText,
-    required Color badgeColor,
-    required Color badgeTextColor,
-    required IconData icon,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-              Icon(icon, size: 18, color: Colors.grey.shade500),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: badgeColor,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(badgeText, style: TextStyle(color: badgeTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-  */
-
   Widget _buildActionButton({
     required String title,
     required Color color,
@@ -275,23 +211,34 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.3),
+              blurRadius: 6,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (icon != null) ...[
-              Icon(icon, color: Colors.white, size: 20),
-              const SizedBox(width: 6),
+              Icon(icon, color: Colors.white, size: 22),
+              const SizedBox(width: 8),
             ],
             Text(
               title,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
             ),
           ],
         ),

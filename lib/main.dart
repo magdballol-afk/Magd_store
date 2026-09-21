@@ -114,7 +114,10 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // كروت الإحصائيات Top Stats Cards
+          /*
+          // ==========================================
+          // كروت الإحصائيات الاربعة (معطلة مؤقتاً)
+          // ==========================================
           Row(
             children: [
               Expanded(
@@ -168,6 +171,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             ],
           ),
           const SizedBox(height: 24),
+          */
 
           // قسم إجراءات سريعة Quick Actions
           const Text('إجراءات سريعة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -219,6 +223,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
+  /*
+  // دالة بناء كرت الإحصائيات (معطلة مؤقتاً)
   Widget _buildStatCard({
     required String title,
     required String value,
@@ -259,6 +265,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       ),
     );
   }
+  */
 
   Widget _buildActionButton({
     required String title,

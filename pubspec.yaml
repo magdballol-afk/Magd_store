@@ -1,4 +1,4 @@
-name: pro
+Name: pro
 description: "A new Flutter project."
 publish_to: 'none'
 
@@ -32,3 +32,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # مسار ملفات وصور الموارد في التطبيق
+  assets:
+    - assets/
+    - assets/background.png

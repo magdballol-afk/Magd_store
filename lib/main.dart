@@ -26,7 +26,7 @@ class MyApp extends StatelessWidget {
       title: 'إدارة المبيعات والمستودع',
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        fontFamily: 'Cairo', // أو الخط المستخدم لديك
+        fontFamily: 'Cairo',
       ),
       home: const MainHomeScreen(),
     );
@@ -204,7 +204,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           const SizedBox(height: 20),
 
           // ==========================================
-          // نشرة أسعار الصرف (3 حقول فقط)
+          // نشرة أسعار الصرف (تتحقق وتأخذ سعر البيع تلقائياً)
           // ==========================================
           const CurrencyRatesCard(),
         ],
@@ -257,7 +257,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 }
 
 // =======================================================
-// ويدجت نشرة أسعار الصرف بـ 3 حقول شاملة موقع الليرة اليوم
+// ويدجت نشرة أسعار الصرف مخصص لاستخراج سعر البيع حصراً
 // =======================================================
 class CurrencyRatesCard extends StatefulWidget {
   const CurrencyRatesCard({Key? key}) : super(key: key);
@@ -271,7 +271,7 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
   bool _isOfflineData = false;
   String _lastUpdated = 'غير محدّث';
 
-  double _sypRate = 13900; // USD / SYP (سعر مبيع الليرة السورية من الليرة اليوم)
+  double _sypRate = 13900; // USD / SYP (سعر مبيع الليرة السورية)
   double _tryRate = 34.20; // USD / TRY
   double _eurRate = 1.09;  // EUR / USD
 
@@ -305,7 +305,7 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
     bool sypFetched = false;
     bool globalFetched = false;
 
-    // 1. جلب سعر الليرة السورية من موقع الليرة اليوم (sp-today.com)
+    // 1. استخراج سعر البيع تلقائياً من موقع sp-today.com
     try {
       final spResponse = await http
           .get(
@@ -316,26 +316,34 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
 
       if (spResponse.statusCode == 200) {
         final html = spResponse.body;
-        // استخراج القيمة باستخدام RegExp للوصول لخانة مبيع الدولار
-        final RegExp regExp = RegExp(r'(\d{2,3}\.\d{2})\s*<\s*\/|\b(\d{2,3}\.\d{2})\b');
+        // البحث عن المطابقات التي تمثل القيم المالية
+        final RegExp regExp = RegExp(r'(\d{2,3}\.\d{2})');
         final matches = regExp.allMatches(html);
         
+        List<double> foundRates = [];
         for (var match in matches) {
-          String? valStr = match.group(1) ?? match.group(2);
+          String? valStr = match.group(1);
           if (valStr != null) {
             double? parsedVal = double.tryParse(valStr);
             if (parsedVal != null && parsedVal > 50 && parsedVal < 500) {
-              // تحويل القيمة الشائعة بالليرة اليوم (مثلاً 139.00 تعني 13900 ل.س)
-              _sypRate = parsedVal * 100;
-              sypFetched = true;
-              break;
+              foundRates.add(parsedVal * 100);
             }
           }
+        }
+
+        // في موقع الليرة اليوم، دائماً سعر البيع أكبر من سعر الشراء (مثال: البيع 13900 والشراء 13825)
+        if (foundRates.length >= 2) {
+          foundRates.sort(); // ترتيب القيم تصاعدياً
+          _sypRate = foundRates.last; // أخذ القيمة الأكبر تلقائياً (سعر البيع)
+          sypFetched = true;
+        } else if (foundRates.isNotEmpty) {
+          _sypRate = foundRates.first;
+          sypFetched = true;
         }
       }
     } catch (_) {}
 
-    // 2. جلب أسعار العملات العالمية (التركي واليورو)
+    // 2. جلب أسعار التركي واليورو
     try {
       final response = await http
           .get(Uri.parse('https://open.er-api.com/v6/latest/USD'))
@@ -445,10 +453,9 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
           ),
           const SizedBox(height: 12),
           
-          // صف يحتوي على 3 حقول بالضبط مثل الصورة
           Row(
             children: [
-              _buildCurrencyTile('USD / SYP', '${_sypRate.toStringAsFixed(0)} ل.س'),
+              _buildCurrencyTile('USD / SYP (مبيع)', '${_sypRate.toStringAsFixed(0)} ل.س'),
               const SizedBox(width: 8),
               _buildCurrencyTile('USD / TRY', '${_tryRate.toStringAsFixed(2)} ₺'),
               const SizedBox(width: 8),
@@ -475,7 +482,11 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
         ),
         child: Column(
           children: [
-            Text(title, style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+            Text(
+              title,
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 4),
             Text(
               value,

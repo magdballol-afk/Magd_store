@@ -89,7 +89,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ==========================================
-          // صورة البانر العلوية مع حواف عصرية وجهات قص منحنية
+          // صورة البانر العلوية مع حواف عصرية
           // ==========================================
           Container(
             width: double.infinity,
@@ -110,7 +110,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                 'assets/background.png',
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
-                  // واجهة بديلة في حال لم يُعثر على صورة assets/background.png
                   return Container(
                     padding: const EdgeInsets.all(16),
                     decoration: const BoxDecoration(
@@ -154,7 +153,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           const SizedBox(height: 20),
 
           // ==========================================
-          // قسم إجراءات سريعة (الأزرار الظاهرة في الصورة)
+          // قسم إجراءات سريعة
           // ==========================================
           const Text(
             'إجراءات سريعة',
@@ -205,7 +204,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           const SizedBox(height: 20),
 
           // ==========================================
-          // نشرة أسعار الصرف أسفل الأزرار بنفس انحناءات الحواف
+          // نشرة أسعار الصرف (3 حقول فقط)
           // ==========================================
           const CurrencyRatesCard(),
         ],
@@ -258,7 +257,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 }
 
 // =======================================================
-// ويدجت نشرة أسعار الصرف الآمن كلياً ضد انقطاع الشبكة
+// ويدجت نشرة أسعار الصرف بـ 3 حقول شاملة موقع الليرة اليوم
 // =======================================================
 class CurrencyRatesCard extends StatefulWidget {
   const CurrencyRatesCard({Key? key}) : super(key: key);
@@ -272,9 +271,9 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
   bool _isOfflineData = false;
   String _lastUpdated = 'غير محدّث';
 
+  double _sypRate = 13900; // USD / SYP (سعر مبيع الليرة السورية من الليرة اليوم)
   double _tryRate = 34.20; // USD / TRY
   double _eurRate = 1.09;  // EUR / USD
-  double _sarRate = 3.75;  // USD / SAR
 
   @override
   void initState() {
@@ -291,9 +290,9 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
     try {
       final prefs = await SharedPreferences.getInstance();
       setState(() {
+        _sypRate = prefs.getDouble('rate_syp') ?? 13900;
         _tryRate = prefs.getDouble('rate_try') ?? 34.20;
         _eurRate = prefs.getDouble('rate_eur') ?? 1.09;
-        _sarRate = prefs.getDouble('rate_sar') ?? 3.75;
         _lastUpdated = prefs.getString('rate_last_updated') ?? 'بيانات مخزنة سابقة';
       });
     } catch (_) {}
@@ -303,6 +302,40 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
+    bool sypFetched = false;
+    bool globalFetched = false;
+
+    // 1. جلب سعر الليرة السورية من موقع الليرة اليوم (sp-today.com)
+    try {
+      final spResponse = await http
+          .get(
+            Uri.parse('https://sp-today.com'),
+            headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'},
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (spResponse.statusCode == 200) {
+        final html = spResponse.body;
+        // استخراج القيمة باستخدام RegExp للوصول لخانة مبيع الدولار
+        final RegExp regExp = RegExp(r'(\d{2,3}\.\d{2})\s*<\s*\/|\b(\d{2,3}\.\d{2})\b');
+        final matches = regExp.allMatches(html);
+        
+        for (var match in matches) {
+          String? valStr = match.group(1) ?? match.group(2);
+          if (valStr != null) {
+            double? parsedVal = double.tryParse(valStr);
+            if (parsedVal != null && parsedVal > 50 && parsedVal < 500) {
+              // تحويل القيمة الشائعة بالليرة اليوم (مثلاً 139.00 تعني 13900 ل.س)
+              _sypRate = parsedVal * 100;
+              sypFetched = true;
+              break;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 2. جلب أسعار العملات العالمية (التركي واليورو)
     try {
       final response = await http
           .get(Uri.parse('https://open.er-api.com/v6/latest/USD'))
@@ -312,45 +345,27 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
         final data = json.decode(response.body);
         if (data['result'] == 'success') {
           final rates = data['rates'];
-          final double tryVal = (rates['TRY'] as num?)?.toDouble() ?? _tryRate;
-          final double eurVal = (rates['EUR'] as num?)?.toDouble() ?? _eurRate;
-          final double sarVal = (rates['SAR'] as num?)?.toDouble() ?? _sarRate;
-
-          final now = DateTime.now();
-          final formattedTime = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
-
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setDouble('rate_try', tryVal);
-          await prefs.setDouble('rate_eur', eurVal);
-          await prefs.setDouble('rate_sar', sarVal);
-          await prefs.setString('rate_last_updated', formattedTime);
-
-          if (mounted) {
-            setState(() {
-              _tryRate = tryVal;
-              _eurRate = eurVal;
-              _sarRate = sarVal;
-              _lastUpdated = formattedTime;
-              _isOfflineData = false;
-            });
-          }
+          _tryRate = (rates['TRY'] as num?)?.toDouble() ?? _tryRate;
+          _eurRate = (rates['EUR'] as num?)?.toDouble() ?? _eurRate;
+          globalFetched = true;
         }
-      } else {
-        _setOfflineState();
       }
-    } catch (_) {
-      _setOfflineState();
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
+    } catch (_) {}
 
-  void _setOfflineState() {
+    final now = DateTime.now();
+    final formattedTime = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('rate_syp', _sypRate);
+    await prefs.setDouble('rate_try', _tryRate);
+    await prefs.setDouble('rate_eur', _eurRate);
+    await prefs.setString('rate_last_updated', formattedTime);
+
     if (mounted) {
       setState(() {
-        _isOfflineData = true;
+        _lastUpdated = formattedTime;
+        _isOfflineData = !(sypFetched || globalFetched);
+        _isLoading = false;
       });
     }
   }
@@ -429,13 +444,15 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
             ],
           ),
           const SizedBox(height: 12),
+          
+          // صف يحتوي على 3 حقول بالضبط مثل الصورة
           Row(
             children: [
+              _buildCurrencyTile('USD / SYP', '${_sypRate.toStringAsFixed(0)} ل.س'),
+              const SizedBox(width: 8),
               _buildCurrencyTile('USD / TRY', '${_tryRate.toStringAsFixed(2)} ₺'),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               _buildCurrencyTile('EUR / USD', '\$${_eurRate.toStringAsFixed(2)}'),
-              const SizedBox(width: 10),
-              _buildCurrencyTile('USD / SAR', '${_sarRate.toStringAsFixed(2)} ر.س'),
             ],
           ),
           const SizedBox(height: 10),
@@ -451,7 +468,7 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
   Widget _buildCurrencyTile(String title, String value) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
         decoration: BoxDecoration(
           color: const Color(0xFFF4F6F9),
           borderRadius: BorderRadius.circular(12),
@@ -462,7 +479,7 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
             const SizedBox(height: 4),
             Text(
               value,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0277BD)),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0277BD)),
             ),
           ],
         ),

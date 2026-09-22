@@ -25,6 +25,10 @@ dependencies:
   url_launcher: ^6.2.5
   share_plus: ^7.2.1
 
+  # جلب أسعار الصرف والتخزين المؤقت
+  http: ^1.2.0
+  shared_preferences: ^2.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

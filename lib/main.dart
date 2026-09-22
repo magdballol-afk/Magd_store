@@ -1,4 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'screens/add_product_screen.dart';
 import 'screens/cash_journal_screen.dart';
 import 'screens/contacts_screen.dart';
@@ -109,8 +113,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                   // واجهة بديلة في حال لم يُعثر على صورة assets/background.png
                   return Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
                         colors: [Color(0xFF0277BD), Color(0xFF00B0FF)],
                       ),
                     ),
@@ -198,6 +202,12 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 20),
+
+          // ==========================================
+          // نشرة أسعار الصرف أسفل الأزرار بنفس انحناءات الحواف
+          // ==========================================
+          const CurrencyRatesCard(),
         ],
       ),
     );
@@ -239,6 +249,220 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                 fontWeight: FontWeight.bold,
                 fontSize: 15,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =======================================================
+// ويدجت نشرة أسعار الصرف الآمن كلياً ضد انقطاع الشبكة
+// =======================================================
+class CurrencyRatesCard extends StatefulWidget {
+  const CurrencyRatesCard({Key? key}) : super(key: key);
+
+  @override
+  State<CurrencyRatesCard> createState() => _CurrencyRatesCardState();
+}
+
+class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
+  bool _isLoading = false;
+  bool _isOfflineData = false;
+  String _lastUpdated = 'غير محدّث';
+
+  double _tryRate = 34.20; // USD / TRY
+  double _eurRate = 1.09;  // EUR / USD
+  double _sarRate = 3.75;  // USD / SAR
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStoredDataAndFetch();
+  }
+
+  Future<void> _loadStoredDataAndFetch() async {
+    await _loadFromLocal();
+    await _fetchRatesFromApi();
+  }
+
+  Future<void> _loadFromLocal() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _tryRate = prefs.getDouble('rate_try') ?? 34.20;
+        _eurRate = prefs.getDouble('rate_eur') ?? 1.09;
+        _sarRate = prefs.getDouble('rate_sar') ?? 3.75;
+        _lastUpdated = prefs.getString('rate_last_updated') ?? 'بيانات مخزنة سابقة';
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _fetchRatesFromApi() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await http
+          .get(Uri.parse('https://open.er-api.com/v6/latest/USD'))
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['result'] == 'success') {
+          final rates = data['rates'];
+          final double tryVal = (rates['TRY'] as num?)?.toDouble() ?? _tryRate;
+          final double eurVal = (rates['EUR'] as num?)?.toDouble() ?? _eurRate;
+          final double sarVal = (rates['SAR'] as num?)?.toDouble() ?? _sarRate;
+
+          final now = DateTime.now();
+          final formattedTime = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setDouble('rate_try', tryVal);
+          await prefs.setDouble('rate_eur', eurVal);
+          await prefs.setDouble('rate_sar', sarVal);
+          await prefs.setString('rate_last_updated', formattedTime);
+
+          if (mounted) {
+            setState(() {
+              _tryRate = tryVal;
+              _eurRate = eurVal;
+              _sarRate = sarVal;
+              _lastUpdated = formattedTime;
+              _isOfflineData = false;
+            });
+          }
+        }
+      } else {
+        _setOfflineState();
+      }
+    } catch (_) {
+      _setOfflineState();
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _setOfflineState() {
+    if (mounted) {
+      setState(() {
+        _isOfflineData = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0277BD).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.currency_exchange, color: Color(0xFF0277BD), size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'أسعار الصرف اللحظية',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  if (_isOfflineData)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      margin: const EdgeInsets.only(left: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.shade300),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.wifi_off, size: 12, color: Colors.amber),
+                          SizedBox(width: 4),
+                          Text('أوفلاين', style: TextStyle(fontSize: 11, color: Colors.amber)),
+                        ],
+                      ),
+                    ),
+                  IconButton(
+                    icon: _isLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh, size: 20, color: Colors.grey),
+                    onPressed: _isLoading ? null : _fetchRatesFromApi,
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildCurrencyTile('USD / TRY', '${_tryRate.toStringAsFixed(2)} ₺'),
+              const SizedBox(width: 10),
+              _buildCurrencyTile('EUR / USD', '\$${_eurRate.toStringAsFixed(2)}'),
+              const SizedBox(width: 10),
+              _buildCurrencyTile('USD / SAR', '${_sarRate.toStringAsFixed(2)} ر.س'),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'آخر تحديث: $_lastUpdated',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCurrencyTile(String title, String value) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F6F9),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Text(title, style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0277BD)),
             ),
           ],
         ),

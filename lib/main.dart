@@ -89,7 +89,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ==========================================
-          // صورة البانر العلوية مع حواف عصرية
+          // صورة البانر العلوية
           // ==========================================
           Container(
             width: double.infinity,
@@ -204,7 +204,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           const SizedBox(height: 20),
 
           // ==========================================
-          // نشرة أسعار الصرف (تتحقق وتأخذ سعر البيع تلقائياً)
+          // نشرة أسعار الصرف الدقيقة بدون تقريب
           // ==========================================
           const CurrencyRatesCard(),
         ],
@@ -257,7 +257,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 }
 
 // =======================================================
-// ويدجت نشرة أسعار الصرف مخصص لاستخراج سعر البيع حصراً
+// ويدجت نشرة أسعار الصرف المطابق لموقع الليرة اليوم بالضبط
 // =======================================================
 class CurrencyRatesCard extends StatefulWidget {
   const CurrencyRatesCard({Key? key}) : super(key: key);
@@ -271,9 +271,9 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
   bool _isOfflineData = false;
   String _lastUpdated = 'غير محدّث';
 
-  double _sypRate = 13900; // USD / SYP (سعر مبيع الليرة السورية)
-  double _tryRate = 34.20; // USD / TRY
-  double _eurRate = 1.09;  // EUR / USD
+  String _sypSellRateText = '13,900'; // القيمة الدقيقة المأخوذة نصياً من الموقع
+  double _tryRate = 34.20;
+  double _eurRate = 1.09;
 
   @override
   void initState() {
@@ -290,7 +290,7 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
     try {
       final prefs = await SharedPreferences.getInstance();
       setState(() {
-        _sypRate = prefs.getDouble('rate_syp') ?? 13900;
+        _sypSellRateText = prefs.getString('rate_syp_text') ?? '13,900';
         _tryRate = prefs.getDouble('rate_try') ?? 34.20;
         _eurRate = prefs.getDouble('rate_eur') ?? 1.09;
         _lastUpdated = prefs.getString('rate_last_updated') ?? 'بيانات مخزنة سابقة';
@@ -305,45 +305,37 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
     bool sypFetched = false;
     bool globalFetched = false;
 
-    // 1. استخراج سعر البيع تلقائياً من موقع sp-today.com
+    // 1. استخراج سعر المبيع الدقيق من موقع sp-today.com
     try {
       final spResponse = await http
           .get(
-            Uri.parse('https://sp-today.com'),
+            Uri.parse('https://sp-today.com/cur/usd'),
             headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'},
           )
           .timeout(const Duration(seconds: 5));
 
       if (spResponse.statusCode == 200) {
         final html = spResponse.body;
-        // البحث عن المطابقات التي تمثل القيم المالية
-        final RegExp regExp = RegExp(r'(\d{2,3}\.\d{2})');
-        final matches = regExp.allMatches(html);
-        
-        List<double> foundRates = [];
-        for (var match in matches) {
-          String? valStr = match.group(1);
-          if (valStr != null) {
-            double? parsedVal = double.tryParse(valStr);
-            if (parsedVal != null && parsedVal > 50 && parsedVal < 500) {
-              foundRates.add(parsedVal * 100);
-            }
-          }
-        }
 
-        // في موقع الليرة اليوم، دائماً سعر البيع أكبر من سعر الشراء (مثال: البيع 13900 والشراء 13825)
-        if (foundRates.length >= 2) {
-          foundRates.sort(); // ترتيب القيم تصاعدياً
-          _sypRate = foundRates.last; // أخذ القيمة الأكبر تلقائياً (سعر البيع)
+        // البحث عن القيمة النصية لسعر المبيع قديمة أو جديدة
+        final RegExp regSellOld = RegExp(r'(\d{1,2},\d{3})\s*قديمة');
+        final RegExp regSellNew = RegExp(r'(\d{2,3}\.\d{2})');
+
+        final matchOld = regSellOld.firstMatch(html);
+        if (matchOld != null && matchOld.group(1) != null) {
+          _sypSellRateText = matchOld.group(1)!;
           sypFetched = true;
-        } else if (foundRates.isNotEmpty) {
-          _sypRate = foundRates.first;
-          sypFetched = true;
+        } else {
+          final matchNew = regSellNew.firstMatch(html);
+          if (matchNew != null && matchNew.group(1) != null) {
+            _sypSellRateText = matchNew.group(1)!;
+            sypFetched = true;
+          }
         }
       }
     } catch (_) {}
 
-    // 2. جلب أسعار التركي واليورو
+    // 2. جلب أسعار العملات العالمية (التركي واليورو)
     try {
       final response = await http
           .get(Uri.parse('https://open.er-api.com/v6/latest/USD'))
@@ -364,7 +356,7 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
     final formattedTime = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('rate_syp', _sypRate);
+    await prefs.setString('rate_syp_text', _sypSellRateText);
     await prefs.setDouble('rate_try', _tryRate);
     await prefs.setDouble('rate_eur', _eurRate);
     await prefs.setString('rate_last_updated', formattedTime);
@@ -455,7 +447,7 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
           
           Row(
             children: [
-              _buildCurrencyTile('USD / SYP (مبيع)', '${_sypRate.toStringAsFixed(0)} ل.س'),
+              _buildCurrencyTile('USD / SYP', 'ل.س $_sypSellRateText'),
               const SizedBox(width: 8),
               _buildCurrencyTile('USD / TRY', '${_tryRate.toStringAsFixed(2)} ₺'),
               const SizedBox(width: 8),

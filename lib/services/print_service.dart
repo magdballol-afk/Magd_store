@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:blue_thermal_printer/blue_thermal_printer.dart';
 
 class PrintService {
-  // البيانات الثابتة للمؤسسة / المحل (يمكنك تعديلها بحسب بياناتك)
-  static const String storeName = "مؤسسة بلول التجارية";
-  static const String commercialRegister = "CR-1029384"; // السجل التجاري
-  static const String taxNumber = "TRN-998877665";      // الرقم الضريبي
-  static const String storePhone = "0930000000";
+  static final BlueThermalPrinter _bluetooth = BlueThermalPrinter.instance;
 
-  /// 1. البحث عن أجهزة البلوتوث واختيار الطابعة
+  /// دالة للتحقق واختيار الطابعة ثم الطباعة
   static Future<void> selectAndPrintInvoice({
     required BuildContext context,
     required String invoiceType, // "فاتورة مبيعات" أو "فاتورة مشتريات"
@@ -18,87 +14,93 @@ class PrintService {
     required double totalPrice,
     required double paidAmount,
     required double remainingAmount,
-    required String currency,
+    String currency = "ل.س",
+    bool is80mm = true, // افتراضياً 80mm لطابعة Bixolon
   }) async {
-    // التأكد من تفعيل البلوتوث
-    final bool isBluetoothEnabled = await PrintBluetoothThermal.bluetoothEnabled;
-    if (!isBluetoothEnabled) {
-      if (context.mounted) {
-        _showSnackBar(context, 'الرجاء تفعيل البلوتوث أولاً', isError: true);
-      }
-      return;
-    }
+    bool? isConnected = await _bluetooth.isConnected;
 
-    // جلب قائمة الأجهزة المقترنة بالهاتف
-    final List<BluetoothInfo> pairedDevices = await PrintBluetoothThermal.pairedBluetooths;
+    if (isConnected != true) {
+      List<BluetoothDevice> devices = await _bluetooth.getBondedDevices();
 
-    if (pairedDevices.isEmpty) {
-      if (context.mounted) {
-        _showSnackBar(context, 'لا توجد أجهزة بلوتوث مقترنة. يرجى إقران الطابعة من إعدادات الهاتف.', isError: true);
-      }
-      return;
-    }
-
-    // عرض نافذة اختيار الطابعة
-    if (context.mounted) {
-      showModalBottomSheet(
-        context: context,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        builder: (dialogContext) {
-          return Container(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'اختر طابعة البلوتوث',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Cairo'),
-                ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: pairedDevices.length,
-                    itemBuilder: (context, index) {
-                      final device = pairedDevices[index];
-                      return ListTile(
-                        leading: const Icon(Icons.print_rounded, color: Color(0xFF0277BD)),
-                        title: Text(device.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Text(device.macAdress),
-                        onTap: () async {
-                          Navigator.pop(dialogContext);
-                          await _connectAndPrint(
-                            context: context,
-                            macAddress: device.macAdress,
-                            invoiceType: invoiceType,
-                            invoiceNumber: invoiceNumber,
-                            customerName: customerName,
-                            items: items,
-                            totalPrice: totalPrice,
-                            paidAmount: paidAmount,
-                            remainingAmount: remainingAmount,
-                            currency: currency,
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
+      if (devices.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('لم يتم العثور على أجهزة بلوتوث مقترنة')),
           );
-        },
+        }
+        return;
+      }
+
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (dialogContext) {
+            return AlertDialog(
+              title: const Text('اختر طابعة البلوتوث (Bixolon)'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: devices.length,
+                  itemBuilder: (context, index) {
+                    final device = devices[index];
+                    return ListTile(
+                      title: Text(device.name ?? 'جهاز غير معروف'),
+                      subtitle: Text(device.address ?? ''),
+                      leading: const Icon(Icons.print),
+                      onTap: () async {
+                        Navigator.pop(dialogContext);
+                        try {
+                          await _bluetooth.connect(device);
+                          if (context.mounted) {
+                            _printContent(
+                              context: context,
+                              invoiceType: invoiceType,
+                              invoiceNumber: invoiceNumber,
+                              customerName: customerName,
+                              items: items,
+                              totalPrice: totalPrice,
+                              paidAmount: paidAmount,
+                              remainingAmount: remainingAmount,
+                              currency: currency,
+                              is80mm: is80mm,
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('فشل الاتصال بالطابعة: $e')),
+                            );
+                          }
+                        }
+                      },
+                    );
+                  },
+                ),
+              ),
+            );
+          },
+        );
+      }
+    } else {
+      _printContent(
+        context: context,
+        invoiceType: invoiceType,
+        invoiceNumber: invoiceNumber,
+        customerName: customerName,
+        items: items,
+        totalPrice: totalPrice,
+        paidAmount: paidAmount,
+        remainingAmount: remainingAmount,
+        currency: currency,
+        is80mm: is80mm,
       );
     }
   }
 
-  /// 2. الاتصال بالطابعة وتنسيق الفاتورة الحرارية كاملة
-  static Future<void> _connectAndPrint({
+  /// تنفيذ أومر طباعة الفاتورة وضبط العرض بـ 80mm (BIXOLON)
+  static Future<void> _printContent({
     required BuildContext context,
-    required String macAddress,
     required String invoiceType,
     required String invoiceNumber,
     required String customerName,
@@ -107,83 +109,70 @@ class PrintService {
     required double paidAmount,
     required double remainingAmount,
     required String currency,
+    required bool is80mm,
   }) async {
     try {
-      final bool result = await PrintBluetoothThermal.connect(macPrinterAddress: macAddress);
+      // إعداد عرض السطر (48 حرفاً لقياس 80mm / و 32 حرفاً لقياس 58mm)
+      final int paperWidth = is80mm ? 48 : 32;
 
-      if (result) {
-        final now = DateTime.now();
-        // تنسيق الوقت التاريخ (مثال: 2026-09-23 | 10:30 PM)
-        final String dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-        final String timeStr = "${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+      // ترويسة الفاتورة
+      _bluetooth.printNewLine();
+      _bluetooth.printCustom(invoiceType, 3, 1); // عنوان بارز ومكبر في الوسط
+      _bluetooth.printCustom("رقم الفاتورة: #$invoiceNumber", 1, 1);
+      _bluetooth.printCustom("التاريخ: ${DateTime.now().toString().split(' ')[0]}", 0, 1);
+      _bluetooth.printCustom("العميل: $customerName", 1, 1);
+      _bluetooth.printCustom("-" * paperWidth, 0, 1);
 
-        StringBuffer sb = StringBuffer();
-
-        // --- هيدر الفاتورة والثوابت ---
-        sb.writeln("================================");
-        sb.writeln("       $storeName       ");
-        sb.writeln("س.ت: $commercialRegister");
-        sb.writeln("ر.ض: $taxNumber");
-        if (storePhone.isNotEmpty) sb.writeln("هاتف: $storePhone");
-        sb.writeln("================================");
-        sb.writeln("       *** $invoiceType ***       ");
-        sb.writeln("================================");
-        sb.writeln("رقم الفاتورة : $invoiceNumber");
-        sb.writeln("العميل       : $customerName");
-        sb.writeln("التاريخ      : $dateStr");
-        sb.writeln("الوقت        : $timeStr");
-        sb.writeln("--------------------------------");
-        sb.writeln("المادة          العدد     السعر");
-        sb.writeln("--------------------------------");
-
-        // --- جدول المواد ---
-        for (var item in items) {
-          String name = item['name'] ?? item['title'] ?? 'مادة';
-          int qty = item['quantity'] ?? item['qty'] ?? 1;
-          double price = (item['price'] as num).toDouble();
-          double itemTotal = qty * price;
-
-          sb.writeln("$name");
-          sb.writeln("  $qty x ${price.toStringAsFixed(0)} = ${itemTotal.toStringAsFixed(0)} $currency");
-        }
-
-        // --- تفاصيل المبالغ (الإجمالي / المدفوع / المتبقي) ---
-        sb.writeln("--------------------------------");
-        sb.writeln("الإجمالي : ${totalPrice.toStringAsFixed(0)} $currency");
-        sb.writeln("المدفوع  : ${paidAmount.toStringAsFixed(0)} $currency");
-        sb.writeln("المتبقي  : ${remainingAmount.toStringAsFixed(0)} $currency");
-        sb.writeln("================================");
-        sb.writeln("   شكراً لتعاملكم معنا!   ");
-        sb.writeln("\n\n\n"); // مسافة لإخراج الورقة قصها
-
-        // إرسال البيانات للطابعة
-        await PrintBluetoothThermal.writeBytes(sb.toString().codeUnits);
-        
-        // قطع الاتصال تلقائياً
-        await PrintBluetoothThermal.disconnect;
-
-        if (context.mounted) {
-          _showSnackBar(context, 'تمت طباعة الفاتورة بنجاح');
-        }
+      // جدول المواد: الاسم | الكمية | السعر | الإجمالي
+      if (is80mm) {
+        _bluetooth.printCustom("المادة                   الكمية   السعر    الإجمالي", 1, 0);
       } else {
-        if (context.mounted) {
-          _showSnackBar(context, 'فشل الاتصال بالطابعة', isError: true);
+        _bluetooth.printCustom("المادة           الكمية   السعر", 1, 0);
+      }
+      _bluetooth.printCustom("-" * paperWidth, 0, 1);
+
+      for (var item in items) {
+        String name = (item['name'] ?? '').toString();
+        double qty = double.tryParse((item['quantity'] ?? 1).toString()) ?? 1.0;
+        double price = double.tryParse((item['price'] ?? 0).toString()) ?? 0.0;
+        double lineTotal = qty * price;
+
+        if (name.length > 18) {
+          name = name.substring(0, 18);
+        }
+
+        if (is80mm) {
+          String pName = name.padRight(22);
+          String pQty = qty.toStringAsFixed(1).padLeft(6);
+          String pPrice = price.toStringAsFixed(0).padLeft(8);
+          String pTotal = lineTotal.toStringAsFixed(0).padLeft(10);
+          _bluetooth.printCustom("$pName $pQty $pPrice $pTotal", 0, 0);
+        } else {
+          String pName = name.padRight(14);
+          String pQty = qty.toStringAsFixed(1).padLeft(5);
+          String pTotal = lineTotal.toStringAsFixed(0).padLeft(8);
+          _bluetooth.printCustom("$pName $pQty $pTotal", 0, 0);
         }
       }
+
+      _bluetooth.printCustom("-" * paperWidth, 0, 1);
+
+      // المجاميع
+      _bluetooth.printCustom("المجموع الإجمالي: ${totalPrice.toStringAsFixed(2)} $currency", 1, 2);
+      _bluetooth.printCustom("المدفوع نقداً   : ${paidAmount.toStringAsFixed(2)} $currency", 0, 2);
+      _bluetooth.printCustom("المتبقي         : ${remainingAmount.toStringAsFixed(2)} $currency", 1, 2);
+
+      _bluetooth.printCustom("=" * paperWidth, 0, 1);
+      _bluetooth.printCustom("شكراً لزيارتكم", 1, 1);
+      _bluetooth.printNewLine();
+      _bluetooth.printNewLine();
+      _bluetooth.paperCut(); // قطع الورقة تلقائياً إذا كانت الطابعة تدعم ذلك
     } catch (e) {
       if (context.mounted) {
-        _showSnackBar(context, 'خطأ أثناء الطباعة: $e', isError: true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('خطأ أثناء الطباعة: $e')),
+        );
       }
     }
-  }
-
-  static void _showSnackBar(BuildContext context, String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: const TextStyle(fontFamily: 'Cairo')),
-        backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 }

@@ -47,6 +47,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
+      // القائمة الجانبية المضافة
+      drawer: _buildSideDrawer(context),
       appBar: AppBar(
         title: const Text(
           'إدارة المبيعات والمستودع',
@@ -82,15 +84,118 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
+  // ==========================================
+  // تصميم القائمة الجانبية (Drawer)
+  // ==========================================
+  Widget _buildSideDrawer(BuildContext context) {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          // رأس القائمة الجانبية
+          DrawerHeader(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF0277BD), Color(0xFF00B0FF)],
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 36),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'إدارة المبيعات والمستودع',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const Text(
+                  'خيارات النظام والنسخ الاحتياطي',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+
+          // قسم إدارة البيانات والنسخ الاحتياطي
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'النسخ الاحتياطي',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.cloud_upload_outlined, color: Color(0xFF0277BD)),
+            title: const Text('إنشاء نسخة احتياطية', style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: const Text('حفظ قاعدة البيانات محلياً أو مشاركتها'),
+            onTap: () {
+              Navigator.pop(context);
+              // سنربط كود إنشاء النسخة الاحتياطية في الخطوة القادمة
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.cloud_download_outlined, color: Color(0xFF26A69A)),
+            title: const Text('استرجاع نسخة احتياطية', style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: const Text('استعادة البيانات من ملف سابق'),
+            onTap: () {
+              Navigator.pop(context);
+              // سنربط كود استرجاع النسخة الاحتياطية في الخطوة القادمة
+            },
+          ),
+
+          const Divider(),
+
+          // قسم العمليات السنوية
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'إدارة الحسابات والسنوات',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.published_with_changes_rounded, color: Color(0xFFE53935)),
+            title: const Text('تدوير السنة المالية', style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFE53935))),
+            subtitle: const Text('ترحيل الأرصدة وإغلاق السنة الحالية'),
+            onTap: () {
+              Navigator.pop(context);
+              // سنربط نافذة خيارات وتأكيد التدوير السنوي
+            },
+          ),
+
+          const Divider(),
+
+          // معلومات التطبيق
+          ListTile(
+            leading: const Icon(Icons.info_outline, color: Colors.grey),
+            title: const Text('عن التطبيق'),
+            subtitle: const Text('الإصدار 1.0.0'),
+            onTap: () {
+              Navigator.pop(context);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDashboardBody() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ==========================================
-          // صورة البانر العلوية
-          // ==========================================
+          // 1. صورة البانر العلوية
           Container(
             width: double.infinity,
             height: 140,
@@ -152,9 +257,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 20),
 
-          // ==========================================
-          // قسم إجراءات سريعة
-          // ==========================================
+          // 2. قسم إجراءات سريعة
           const Text(
             'إجراءات سريعة',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
@@ -203,9 +306,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
           const SizedBox(height: 20),
 
-          // ==========================================
-          // نشرة أسعار الصرف الدقيقة بدون تقريب
-          // ==========================================
+          // 3. نشرة أسعار الصرف
           const CurrencyRatesCard(),
         ],
       ),
@@ -257,7 +358,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 }
 
 // =======================================================
-// ويدجت نشرة أسعار الصرف المطابق لموقع الليرة اليوم بالضبط
+// ويدجت نشرة أسعار الصرف
 // =======================================================
 class CurrencyRatesCard extends StatefulWidget {
   const CurrencyRatesCard({Key? key}) : super(key: key);
@@ -271,7 +372,7 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
   bool _isOfflineData = false;
   String _lastUpdated = 'غير محدّث';
 
-  String _sypSellRateText = '13,900'; // القيمة الدقيقة المأخوذة نصياً من الموقع
+  String _sypSellRateText = '13,900';
   double _tryRate = 34.20;
   double _eurRate = 1.09;
 
@@ -305,7 +406,6 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
     bool sypFetched = false;
     bool globalFetched = false;
 
-    // 1. استخراج سعر المبيع الدقيق من موقع sp-today.com
     try {
       final spResponse = await http
           .get(
@@ -316,8 +416,6 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
 
       if (spResponse.statusCode == 200) {
         final html = spResponse.body;
-
-        // البحث عن القيمة النصية لسعر المبيع قديمة أو جديدة
         final RegExp regSellOld = RegExp(r'(\d{1,2},\d{3})\s*قديمة');
         final RegExp regSellNew = RegExp(r'(\d{2,3}\.\d{2})');
 
@@ -335,7 +433,6 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
       }
     } catch (_) {}
 
-    // 2. جلب أسعار العملات العالمية (التركي واليورو)
     try {
       final response = await http
           .get(Uri.parse('https://open.er-api.com/v6/latest/USD'))
@@ -444,7 +541,6 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
             ],
           ),
           const SizedBox(height: 12),
-          
           Row(
             children: [
               _buildCurrencyTile('USD / SYP', 'ل.س $_sypSellRateText'),

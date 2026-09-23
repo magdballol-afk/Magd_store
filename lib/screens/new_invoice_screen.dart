@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
+import '../services/print_service.dart';
 
 class NewInvoiceScreen extends StatefulWidget {
   final String? type;
@@ -141,6 +142,44 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
   double get _paidAmount {
     return double.tryParse(_paidAmountController.text.trim()) ?? 0.0;
+  }
+
+  /// دالة طباعة الفاتورة عبر البلوتوث
+  Future<void> _printInvoice() async {
+    if (_invoiceItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يمكن طباعة فاتورة فارغة')),
+      );
+      return;
+    }
+
+    final double remaining = _finalTotal - _paidAmount;
+
+    final formattedItems = _invoiceItems.map((item) {
+      return {
+        'name': item['product_name'] ?? 'مادة',
+        'quantity': item['quantity'] ?? 1,
+        'price': item['unit_price'] ?? 0.0,
+      };
+    }).toList();
+
+    final String invoiceNumberStr = widget.invoiceId != null
+        ? "${widget.invoiceId}"
+        : "DRAFT-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}";
+
+    final String displayType = _invoiceType == 'purchase' ? 'فاتورة مشتريات' : 'فاتورة مبيعات';
+
+    await PrintService.selectAndPrintInvoice(
+      context: context,
+      invoiceType: displayType,
+      invoiceNumber: invoiceNumberStr,
+      customerName: _selectedContactName,
+      items: formattedItems,
+      totalPrice: _finalTotal,
+      paidAmount: _paidAmount,
+      remainingAmount: remaining < 0 ? 0.0 : remaining,
+      currency: "ل.س",
+    );
   }
 
   void _showContactSearchDialog() {
@@ -431,6 +470,13 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               : (_invoiceType == 'purchase' ? 'فاتورة شراء جديدة' : 'فاتورة مبيعات جديدة'),
         ),
         backgroundColor: const Color(0xFF5C6BC0),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.print),
+            tooltip: 'طباعة الفاتورة',
+            onPressed: _printInvoice,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

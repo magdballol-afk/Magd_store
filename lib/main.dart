@@ -12,6 +12,7 @@ import 'screens/new_invoice_screen.dart';
 import 'screens/products_screen.dart';
 import 'screens/smart_report_screen.dart';
 import 'services/backup_service.dart';
+import 'services/fiscal_year_service.dart'; // <--- تم إضافة الاستيراد هنا
 
 void main() {
   runApp(const MyApp());
@@ -84,7 +85,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // القائمة الجانبية (Drawer) المربوطة بخدمة النسخ الاحتياطي
+  // القائمة الجانبية (Drawer) المربوطة بخدمة النسخ الاحتياطي وتدوير السنة المالية
   Widget _buildSideDrawer(BuildContext context) {
     return Drawer(
       child: ListView(
@@ -161,6 +162,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             subtitle: const Text('ترحيل الأرصدة وإغلاق السنة الحالية'),
             onTap: () {
               Navigator.pop(context);
+              FiscalYearService.showRolloverDialog(context); // <--- تم التعديل هنا
             },
           ),
           const Divider(),

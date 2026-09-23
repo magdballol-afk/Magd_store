@@ -109,6 +109,48 @@ class DatabaseHelper {
   }
 
   // ==========================================
+  //  قسم تدوير السنة المالية
+  // ==========================================
+
+  Future<void> executeFiscalYearRollover(String newYear) async {
+    final db = await instance.database;
+
+    await db.transaction((txn) async {
+      // 1. حساب صافي الصندوق الحالي (المقبوضات - المصروفات)
+      final incomeResult = await txn.rawQuery(
+        "SELECT SUM(amount) as total FROM cash_transactions WHERE type = 'income'",
+      );
+      final expenseResult = await txn.rawQuery(
+        "SELECT SUM(amount) as total FROM cash_transactions WHERE type = 'expense'",
+      );
+
+      final double totalIncome = double.tryParse((incomeResult.first['total'] ?? 0.0).toString()) ?? 0.0;
+      final double totalExpense = double.tryParse((expenseResult.first['total'] ?? 0.0).toString()) ?? 0.0;
+      final double netCashBalance = totalIncome - totalExpense;
+
+      // 2. تفريغ جدول بنود الفواتير والفواتير وحركات الصندوق القديمة
+      await txn.delete('invoice_items');
+      await txn.delete('invoices');
+      await txn.delete('cash_transactions');
+
+      // 3. إعادة إدراج رصيد الصندوق الحالي كرصيد افتتاحي للسنة الجديدة
+      if (netCashBalance != 0) {
+        final String todayDate = DateTime.now().toIso8601String().split('T').first;
+        final String type = netCashBalance > 0 ? 'income' : 'expense';
+
+        await txn.insert('cash_transactions', {
+          'contact_id': null,
+          'contact_name': 'رصيد افتتاحي',
+          'type': type,
+          'amount': netCashBalance.abs(),
+          'notes': 'رصيد افتتاحي من تدوير السنة المالية $newYear',
+          'date': todayDate,
+        });
+      }
+    });
+  }
+
+  // ==========================================
   //  قسم إدارة العملاء (Contacts)
   // ==========================================
 

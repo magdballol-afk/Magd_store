@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../database/database_helper.dart';
 
 class FiscalYearService {
   /// إظهار حوار التأكيد وتنفيذ عملية التدوير
@@ -24,7 +25,7 @@ class FiscalYearService {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'تنبيه: سيتم إغلاق حسابات السنة الحالية وتدوير الأرصدة النهائية (العملاء، الموردين، والصندوق) كأرصدة افتتاحية للسنة الجديدة.',
+                'تنبيه: سيتم إغلاق حسابات السنة الحالية وتدوير الأرصدة النهائية (العملاء، الموردين، الصندوق، والمستودع) كأرصدة افتتاحية للسنة الجديدة، وحذف جميع الفواتير وحركات الصندوق القديمة.',
                 style: TextStyle(fontSize: 13, color: Colors.black87),
               ),
               const SizedBox(height: 16),
@@ -89,14 +90,14 @@ class FiscalYearService {
     );
 
     try {
-      // 2. تطبيق عمليات قاعدة البيانات
-      await Future.delayed(const Duration(seconds: 2)); // محاكاة العملية
+      // 2. تنفيذ التدوير الفعلي في قاعدة البيانات
+      await DatabaseHelper.instance.executeFiscalYearRollover(newYear);
 
       if (context.mounted) {
         Navigator.pop(context); // إغلاق مؤشر التحميل
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('تمت عملية التدوير للسنة $newYear بنجاح!'),
+            content: Text('تمت عملية التدوير للسنة $newYear وتصفير الحركة بنجاح!'),
             backgroundColor: Colors.green,
           ),
         );

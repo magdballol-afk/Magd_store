@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-// قم باستيراد ملف قاعدة البيانات الخاص بك هنا إذا وجد
-// import '../database/database_helper.dart';
 
 class FiscalYearService {
   /// إظهار حوار التأكيد وتنفيذ عملية التدوير
@@ -75,14 +73,16 @@ class FiscalYearService {
       barrierDismissible: false,
       builder: (_) => const Center(
         child: Card(
-          padding: EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('جاري تدوير الأرصدة وإغلاق السنة...'),
-            ],
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('جاري تدوير الأرصدة وإغلاق السنة...'),
+              ],
+            ),
           ),
         ),
       ),
@@ -90,9 +90,6 @@ class FiscalYearService {
 
     try {
       // 2. تطبيق عمليات قاعدة البيانات
-      // final db = await DatabaseHelper.instance.database;
-      // await db.transaction((txn) async { ... logic ... });
-
       await Future.delayed(const Duration(seconds: 2)); // محاكاة العملية
 
       if (context.mounted) {

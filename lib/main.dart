@@ -400,6 +400,7 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
 
       if (spResponse.statusCode == 200) {
         final data = json.decode(spResponse.body);
+        // التعديل: التأكد من جلب حقل 'sell' للمبيع
         if (data != null && data['sell'] != null) {
           String rawSell = data['sell'].toString();
           if (rawSell.isNotEmpty) {
@@ -410,7 +411,7 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
       }
     } catch (_) {}
 
-    // في حال تعثر الـ API المباشر، يتم الفحص التلقائي للصفحة الرئيسية عبر Regex احتياطي محدد
+    // التعديل: تحديث Regex الاحتياطي ليبحث عن "المبيع" Selling Price بدقة أكبر
     if (!sypFetched) {
       try {
         final htmlResponse = await http
@@ -424,7 +425,8 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
 
         if (htmlResponse.statusCode == 200) {
           final html = htmlResponse.body;
-          final RegExp regSell = RegExp(r'(\d{1,2},\d{3})\s*old');
+          // Regex جديد يبحث عن الرقم الموجود داخل class="price" لضمان جلب سعر المبيع الحالي
+          final RegExp regSell = RegExp(r'<span class="price">([\d,]+)</span>\s*old');
           final match = regSell.firstMatch(html);
           if (match != null && match.group(1) != null) {
             _sypSellRateText = match.group(1)!;
@@ -545,7 +547,8 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
           const SizedBox(height: 12),
           Row(
             children: [
-              _buildCurrencyTile('USD / SYP', 'ل.س $_sypSellRateText'),
+              // التعديل: تغيير التسمية لتوضيح أنه سعر مبيع
+              _buildCurrencyTile('مبيع USD / SYP', 'ل.س $_sypSellRateText'),
               const SizedBox(width: 8),
               _buildCurrencyTile('USD / TRY', '${_tryRate.toStringAsFixed(2)} ₺'),
               const SizedBox(width: 8),

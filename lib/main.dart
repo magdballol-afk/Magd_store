@@ -47,7 +47,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
-      // القائمة الجانبية المضافة
       drawer: _buildSideDrawer(context),
       appBar: AppBar(
         title: const Text(
@@ -84,15 +83,12 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // ==========================================
-  // تصميم القائمة الجانبية (Drawer)
-  // ==========================================
+  // القائمة الجانبية (Drawer)
   Widget _buildSideDrawer(BuildContext context) {
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          // رأس القائمة الجانبية
           DrawerHeader(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -125,8 +121,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               ],
             ),
           ),
-
-          // قسم إدارة البيانات والنسخ الاحتياطي
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
@@ -140,7 +134,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             subtitle: const Text('حفظ قاعدة البيانات محلياً أو مشاركتها'),
             onTap: () {
               Navigator.pop(context);
-              // سنربط كود إنشاء النسخة الاحتياطية في الخطوة القادمة
             },
           ),
           ListTile(
@@ -149,13 +142,9 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             subtitle: const Text('استعادة البيانات من ملف سابق'),
             onTap: () {
               Navigator.pop(context);
-              // سنربط كود استرجاع النسخة الاحتياطية في الخطوة القادمة
             },
           ),
-
           const Divider(),
-
-          // قسم العمليات السنوية
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
@@ -169,13 +158,9 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             subtitle: const Text('ترحيل الأرصدة وإغلاق السنة الحالية'),
             onTap: () {
               Navigator.pop(context);
-              // سنربط نافذة خيارات وتأكيد التدوير السنوي
             },
           ),
-
           const Divider(),
-
-          // معلومات التطبيق
           ListTile(
             leading: const Icon(Icons.info_outline, color: Colors.grey),
             title: const Text('عن التطبيق'),
@@ -195,7 +180,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. صورة البانر العلوية
           Container(
             width: double.infinity,
             height: 140,
@@ -256,14 +240,11 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             ),
           ),
           const SizedBox(height: 20),
-
-          // 2. قسم إجراءات سريعة
           const Text(
             'إجراءات سريعة',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
           ),
           const SizedBox(height: 14),
-
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
@@ -305,8 +286,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             ],
           ),
           const SizedBox(height: 20),
-
-          // 3. نشرة أسعار الصرف
           const CurrencyRatesCard(),
         ],
       ),
@@ -358,7 +337,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 }
 
 // =======================================================
-// ويدجت نشرة أسعار الصرف
+// ويدجت أسعار الصرف بآلية التتبع الديناميكية المباشرة
 // =======================================================
 class CurrencyRatesCard extends StatefulWidget {
   const CurrencyRatesCard({Key? key}) : super(key: key);
@@ -406,33 +385,56 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
     bool sypFetched = false;
     bool globalFetched = false;
 
+    // جلب سعر المبيع من API sp-today مباشرة بطلب مقترن بترويسات المتصفح
     try {
       final spResponse = await http
           .get(
-            Uri.parse('https://sp-today.com/cur/usd'),
-            headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'},
+            Uri.parse('https://sp-today.com/api/cur/usd'),
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+              'Accept': 'application/json, text/plain, */*',
+              'Referer': 'https://sp-today.com/en/currency/us-dollar',
+            },
           )
           .timeout(const Duration(seconds: 5));
 
       if (spResponse.statusCode == 200) {
-        final html = spResponse.body;
-        final RegExp regSellOld = RegExp(r'(\d{1,2},\d{3})\s*قديمة');
-        final RegExp regSellNew = RegExp(r'(\d{2,3}\.\d{2})');
-
-        final matchOld = regSellOld.firstMatch(html);
-        if (matchOld != null && matchOld.group(1) != null) {
-          _sypSellRateText = matchOld.group(1)!;
-          sypFetched = true;
-        } else {
-          final matchNew = regSellNew.firstMatch(html);
-          if (matchNew != null && matchNew.group(1) != null) {
-            _sypSellRateText = matchNew.group(1)!;
+        final data = json.decode(spResponse.body);
+        if (data != null && data['sell'] != null) {
+          String rawSell = data['sell'].toString();
+          if (rawSell.isNotEmpty) {
+            _sypSellRateText = rawSell;
             sypFetched = true;
           }
         }
       }
     } catch (_) {}
 
+    // في حال تعثر الـ API المباشر، يتم الفحص التلقائي للصفحة الرئيسية عبر Regex احتياطي محدد
+    if (!sypFetched) {
+      try {
+        final htmlResponse = await http
+            .get(
+              Uri.parse('https://sp-today.com/en/currency/us-dollar'),
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+              },
+            )
+            .timeout(const Duration(seconds: 5));
+
+        if (htmlResponse.statusCode == 200) {
+          final html = htmlResponse.body;
+          final RegExp regSell = RegExp(r'(\d{1,2},\d{3})\s*old');
+          final match = regSell.firstMatch(html);
+          if (match != null && match.group(1) != null) {
+            _sypSellRateText = match.group(1)!;
+            sypFetched = true;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // جلب التركي واليورو
     try {
       final response = await http
           .get(Uri.parse('https://open.er-api.com/v6/latest/USD'))

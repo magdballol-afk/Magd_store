@@ -11,6 +11,7 @@ import 'screens/item_movement_filter_screen.dart';
 import 'screens/new_invoice_screen.dart';
 import 'screens/products_screen.dart';
 import 'screens/smart_report_screen.dart';
+import 'services/backup_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -83,7 +84,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // القائمة الجانبية (Drawer)
+  // القائمة الجانبية (Drawer) المربوطة بخدمة النسخ الاحتياطي
   Widget _buildSideDrawer(BuildContext context) {
     return Drawer(
       child: ListView(
@@ -132,16 +133,18 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             leading: const Icon(Icons.cloud_upload_outlined, color: Color(0xFF0277BD)),
             title: const Text('إنشاء نسخة احتياطية', style: TextStyle(fontWeight: FontWeight.w600)),
             subtitle: const Text('حفظ قاعدة البيانات محلياً أو مشاركتها'),
-            onTap: () {
+            onTap: () async {
               Navigator.pop(context);
+              await BackupService.createAndShareBackup(context);
             },
           ),
           ListTile(
             leading: const Icon(Icons.cloud_download_outlined, color: Color(0xFF26A69A)),
             title: const Text('استرجاع نسخة احتياطية', style: TextStyle(fontWeight: FontWeight.w600)),
             subtitle: const Text('استعادة البيانات من ملف سابق'),
-            onTap: () {
+            onTap: () async {
               Navigator.pop(context);
+              await BackupService.restoreBackup(context);
             },
           ),
           const Divider(),
@@ -351,7 +354,8 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
   bool _isOfflineData = false;
   String _lastUpdated = 'غير محدّث';
 
-  String _sypSellRateText = '13,900';
+  String _sypSellRateText = '---';
+  String _sypBuyRateText = '---';
   double _tryRate = 34.20;
   double _eurRate = 1.09;
 
@@ -370,7 +374,8 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
     try {
       final prefs = await SharedPreferences.getInstance();
       setState(() {
-        _sypSellRateText = prefs.getString('rate_syp_text') ?? '13,900';
+        _sypSellRateText = prefs.getString('rate_syp_sell_text') ?? '---';
+        _sypBuyRateText = prefs.getString('rate_syp_buy_text') ?? '---';
         _tryRate = prefs.getDouble('rate_try') ?? 34.20;
         _eurRate = prefs.getDouble('rate_eur') ?? 1.09;
         _lastUpdated = prefs.getString('rate_last_updated') ?? 'بيانات مخزنة سابقة';
@@ -385,58 +390,53 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
     bool sypFetched = false;
     bool globalFetched = false;
 
-    // جلب سعر المبيع من API sp-today مباشرة بطلب مقترن بترويسات المتصفح
     try {
-      final spResponse = await http
-          .get(
-            Uri.parse('https://sp-today.com/api/cur/usd'),
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-              'Accept': 'application/json, text/plain, */*',
-              'Referer': 'https://sp-today.com/en/currency/us-dollar',
-            },
-          )
-          .timeout(const Duration(seconds: 5));
+      final response = await http.get(
+        Uri.parse('https://sp-today.com/en/currency/us-dollar'),
+        headers: {
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
+          'Cache-Control': 'no-cache',
+        },
+      ).timeout(const Duration(seconds: 6));
 
-      if (spResponse.statusCode == 200) {
-        final data = json.decode(spResponse.body);
-        // التعديل: التأكد من جلب حقل 'sell' للمبيع
-        if (data != null && data['sell'] != null) {
-          String rawSell = data['sell'].toString();
-          if (rawSell.isNotEmpty) {
-            _sypSellRateText = rawSell;
-            sypFetched = true;
-          }
+      if (response.statusCode == 200) {
+        final html = response.body;
+        final RegExp buyRegExp = RegExp(r'class="bid"[^>]*>\s*([\d,]+)');
+        final RegExp sellRegExp = RegExp(r'class="ask"[^>]*>\s*([\d,]+)');
+
+        final buyMatch = buyRegExp.firstMatch(html);
+        final sellMatch = sellRegExp.firstMatch(html);
+
+        if (sellMatch != null && sellMatch.group(1) != null) {
+          _sypSellRateText = sellMatch.group(1)!;
+          sypFetched = true;
+        }
+
+        if (buyMatch != null && buyMatch.group(1) != null) {
+          _sypBuyRateText = buyMatch.group(1)!;
         }
       }
     } catch (_) {}
 
-    // التعديل: تحديث Regex الاحتياطي ليبحث عن "المبيع" Selling Price بدقة أكبر
     if (!sypFetched) {
       try {
-        final htmlResponse = await http
-            .get(
-              Uri.parse('https://sp-today.com/en/currency/us-dollar'),
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-              },
-            )
-            .timeout(const Duration(seconds: 5));
+        final altResponse = await http.get(
+          Uri.parse('https://api.exchangerate-api.com/v4/latest/USD'),
+        ).timeout(const Duration(seconds: 5));
 
-        if (htmlResponse.statusCode == 200) {
-          final html = htmlResponse.body;
-          // Regex جديد يبحث عن الرقم الموجود داخل class="price" لضمان جلب سعر المبيع الحالي
-          final RegExp regSell = RegExp(r'<span class="price">([\d,]+)</span>\s*old');
-          final match = regSell.firstMatch(html);
-          if (match != null && match.group(1) != null) {
-            _sypSellRateText = match.group(1)!;
+        if (altResponse.statusCode == 200) {
+          final data = json.decode(altResponse.body);
+          if (data['rates'] != null && data['rates']['SYP'] != null) {
+            double rawSyp = (data['rates']['SYP'] as num).toDouble();
+            _sypSellRateText = rawSyp.toInt().toString();
             sypFetched = true;
           }
         }
       } catch (_) {}
     }
 
-    // جلب التركي واليورو
     try {
       final response = await http
           .get(Uri.parse('https://open.er-api.com/v6/latest/USD'))
@@ -454,10 +454,12 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
     } catch (_) {}
 
     final now = DateTime.now();
-    final formattedTime = "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+    final formattedTime =
+        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('rate_syp_text', _sypSellRateText);
+    await prefs.setString('rate_syp_sell_text', _sypSellRateText);
+    await prefs.setString('rate_syp_buy_text', _sypBuyRateText);
     await prefs.setDouble('rate_try', _tryRate);
     await prefs.setDouble('rate_eur', _eurRate);
     await prefs.setString('rate_last_updated', formattedTime);
@@ -502,12 +504,16 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
                       color: const Color(0xFF0277BD).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.currency_exchange, color: Color(0xFF0277BD), size: 20),
+                    child: const Icon(Icons.currency_exchange,
+                        color: Color(0xFF0277BD), size: 20),
                   ),
                   const SizedBox(width: 10),
                   const Text(
                     'أسعار الصرف اللحظية',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87),
                   ),
                 ],
               ),
@@ -515,7 +521,8 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
                 children: [
                   if (_isOfflineData)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       margin: const EdgeInsets.only(left: 6),
                       decoration: BoxDecoration(
                         color: Colors.amber.shade50,
@@ -526,7 +533,9 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
                         children: [
                           Icon(Icons.wifi_off, size: 12, color: Colors.amber),
                           SizedBox(width: 4),
-                          Text('أوفلاين', style: TextStyle(fontSize: 11, color: Colors.amber)),
+                          Text('أوفلاين',
+                              style:
+                                  TextStyle(fontSize: 11, color: Colors.amber)),
                         ],
                       ),
                     ),
@@ -537,7 +546,8 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.refresh, size: 20, color: Colors.grey),
+                        : const Icon(Icons.refresh,
+                            size: 20, color: Colors.grey),
                     onPressed: _isLoading ? null : _fetchRatesFromApi,
                   ),
                 ],
@@ -547,7 +557,6 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
           const SizedBox(height: 12),
           Row(
             children: [
-              // التعديل: تغيير التسمية لتوضيح أنه سعر مبيع
               _buildCurrencyTile('مبيع USD / SYP', 'ل.س $_sypSellRateText'),
               const SizedBox(width: 8),
               _buildCurrencyTile('USD / TRY', '${_tryRate.toStringAsFixed(2)} ₺'),
@@ -577,13 +586,19 @@ class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
           children: [
             Text(
               title,
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w600),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
             Text(
               value,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0277BD)),
+              style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0277BD)),
             ),
           ],
         ),

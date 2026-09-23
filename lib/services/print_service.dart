@@ -4,6 +4,14 @@ import 'package:blue_thermal_printer/blue_thermal_printer.dart';
 class PrintService {
   static final BlueThermalPrinter _bluetooth = BlueThermalPrinter.instance;
 
+  // ==========================================
+  //  بيانات المنشأة / الشركة (يمكنك تعديلها هنا)
+  // ==========================================
+  static const String companyName = "شركة التجارة العامة";
+  static const String taxNumber = "الرقم الضريبي: 123456789";
+  static const String companyPhone = "هاتف: 0912345678 / 011123456";
+  static const String companyAddress = "العنوان: الشارع العام - المركز الرئيسي";
+
   /// دالة للتحقق واختيار الطابعة ثم الطباعة
   static Future<void> selectAndPrintInvoice({
     required BuildContext context,
@@ -98,7 +106,7 @@ class PrintService {
     }
   }
 
-  /// تنفيذ أومر طباعة الفاتورة وضبط العرض بـ 80mm (BIXOLON)
+  /// تنفيذ أوامر طباعة الفاتورة وضبط العرض بـ 80mm (BIXOLON)
   static Future<void> _printContent({
     required BuildContext context,
     required String invoiceType,
@@ -115,15 +123,23 @@ class PrintService {
       // إعداد عرض السطر (48 حرفاً لقياس 80mm / و 32 حرفاً لقياس 58mm)
       final int paperWidth = is80mm ? 48 : 32;
 
-      // ترويسة الفاتورة
       _bluetooth.printNewLine();
-      _bluetooth.printCustom(invoiceType, 3, 1); // عنوان بارز ومكبر في الوسط
+
+      // 1. ترويسة معلومات الشركة (في المنتصف)
+      _bluetooth.printCustom(companyName, 2, 1); // خط عريض وكبير في الوسط
+      _bluetooth.printCustom(taxNumber, 0, 1);
+      _bluetooth.printCustom(companyPhone, 0, 1);
+      _bluetooth.printCustom(companyAddress, 0, 1);
+      _bluetooth.printCustom("=" * paperWidth, 0, 1);
+
+      // 2. تفاصيل الفاتورة والعميل
+      _bluetooth.printCustom(invoiceType, 2, 1); // نوع الفاتورة (مبيعات / مشتريات)
       _bluetooth.printCustom("رقم الفاتورة: #$invoiceNumber", 1, 1);
       _bluetooth.printCustom("التاريخ: ${DateTime.now().toString().split(' ')[0]}", 0, 1);
       _bluetooth.printCustom("العميل: $customerName", 1, 1);
       _bluetooth.printCustom("-" * paperWidth, 0, 1);
 
-      // جدول المواد: الاسم | الكمية | السعر | الإجمالي
+      // 3. جدول المواد: المادة | الكمية | السعر | الإجمالي
       if (is80mm) {
         _bluetooth.printCustom("المادة                   الكمية   السعر    الإجمالي", 1, 0);
       } else {
@@ -157,7 +173,7 @@ class PrintService {
 
       _bluetooth.printCustom("-" * paperWidth, 0, 1);
 
-      // المجاميع
+      // 4. المجاميع والمدفوعات
       _bluetooth.printCustom("المجموع الإجمالي: ${totalPrice.toStringAsFixed(2)} $currency", 1, 2);
       _bluetooth.printCustom("المدفوع نقداً   : ${paidAmount.toStringAsFixed(2)} $currency", 0, 2);
       _bluetooth.printCustom("المتبقي         : ${remainingAmount.toStringAsFixed(2)} $currency", 1, 2);
@@ -166,7 +182,7 @@ class PrintService {
       _bluetooth.printCustom("شكراً لزيارتكم", 1, 1);
       _bluetooth.printNewLine();
       _bluetooth.printNewLine();
-      _bluetooth.paperCut(); // قطع الورقة تلقائياً إذا كانت الطابعة تدعم ذلك
+      _bluetooth.paperCut(); // قطع الورقة تلقائياً للطابعات الداعمة للقطع
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

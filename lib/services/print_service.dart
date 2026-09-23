@@ -2,13 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 class PrintService {
-  /// 1. البحث عن أجهزة البلوتوث المقترنة واختيار الطابعة
+  // البيانات الثابتة للمؤسسة / المحل (يمكنك تعديلها بحسب بياناتك)
+  static const String storeName = "مؤسسة بلول التجارية";
+  static const String commercialRegister = "CR-1029384"; // السجل التجاري
+  static const String taxNumber = "TRN-998877665";      // الرقم الضريبي
+  static const String storePhone = "0930000000";
+
+  /// 1. البحث عن أجهزة البلوتوث واختيار الطابعة
   static Future<void> selectAndPrintInvoice({
     required BuildContext context,
+    required String invoiceType, // "فاتورة مبيعات" أو "فاتورة مشتريات"
     required String invoiceNumber,
     required String customerName,
     required List<Map<String, dynamic>> items,
     required double totalPrice,
+    required double paidAmount,
+    required double remainingAmount,
     required String currency,
   }) async {
     // التأكد من تفعيل البلوتوث
@@ -30,7 +39,7 @@ class PrintService {
       return;
     }
 
-    // عرض نافذة لاختيار الطابعة (مثل BIXOLON)
+    // عرض نافذة اختيار الطابعة
     if (context.mounted) {
       showModalBottomSheet(
         context: context,
@@ -64,10 +73,13 @@ class PrintService {
                           await _connectAndPrint(
                             context: context,
                             macAddress: device.macAdress,
+                            invoiceType: invoiceType,
                             invoiceNumber: invoiceNumber,
                             customerName: customerName,
                             items: items,
                             totalPrice: totalPrice,
+                            paidAmount: paidAmount,
+                            remainingAmount: remainingAmount,
                             currency: currency,
                           );
                         },
@@ -83,63 +95,84 @@ class PrintService {
     }
   }
 
-  /// 2. الاتصال بالطابعة وإرسال بيانات الفاتورة
+  /// 2. الاتصال بالطابعة وتنسيق الفاتورة الحرارية كاملة
   static Future<void> _connectAndPrint({
     required BuildContext context,
     required String macAddress,
+    required String invoiceType,
     required String invoiceNumber,
     required String customerName,
     required List<Map<String, dynamic>> items,
     required double totalPrice,
+    required double paidAmount,
+    required double remainingAmount,
     required String currency,
   }) async {
     try {
-      // الاتصال بالطابعة عبر عنوان MAC
       final bool result = await PrintBluetoothThermal.connect(macPrinterAddress: macAddress);
 
       if (result) {
-        // بناء نص الفاتورة بتنسيق حراري مرتب
-        StringBuffer bytes = StringBuffer();
-        
-        bytes.writeln("================================");
-        bytes.writeln("       فاتورة مبيعات           ");
-        bytes.writeln("================================");
-        bytes.writeln("رقم الفاتورة : $invoiceNumber");
-        bytes.writeln("العميل       : $customerName");
-        bytes.writeln("التاريخ      : ${DateTime.now().toString().split(' ')[0]}");
-        bytes.writeln("--------------------------------");
-        bytes.writeln("المادة          العدد     السعر");
-        bytes.writeln("--------------------------------");
+        final now = DateTime.now();
+        // تنسيق الوقت التاريخ (مثال: 2026-09-23 | 10:30 PM)
+        final String dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+        final String timeStr = "${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
+        StringBuffer sb = StringBuffer();
+
+        // --- هيدر الفاتورة والثوابت ---
+        sb.writeln("================================");
+        sb.writeln("       $storeName       ");
+        sb.writeln("س.ت: $commercialRegister");
+        sb.writeln("ر.ض: $taxNumber");
+        if (storePhone.isNotEmpty) sb.writeln("هاتف: $storePhone");
+        sb.writeln("================================");
+        sb.writeln("       *** $invoiceType ***       ");
+        sb.writeln("================================");
+        sb.writeln("رقم الفاتورة : $invoiceNumber");
+        sb.writeln("العميل       : $customerName");
+        sb.writeln("التاريخ      : $dateStr");
+        sb.writeln("الوقت        : $timeStr");
+        sb.writeln("--------------------------------");
+        sb.writeln("المادة          العدد     السعر");
+        sb.writeln("--------------------------------");
+
+        // --- جدول المواد ---
         for (var item in items) {
-          String name = item['name'] ?? '';
-          int qty = item['quantity'] ?? 1;
+          String name = item['name'] ?? item['title'] ?? 'مادة';
+          int qty = item['quantity'] ?? item['qty'] ?? 1;
           double price = (item['price'] as num).toDouble();
-          bytes.writeln("$name\n                 $qty   x   $price");
+          double itemTotal = qty * price;
+
+          sb.writeln("$name");
+          sb.writeln("  $qty x ${price.toStringAsFixed(0)} = ${itemTotal.toStringAsFixed(0)} $currency");
         }
 
-        bytes.writeln("--------------------------------");
-        bytes.writeln("الإجمالي: $totalPrice $currency");
-        bytes.writeln("================================");
-        bytes.writeln("       شكراً لزيارتكم!          \n\n\n");
+        // --- تفاصيل المبالغ (الإجمالي / المدفوع / المتبقي) ---
+        sb.writeln("--------------------------------");
+        sb.writeln("الإجمالي : ${totalPrice.toStringAsFixed(0)} $currency");
+        sb.writeln("المدفوع  : ${paidAmount.toStringAsFixed(0)} $currency");
+        sb.writeln("المتبقي  : ${remainingAmount.toStringAsFixed(0)} $currency");
+        sb.writeln("================================");
+        sb.writeln("   شكراً لتعاملكم معنا!   ");
+        sb.writeln("\n\n\n"); // مسافة لإخراج الورقة قصها
 
-        // إرسال النص للطباعة
-        await PrintBluetoothThermal.writeBytes(bytes.toString().codeUnits);
+        // إرسال البيانات للطابعة
+        await PrintBluetoothThermal.writeBytes(sb.toString().codeUnits);
         
-        // قطع الاتصال تلقائياً بعد الانتهاء
+        // قطع الاتصال تلقائياً
         await PrintBluetoothThermal.disconnect;
 
         if (context.mounted) {
-          _showSnackBar(context, 'تمت إرسال الفاتورة للطابعة بنجاح');
+          _showSnackBar(context, 'تمت طباعة الفاتورة بنجاح');
         }
       } else {
         if (context.mounted) {
-          _showSnackBar(context, 'فشل الاتصال بالطابعة المحددة', isError: true);
+          _showSnackBar(context, 'فشل الاتصال بالطابعة', isError: true);
         }
       }
     } catch (e) {
       if (context.mounted) {
-        _showSnackBar(context, 'حدث خطأ أثناء الطباعة: $e', isError: true);
+        _showSnackBar(context, 'خطأ أثناء الطباعة: $e', isError: true);
       }
     }
   }

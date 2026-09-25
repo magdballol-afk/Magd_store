@@ -166,10 +166,16 @@ class DatabaseHelper {
     return await db.query('contacts', orderBy: 'id DESC');
   }
 
-  Future<int> updateContactBalance([dynamic contactId, dynamic amount]) async {
-    if (contactId == null) return 0;
+  Future<int> updateContactBalance([dynamic arg1, dynamic arg2]) async {
     final db = await instance.database;
-    final double amt = (amount as num?)?.toDouble() ?? 0.0;
+    int? contactId;
+    double amt = 0.0;
+
+    if (arg1 is int) contactId = arg1;
+    if (arg2 is num) amt = arg2.toDouble();
+
+    if (contactId == null) return 0;
+
     return await db.rawUpdate(
       'UPDATE contacts SET balance = balance + ? WHERE id = ?',
       [amt, contactId],
@@ -204,38 +210,88 @@ class DatabaseHelper {
   }
 
   // ==========================================
-  // 5. عمليات الفواتير والترصيد (Invoices)
+  // 5. عمليات الفواتير (Invoices) - تتيح المعاملات الموقعية والمسماة
   // ==========================================
-  Future<int> addFullInvoice([Map<String, dynamic>? invoice, List<Map<String, dynamic>>? items]) async {
-    if (invoice == null) return 0;
+  Future<int> addFullInvoice([
+    Map<String, dynamic>? invoice,
+    List<Map<String, dynamic>>? items,
+  ], {
+    dynamic invoiceId,
+    dynamic contactId,
+    dynamic type,
+    dynamic totalAmount,
+    dynamic discount,
+    dynamic netAmount,
+    dynamic paidAmount,
+    dynamic remainingAmount,
+    dynamic date,
+    dynamic itemsList,
+  }) async {
     final db = await instance.database;
-    int invoiceId = 0;
+    int newInvoiceId = 0;
+
+    final Map<String, dynamic> invoiceData = invoice ?? {
+      if (contactId != null) 'contact_id': contactId,
+      if (type != null) 'type': type,
+      if (totalAmount != null) 'total_amount': totalAmount,
+      if (discount != null) 'discount': discount,
+      if (netAmount != null) 'net_amount': netAmount,
+      if (paidAmount != null) 'paid_amount': paidAmount,
+      if (remainingAmount != null) 'remaining_amount': remainingAmount,
+      if (date != null) 'date': date,
+    };
+
+    final List<Map<String, dynamic>> itemList = items ?? (itemsList as List<Map<String, dynamic>>? ?? []);
 
     await db.transaction((txn) async {
-      invoiceId = await txn.insert('invoices', invoice);
-      if (items != null) {
-        for (var item in items) {
-          item['invoice_id'] = invoiceId;
-          await txn.insert('invoice_items', item);
-        }
+      newInvoiceId = await txn.insert('invoices', invoiceData);
+      for (var item in itemList) {
+        item['invoice_id'] = newInvoiceId;
+        await txn.insert('invoice_items', item);
       }
     });
 
-    return invoiceId;
+    return newInvoiceId;
   }
 
-  Future<void> updateFullInvoice([Map<String, dynamic>? invoice, List<Map<String, dynamic>>? items]) async {
-    if (invoice == null) return;
+  Future<void> updateFullInvoice([
+    Map<String, dynamic>? invoice,
+    List<Map<String, dynamic>>? items,
+  ], {
+    dynamic invoiceId,
+    dynamic contactId,
+    dynamic type,
+    dynamic totalAmount,
+    dynamic discount,
+    dynamic netAmount,
+    dynamic paidAmount,
+    dynamic remainingAmount,
+    dynamic date,
+    dynamic itemsList,
+  }) async {
     final db = await instance.database;
 
+    final int targetId = invoice?['id'] ?? (invoiceId is int ? invoiceId : int.tryParse(invoiceId.toString()) ?? 0);
+    final Map<String, dynamic> invoiceData = invoice ?? {
+      'id': targetId,
+      if (contactId != null) 'contact_id': contactId,
+      if (type != null) 'type': type,
+      if (totalAmount != null) 'total_amount': totalAmount,
+      if (discount != null) 'discount': discount,
+      if (netAmount != null) 'net_amount': netAmount,
+      if (paidAmount != null) 'paid_amount': paidAmount,
+      if (remainingAmount != null) 'remaining_amount': remainingAmount,
+      if (date != null) 'date': date,
+    };
+
+    final List<Map<String, dynamic>> itemList = items ?? (itemsList as List<Map<String, dynamic>>? ?? []);
+
     await db.transaction((txn) async {
-      await txn.update('invoices', invoice, where: 'id = ?', whereArgs: [invoice['id']]);
-      if (items != null) {
-        await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoice['id']]);
-        for (var item in items) {
-          item['invoice_id'] = invoice['id'];
-          await txn.insert('invoice_items', item);
-        }
+      await txn.update('invoices', invoiceData, where: 'id = ?', whereArgs: [targetId]);
+      await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [targetId]);
+      for (var item in itemList) {
+        item['invoice_id'] = targetId;
+        await txn.insert('invoice_items', item);
       }
     });
   }

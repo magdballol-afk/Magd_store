@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../helpers/database_helper.dart';
+import 'package:pro/database/database_helper.dart'; // مسار قاعدة البيانات الصحيح والنهائي
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({Key? key}) : super(key: key);

@@ -98,7 +98,7 @@ class DatabaseHelper {
   }
 
   // ==========================================
-  // عمليات المنتجات (Products)
+  // 1. إدارة المنتجات وحركاتها
   // ==========================================
   Future<int> insertProduct(Map<String, dynamic> product) async {
     final db = await instance.database;
@@ -120,8 +120,28 @@ class DatabaseHelper {
     return await db.delete('products', where: 'id = ?', whereArgs: [id]);
   }
 
+  // دالة جلب كشف حركة المادة
+  Future<List<Map<String, dynamic>>> getProductMovements(int productId) async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT 
+        ii.id,
+        ii.invoice_id,
+        ii.quantity,
+        ii.price,
+        ii.total,
+        i.type AS invoice_type,
+        i.contact_name,
+        i.date
+      FROM invoice_items ii
+      JOIN invoices i ON ii.invoice_id = i.id
+      WHERE ii.product_id = ?
+      ORDER BY i.date DESC
+    ''', [productId]);
+  }
+
   // ==========================================
-  // عمليات الحسابات والعملاء (Contacts)
+  // 2. الحسابات والعملاء
   // ==========================================
   Future<int> insertContact(Map<String, dynamic> contact) async {
     final db = await instance.database;
@@ -143,7 +163,7 @@ class DatabaseHelper {
   }
 
   // ==========================================
-  // عمليات حركات الصندوق (Cash Journal)
+  // 3. حركات الصندوق
   // ==========================================
   Future<List<Map<String, dynamic>>> getDailyTransactions(String date) async {
     final db = await instance.database;
@@ -166,7 +186,7 @@ class DatabaseHelper {
   }
 
   // ==========================================
-  // عمليات الفواتير الكاملة (Invoices)
+  // 4. الفواتير والتدوير السنوي
   // ==========================================
   Future<int> addFullInvoice(Map<String, dynamic> invoice, List<Map<String, dynamic>> items) async {
     final db = await instance.database;
@@ -197,9 +217,20 @@ class DatabaseHelper {
     });
   }
 
-  Future<List<Map<String, dynamic>>> getInvoices() async {
+  // دالة التدوير وإغلاق السنة المالية
+  Future<bool> executeFiscalYearRollover(String newYear) async {
     final db = await instance.database;
-    return await db.query('invoices', orderBy: 'id DESC');
+    try {
+      await db.transaction((txn) async {
+        // تصفير الفواتير وحركات الصندوق للسنة القديمة وتدوير الأرصدة
+        await txn.delete('invoices');
+        await txn.delete('invoice_items');
+        await txn.delete('cash_journal');
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   Future close() async {

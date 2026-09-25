@@ -1,102 +1,108 @@
 import 'package:flutter/material.dart';
-import '../database/database_helper.dart';
-import '../models/product.dart';
+import '../helpers/database_helper.dart';
 
-class ProductCardScreen extends StatefulWidget {
-  final Product product;
-
-  const ProductCardScreen({super.key, required this.product});
+class ProductsScreen extends StatefulWidget {
+  const ProductsScreen({Key? key}) : super(key: key);
 
   @override
-  State<ProductCardScreen> createState() => _ProductCardScreenState();
+  State<ProductsScreen> createState() => _ProductsScreenState();
 }
 
-class _ProductCardScreenState extends State<ProductCardScreen> {
-  bool _isEditing = false;
-
-  late TextEditingController _nameController;
-  late TextEditingController _buyPriceController;
-  late TextEditingController _wholesalePriceController;
-  late TextEditingController _retailPriceController;
-  late TextEditingController _stockController;
+class _ProductsScreenState extends State<ProductsScreen> {
+  List<Map<String, dynamic>> _products = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.product.name);
-    _buyPriceController = TextEditingController(text: widget.product.buyPrice.toString());
-    _wholesalePriceController = TextEditingController(text: widget.product.wholesalePrice.toString());
-    _retailPriceController = TextEditingController(text: widget.product.retailPrice.toString());
-    _stockController = TextEditingController(text: widget.product.stockQuantity.toString());
+    _refreshProducts();
   }
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _buyPriceController.dispose();
-    _wholesalePriceController.dispose();
-    _retailPriceController.dispose();
-    _stockController.dispose();
-    super.dispose();
+  Future<void> _refreshProducts() async {
+    setState(() => _isLoading = true);
+    final data = await DatabaseHelper.instance.getProducts();
+    setState(() {
+      _products = data;
+      _isLoading = false;
+    });
   }
 
-  Future<void> _saveChanges() async {
-    final updatedProduct = Product(
-      id: widget.product.id,
-      name: _nameController.text.trim(),
-      buyPrice: double.tryParse(_buyPriceController.text) ?? widget.product.buyPrice,
-      wholesalePrice: double.tryParse(_wholesalePriceController.text) ?? widget.product.wholesalePrice,
-      retailPrice: double.tryParse(_retailPriceController.text) ?? widget.product.retailPrice,
-      stockQuantity: double.tryParse(_stockController.text) ?? widget.product.stockQuantity,
-    );
+  void _showEditDialog(Map<String, dynamic> product) {
+    final nameController = TextEditingController(text: product['name']?.toString() ?? '');
+    final quantityController = TextEditingController(text: (product['quantity'] ?? 0.0).toString());
+    final buyPriceController = TextEditingController(text: (product['buy_price'] ?? 0.0).toString());
+    final retailPriceController = TextEditingController(text: (product['retail_price'] ?? 0.0).toString());
+    final halfWholesaleController = TextEditingController(text: (product['half_wholesale_price'] ?? 0.0).toString());
+    final wholesalePriceController = TextEditingController(text: (product['wholesale_price'] ?? 0.0).toString());
 
-    await DatabaseHelper.instance.updateProduct(updatedProduct);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حفظ التعديلات بنجاح')),
-      );
-      Navigator.pop(context, true);
-    }
-  }
-
-  Widget _buildField({
-    required String label,
-    required TextEditingController controller,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Center(
+            child: Text('تعديل خصائص المادة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           ),
-          const SizedBox(height: 6),
-          TextField(
-            controller: controller,
-            enabled: _isEditing,
-            keyboardType: keyboardType,
-            textAlign: TextAlign.right,
-            decoration: InputDecoration(
-              prefixIcon: Icon(icon, color: const Color(0xFF0277BD)),
-              fillColor: _isEditing ? Colors.white : Colors.grey.shade100,
-              filled: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              disabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: Colors.grey.shade200),
-              ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildDialogField(nameController, 'اسم المادة', Icons.edit),
+                const SizedBox(height: 10),
+                _buildDialogField(quantityController, 'الكمية الحالية', Icons.dns, isNumber: true),
+                const SizedBox(height: 10),
+                _buildDialogField(buyPriceController, 'سعر الشراء', Icons.shopping_bag_outlined, isNumber: true),
+                const SizedBox(height: 10),
+                _buildDialogField(retailPriceController, 'سعر البيع (مفرق)', Icons.local_offer_outlined, isNumber: true),
+                const SizedBox(height: 10),
+                _buildDialogField(halfWholesaleController, 'سعر نصف الجملة', Icons.storefront_outlined, isNumber: true),
+                const SizedBox(height: 10),
+                _buildDialogField(wholesalePriceController, 'سعر الجملة', Icons.domain_outlined, isNumber: true),
+              ],
             ),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF5C6BC0),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () async {
+                final updatedProduct = {
+                  'id': product['id'],
+                  'name': nameController.text.trim(),
+                  'quantity': double.tryParse(quantityController.text) ?? 0.0,
+                  'buy_price': double.tryParse(buyPriceController.text) ?? 0.0,
+                  'retail_price': double.tryParse(retailPriceController.text) ?? 0.0,
+                  'half_wholesale_price': double.tryParse(halfWholesaleController.text) ?? 0.0,
+                  'wholesale_price': double.tryParse(wholesalePriceController.text) ?? 0.0,
+                };
+
+                await DatabaseHelper.instance.updateProduct(updatedProduct);
+                Navigator.pop(context);
+                _refreshProducts();
+              },
+              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDialogField(TextEditingController controller, String label, IconData icon, {bool isNumber = false}) {
+    return TextField(
+      controller: controller,
+      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: const Color(0xFF5C6BC0)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       ),
     );
   }
@@ -104,126 +110,34 @@ class _ProductCardScreenState extends State<ProductCardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FA),
+      backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
+        title: const Text('إدارة المنتجات والمواد'),
         backgroundColor: const Color(0xFF0277BD),
-        centerTitle: true,
-        title: const Text(
-          'بطاقة المادة',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(_isEditing ? Icons.check : Icons.edit, color: Colors.white),
-            onPressed: () {
-              if (_isEditing) {
-                _saveChanges();
-              } else {
-                setState(() {
-                  _isEditing = true;
-                });
-              }
-            },
-          ),
-        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    const CircleAvatar(
-                      radius: 28,
-                      backgroundColor: Color(0xFFE1F5FE),
-                      child: Icon(Icons.inventory, color: Color(0xFF0277BD), size: 30),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _nameController.text,
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'معرف المادة: ${widget.product.id ?? "جديد"}',
-                            style: const TextStyle(color: Colors.grey, fontSize: 13),
-                          ),
-                        ],
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _products.isEmpty
+              ? const Center(child: Text('لا توجد مواد مضافة'))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: _products.length,
+                  itemBuilder: (context, index) {
+                    final item = _products[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: ListTile(
+                        title: Text(item['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('الكمية: ${item['quantity']} | شراء: ${item['buy_price']} | مفرق: ${item['retail_price']}'),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.edit, color: Color(0xFF5C6BC0)),
+                          onPressed: () => _showEditDialog(item),
+                        ),
                       ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            _buildField(
-              label: 'اسم المادة:',
-              controller: _nameController,
-              icon: Icons.label_outline,
-            ),
-            _buildField(
-              label: 'سعر الشراء:',
-              controller: _buyPriceController,
-              icon: Icons.shopping_bag_outlined,
-              keyboardType: TextInputType.number,
-            ),
-            _buildField(
-              label: 'سعر الجملة:',
-              controller: _wholesalePriceController,
-              icon: Icons.storefront_outlined,
-              keyboardType: TextInputType.number,
-            ),
-            _buildField(
-              label: 'سعر المفرق:',
-              controller: _retailPriceController,
-              icon: Icons.sell_outlined,
-              keyboardType: TextInputType.number,
-            ),
-            _buildField(
-              label: 'الكمية المتاحة في المخزون:',
-              controller: _stockController,
-              icon: Icons.storage_outlined,
-              keyboardType: TextInputType.number,
-            ),
-
-            const SizedBox(height: 20),
-
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isEditing ? Colors.green : const Color(0xFF0277BD),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                ),
-                onPressed: () {
-                  if (_isEditing) {
-                    _saveChanges();
-                  } else {
-                    setState(() {
-                      _isEditing = true;
-                    });
-                  }
-                },
-                icon: Icon(_isEditing ? Icons.save : Icons.edit, color: Colors.white),
-                label: Text(
-                  _isEditing ? 'حفظ التعديلات' : 'تعديل البطاقة',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

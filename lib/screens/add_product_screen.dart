@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:pro/database/database_helper.dart'; // مسار قاعدة البيانات الصحيح والنهائي
+import 'package:pro/database/database_helper.dart';
 
 class AddProductScreen extends StatefulWidget {
-  const AddProductScreen({Key? key}) : super(key: key);
+  final Map<String, dynamic>? product; // تمرير المادة عند وضع التعديل (اختياري)
+
+  const AddProductScreen({Key? key, this.product}) : super(key: key);
 
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
@@ -10,22 +12,47 @@ class AddProductScreen extends StatefulWidget {
 
 class _AddProductScreenState extends State<AddProductScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _buyPriceController = TextEditingController();
-  final _retailPriceController = TextEditingController();
-  final _halfWholesalePriceController = TextEditingController();
-  final _wholesalePriceController = TextEditingController();
-  final _quantityController = TextEditingController();
+
+  late TextEditingController _nameController;
+  late TextEditingController _buyPriceController;
+  late TextEditingController _retailPriceController;
+  late TextEditingController _halfWholesalePriceController;
+  late TextEditingController _wholesalePriceController;
+  late TextEditingController _quantityController;
 
   bool _isLoading = false;
+  bool get _isEditing => widget.product != null;
 
-  Future<void> _saveProduct() async {
+  @override
+  void initState() {
+    super.initState();
+    // تعبئة الحقول بالبيانات السابقة إذا كنا في وضع التعديل
+    _nameController = TextEditingController(text: widget.product?['name']?.toString() ?? '');
+    _buyPriceController = TextEditingController(text: (widget.product?['buy_price'] ?? '').toString());
+    _retailPriceController = TextEditingController(text: (widget.product?['retail_price'] ?? '').toString());
+    _halfWholesalePriceController = TextEditingController(text: (widget.product?['half_wholesale_price'] ?? '').toString());
+    _wholesalePriceController = TextEditingController(text: (widget.product?['wholesale_price'] ?? '').toString());
+    _quantityController = TextEditingController(text: (widget.product?['quantity'] ?? '').toString());
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _buyPriceController.dispose();
+    _retailPriceController.dispose();
+    _halfWholesalePriceController.dispose();
+    _wholesalePriceController.dispose();
+    _quantityController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveOrUpdateProduct() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      final product = {
+      final productData = {
         'name': _nameController.text.trim(),
         'buy_price': double.tryParse(_buyPriceController.text) ?? 0.0,
         'retail_price': double.tryParse(_retailPriceController.text) ?? 0.0,
@@ -34,11 +61,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
         'quantity': double.tryParse(_quantityController.text) ?? 0.0,
       };
 
-      await DatabaseHelper.instance.insertProduct(product);
+      if (_isEditing) {
+        productData['id'] = widget.product!['id'];
+        await DatabaseHelper.instance.updateProduct(productData);
+      } else {
+        await DatabaseHelper.instance.insertProduct(productData);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تمت إضافة المادة بنجاح'), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text(_isEditing ? 'تم حفظ التعديل بنجاح' : 'تمت إضافة المادة بنجاح'),
+            backgroundColor: Colors.green,
+          ),
         );
         Navigator.pop(context, true);
       }
@@ -58,7 +93,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
-        title: const Text('إضافة منتج جديد', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          _isEditing ? 'تعديل منتج' : 'إضافة منتج جديد',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         centerTitle: true,
         backgroundColor: const Color(0xFF0277BD),
       ),
@@ -84,14 +122,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _saveProduct,
+                  onPressed: _isLoading ? null : _saveOrUpdateProduct,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0277BD),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('حفظ المادة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                      : Text(
+                          _isEditing ? 'حفظ التعديل' : 'حفظ المادة',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
                 ),
               ),
             ],
@@ -104,7 +145,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Widget _buildTextField(TextEditingController controller, String label, IconData icon, {bool isNumber = false, bool isRequired = false}) {
     return TextFormField(
       controller: controller,
-      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      keyboardType: isNumber ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
       validator: (value) {
         if (isRequired && (value == null || value.trim().isEmpty)) {
           return 'هذا الحقل مطلوب';

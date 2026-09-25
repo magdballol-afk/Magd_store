@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
+import 'add_product_screen.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({Key? key}) : super(key: key);
@@ -41,111 +42,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     });
   }
 
-  // 1. نافذة إضافة أو تعديل مادة مع الأسعار المتقدمة
-  void _showAddEditProductDialog([Map<String, dynamic>? product]) {
-    final bool isEdit = product != null;
-
-    final nameController = TextEditingController(text: isEdit ? product['name'] : '');
-    final qtyController = TextEditingController(text: isEdit ? product['quantity'].toString() : '0');
-    final purchasePriceController = TextEditingController(text: isEdit ? (product['purchase_price'] ?? 0.0).toString() : '0');
-    final retailPriceController = TextEditingController(text: isEdit ? (product['price'] ?? 0.0).toString() : '0');
-    final semiPriceController = TextEditingController(text: isEdit ? (product['semi_wholesale_price'] ?? 0.0).toString() : '0');
-    final wholesalePriceController = TextEditingController(text: isEdit ? (product['wholesale_price'] ?? 0.0).toString() : '0');
-
-    final formKey = GlobalKey<FormState>();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(isEdit ? 'تعديل خصائص المادة' : 'إضافة مادة جديدة'),
-          content: SingleChildScrollView(
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: nameController,
-                    decoration: const InputDecoration(labelText: 'اسم المادة', border: OutlineInputBorder()),
-                    validator: (val) => (val == null || val.trim().isEmpty) ? 'يرجى إدخال اسم المادة' : null,
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: qtyController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'الكمية الحالية', border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: purchasePriceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'سعر الشراء', border: OutlineInputBorder(), prefixIcon: Icon(Icons.shopping_bag_outlined)),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: retailPriceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'سعر البيع (مفرق)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.sell_outlined)),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: semiPriceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'سعر نصف الجملة', border: OutlineInputBorder(), prefixIcon: Icon(Icons.storefront_outlined)),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: wholesalePriceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'سعر الجملة', border: OutlineInputBorder(), prefixIcon: Icon(Icons.warehouse_outlined)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('إلغاء'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5C6BC0)),
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) return;
-
-                final Map<String, dynamic> data = {
-                  'name': nameController.text.trim(),
-                  'quantity': double.tryParse(qtyController.text.trim()) ?? 0.0,
-                  'purchase_price': double.tryParse(purchasePriceController.text.trim()) ?? 0.0,
-                  'price': double.tryParse(retailPriceController.text.trim()) ?? 0.0,
-                  'semi_wholesale_price': double.tryParse(semiPriceController.text.trim()) ?? 0.0,
-                  'wholesale_price': double.tryParse(wholesalePriceController.text.trim()) ?? 0.0,
-                };
-
-                if (isEdit) {
-                  await DatabaseHelper.instance.updateProduct(product['id'], data);
-                } else {
-                  await DatabaseHelper.instance.insertProduct(data);
-                }
-
-                if (mounted) {
-                  Navigator.pop(context);
-                  _refreshProducts();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(isEdit ? 'تم تعديل المادة بنجاح' : 'تمت إضافة المادة بنجاح')),
-                  );
-                }
-              },
-              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // 2. كشف حركة المادة مع الفلترة والتحويل للفاتورة
+  // كشف حركة المادة مع الفلترة والتحويل للفاتورة
   void _showProductMovementDialog(Map<String, dynamic> product) async {
     final movements = await DatabaseHelper.instance.getProductMovements(product['id']);
 
@@ -275,7 +172,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
-  // 3. عرض الفاتورة المرتبطة بالضغط على الحركة
+  // عرض الفاتورة المرتبطة بالضغط على الحركة
   void _showInvoiceDetailsDialog(int invoiceId) async {
     final db = await DatabaseHelper.instance.database;
     final invoices = await db.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
@@ -344,7 +241,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           itemCount: _filteredProducts.length,
                           itemBuilder: (context, index) {
                             final product = _filteredProducts[index];
-                            final double retailPrice = (product['price'] as num?)?.toDouble() ?? 0.0;
+                            final double retailPrice = (product['retail_price'] ?? product['price'] as num?)?.toDouble() ?? 0.0;
+                            final double buyPrice = (product['buy_price'] ?? product['purchase_price'] as num?)?.toDouble() ?? 0.0;
                             final double qty = (product['quantity'] as num?)?.toDouble() ?? 0.0;
 
                             return Card(
@@ -354,7 +252,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                   product['name'] ?? '',
                                   style: const TextStyle(fontWeight: FontWeight.bold),
                                 ),
-                                subtitle: Text('الكمية: $qty | مفرق: $retailPrice | شراء: ${product['purchase_price']}'),
+                                subtitle: Text('الكمية: $qty | مفرق: $retailPrice | شراء: $buyPrice'),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -366,7 +264,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                     IconButton(
                                       icon: const Icon(Icons.edit, color: Colors.indigo),
                                       tooltip: 'تعديل خصائص المادة',
-                                      onPressed: () => _showAddEditProductDialog(product),
+                                      onPressed: () async {
+                                        // فتح شاشة الإضافة والتعديل الكاملة بدلاً من النافذة المنبثقة
+                                        final updated = await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => AddProductScreen(product: product),
+                                          ),
+                                        );
+                                        if (updated == true) {
+                                          _refreshProducts();
+                                        }
+                                      },
                                     ),
                                   ],
                                 ),
@@ -378,7 +287,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
               ],
             ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddEditProductDialog(),
+        onPressed: () async {
+          final added = await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AddProductScreen()),
+          );
+          if (added == true) {
+            _refreshProducts();
+          }
+        },
         backgroundColor: const Color(0xFF5C6BC0),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('إضافة مادة', style: TextStyle(color: Colors.white)),

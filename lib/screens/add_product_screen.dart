@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
-import '../models/product.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({Key? key}) : super(key: key);
@@ -25,29 +24,48 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     setState(() => _isLoading = true);
 
-    final String name = _nameController.text.trim();
-    final double buyPrice = double.tryParse(_buyPriceController.text.trim()) ?? 0.0;
-    final double wholesalePrice = double.tryParse(_wholesalePriceController.text.trim()) ?? 0.0;
-    final double retailPrice = double.tryParse(_retailPriceController.text.trim()) ?? 0.0;
-    final double quantity = double.tryParse(_quantityController.text.trim()) ?? 0.0;
+    try {
+      final String name = _nameController.text.trim();
+      final double buyPrice = double.tryParse(_buyPriceController.text.trim()) ?? 0.0;
+      final double wholesalePrice = double.tryParse(_wholesalePriceController.text.trim()) ?? 0.0;
+      final double retailPrice = double.tryParse(_retailPriceController.text.trim()) ?? 0.0;
+      final double quantity = double.tryParse(_quantityController.text.trim()) ?? 0.0;
 
-    final newProduct = Product(
-      name: name,
-      buyPrice: buyPrice,
-      wholesalePrice: wholesalePrice,
-      retailPrice: retailPrice,
-      stockQuantity: quantity,
-    );
+      // إرسال الخريطة بأسماء الأعمدة المطابقة لقاعدة البيانات بالضبط
+      final Map<String, dynamic> productRow = {
+        'name': name,
+        'buy_price': buyPrice,
+        'wholesale_price': wholesalePrice,
+        'retail_price': retailPrice,
+        'stock_quantity': quantity,
+        'price': retailPrice,     // حقل احتياطي للتوافق
+        'quantity': quantity,     // حقل احتياطي للتوافق
+      };
 
-    await DatabaseHelper.instance.insertProduct(newProduct.toMap());
+      await DatabaseHelper.instance.insertProduct(productRow);
 
-    setState(() => _isLoading = false);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تمت إضافة المادة بنجاح')),
-      );
-      Navigator.of(context).pop(true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تمت إضافة المادة بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(context).pop(true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('حدث خطأ أثناء الحفظ: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -157,10 +175,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     ),
                     onPressed: _isLoading ? null : _saveProduct,
                     child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          )
                         : const Text(
                             'حفظ المنتج',
-                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                   ),
                 ),

@@ -19,17 +19,13 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2, // رفع الإصدار للترقية التلقائية
+      version: 2,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
   }
 
-  // ==========================================
-  // إنشاء كافة جداول قاعدة البيانات بالكامل
-  // ==========================================
   Future _createDB(Database db, int version) async {
-    // 1. جدول المنتجات
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +38,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 2. جدول العملاء والموردين
     await db.execute('''
       CREATE TABLE contacts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,7 +48,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 3. جدول الفواتير
     await db.execute('''
       CREATE TABLE invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +64,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 4. جدول عناصر الفاتورة
     await db.execute('''
       CREATE TABLE invoice_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,7 +78,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 5. جدول حركة الصندوق والمقبوضات/المدفوعات
     await db.execute('''
       CREATE TABLE cash_journal (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,18 +91,14 @@ class DatabaseHelper {
     ''');
   }
 
-  // ==========================================
-  // دالة الترقية عند تغيير هيكلية قواعد البيانات
-  // ==========================================
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // إضافة حقل نصف الجملة للنسخ السابقة التي تجري على الأجهزة
       await db.execute('ALTER TABLE products ADD COLUMN half_wholesale_price REAL DEFAULT 0.0');
     }
   }
 
   // ==========================================
-  // عمليات المنتجات (Products Operations)
+  // عمليات المنتجات (Products)
   // ==========================================
   Future<int> insertProduct(Map<String, dynamic> product) async {
     final db = await instance.database;
@@ -124,12 +112,7 @@ class DatabaseHelper {
 
   Future<int> updateProduct(Map<String, dynamic> product) async {
     final db = await instance.database;
-    return await db.update(
-      'products',
-      product,
-      where: 'id = ?',
-      whereArgs: [product['id']],
-    );
+    return await db.update('products', product, where: 'id = ?', whereArgs: [product['id']]);
   }
 
   Future<int> deleteProduct(int id) async {
@@ -138,7 +121,7 @@ class DatabaseHelper {
   }
 
   // ==========================================
-  // عمليات العملاء والموردين (Contacts Operations)
+  // عمليات الحسابات والعملاء (Contacts)
   // ==========================================
   Future<int> insertContact(Map<String, dynamic> contact) async {
     final db = await instance.database;
@@ -150,15 +133,42 @@ class DatabaseHelper {
     return await db.query('contacts', orderBy: 'id DESC');
   }
 
-  Future<int> updateContact(Map<String, dynamic> contact) async {
+  Future<int> updateContactBalance(int? contactId, double amount) async {
+    if (contactId == null) return 0;
     final db = await instance.database;
-    return await db.update('contacts', contact, where: 'id = ?', whereArgs: [contact['id']]);
+    return await db.rawUpdate(
+      'UPDATE contacts SET balance = balance + ? WHERE id = ?',
+      [amount, contactId],
+    );
   }
 
   // ==========================================
-  // عمليات الفواتير (Invoices Operations)
+  // عمليات حركات الصندوق (Cash Journal)
   // ==========================================
-  Future<int> insertInvoice(Map<String, dynamic> invoice, List<Map<String, dynamic>> items) async {
+  Future<List<Map<String, dynamic>>> getDailyTransactions(String date) async {
+    final db = await instance.database;
+    return await db.query('cash_journal', where: 'date LIKE ?', whereArgs: ['$date%'], orderBy: 'id DESC');
+  }
+
+  Future<int> addCashTransaction(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    return await db.insert('cash_journal', row);
+  }
+
+  Future<int> updateCashTransaction(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    return await db.update('cash_journal', row, where: 'id = ?', whereArgs: [row['id']]);
+  }
+
+  Future<int> deleteCashTransaction(int transactionId) async {
+    final db = await instance.database;
+    return await db.delete('cash_journal', where: 'id = ?', whereArgs: [transactionId]);
+  }
+
+  // ==========================================
+  // عمليات الفواتير الكاملة (Invoices)
+  // ==========================================
+  Future<int> addFullInvoice(Map<String, dynamic> invoice, List<Map<String, dynamic>> items) async {
     final db = await instance.database;
     int invoiceId = 0;
 
@@ -173,22 +183,23 @@ class DatabaseHelper {
     return invoiceId;
   }
 
+  Future<void> updateFullInvoice(Map<String, dynamic> invoice, List<Map<String, dynamic>> items) async {
+    final db = await instance.database;
+
+    await db.transaction((txn) async {
+      await txn.update('invoices', invoice, where: 'id = ?', whereArgs: [invoice['id']]);
+      await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoice['id']]);
+
+      for (var item in items) {
+        item['invoice_id'] = invoice['id'];
+        await txn.insert('invoice_items', item);
+      }
+    });
+  }
+
   Future<List<Map<String, dynamic>>> getInvoices() async {
     final db = await instance.database;
     return await db.query('invoices', orderBy: 'id DESC');
-  }
-
-  // ==========================================
-  // عمليات حركة الصندوق (Cash Journal Operations)
-  // ==========================================
-  Future<int> insertCashJournal(Map<String, dynamic> entry) async {
-    final db = await instance.database;
-    return await db.insert('cash_journal', entry);
-  }
-
-  Future<List<Map<String, dynamic>>> getCashJournal() async {
-    final db = await instance.database;
-    return await db.query('cash_journal', orderBy: 'id DESC');
   }
 
   Future close() async {

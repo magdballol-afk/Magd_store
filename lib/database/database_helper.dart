@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import '../models/product.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -20,7 +21,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3, // تم الترفيع للإصدار 3 لدعم هيكل أسعار المنتجات الموحد
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -37,13 +38,17 @@ class DatabaseHelper {
       )
     ''');
 
-    // 2. جدول المنتجات
+    // 2. جدول المنتجات المتوافق كلياً مع بطاقة المادة وإضافة المادة
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
-        price REAL NOT NULL DEFAULT 0.0,
-        quantity REAL NOT NULL DEFAULT 0.0
+        buy_price REAL NOT NULL DEFAULT 0.0,
+        wholesale_price REAL NOT NULL DEFAULT 0.0,
+        retail_price REAL NOT NULL DEFAULT 0.0,
+        stock_quantity REAL NOT NULL DEFAULT 0.0,
+        price REAL DEFAULT 0.0,
+        quantity REAL DEFAULT 0.0
       )
     ''');
 
@@ -61,7 +66,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // 4. جدول الفواتير (يحتوي على total و total_amount و remaining_amount لمنع أي تعارض)
+    // 4. جدول الفواتير
     await db.execute('''
       CREATE TABLE invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -96,7 +101,7 @@ class DatabaseHelper {
     ''');
   }
 
-  // معالجة التحديث الهيكلي لقواعد البيانات القائمة
+  // معالجة التحديث الهيكلي لقواعد البيانات القائمة دون مسح البيانات
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       try {
@@ -105,6 +110,13 @@ class DatabaseHelper {
       try {
         await db.execute('ALTER TABLE invoices ADD COLUMN remaining_amount REAL DEFAULT 0.0');
       } catch (_) {}
+    }
+
+    if (oldVersion < 3) {
+      try { await db.execute('ALTER TABLE products ADD COLUMN buy_price REAL DEFAULT 0.0'); } catch (_) {}
+      try { await db.execute('ALTER TABLE products ADD COLUMN wholesale_price REAL DEFAULT 0.0'); } catch (_) {}
+      try { await db.execute('ALTER TABLE products ADD COLUMN retail_price REAL DEFAULT 0.0'); } catch (_) {}
+      try { await db.execute('ALTER TABLE products ADD COLUMN stock_quantity REAL DEFAULT 0.0'); } catch (_) {}
     }
   }
 
@@ -116,7 +128,6 @@ class DatabaseHelper {
     final db = await instance.database;
 
     await db.transaction((txn) async {
-      // 1. حساب صافي الصندوق الحالي (المقبوضات - المصروفات)
       final incomeResult = await txn.rawQuery(
         "SELECT SUM(amount) as total FROM cash_transactions WHERE type = 'income'",
       );
@@ -128,12 +139,10 @@ class DatabaseHelper {
       final double totalExpense = double.tryParse((expenseResult.first['total'] ?? 0.0).toString()) ?? 0.0;
       final double netCashBalance = totalIncome - totalExpense;
 
-      // 2. تفريغ جدول بنود الفواتير والفواتير وحركات الصندوق القديمة
       await txn.delete('invoice_items');
       await txn.delete('invoices');
       await txn.delete('cash_transactions');
 
-      // 3. إعادة إدراج رصيد الصندوق الحالي كرصيد افتتاحي للسنة الجديدة
       if (netCashBalance != 0) {
         final String todayDate = DateTime.now().toIso8601String().split('T').first;
         final String type = netCashBalance > 0 ? 'income' : 'expense';
@@ -188,14 +197,26 @@ class DatabaseHelper {
     return await db.insert('products', row);
   }
 
-  Future<int> updateProduct(int id, Map<String, dynamic> row) async {
+  // دالة تحديث المنتج المتوافقة مع كائن Product ودعم التحديث المباشر
+  Future<int> updateProduct(dynamic productOrId, [Map<String, dynamic>? rowData]) async {
     final db = await instance.database;
-    return await db.update(
-      'products',
-      row,
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+
+    if (productOrId is Product) {
+      return await db.update(
+        'products',
+        productOrId.toMap(),
+        where: 'id = ?',
+        whereArgs: [productOrId.id],
+      );
+    } else if (productOrId is int && rowData != null) {
+      return await db.update(
+        'products',
+        rowData,
+        where: 'id = ?',
+        whereArgs: [productOrId],
+      );
+    }
+    return 0;
   }
 
   Future<List<Map<String, dynamic>>> getProductMovements(dynamic productId) async {
@@ -277,7 +298,6 @@ class DatabaseHelper {
     await db.transaction((txn) async {
       final double remaining = totalAmount - paidAmount;
 
-      // 1. إدراج رأس الفاتورة مع تدعيم total و total_amount و remaining_amount
       final invoiceId = await txn.insert('invoices', {
         'contact_id': contactId,
         'contact_name': contactName,
@@ -291,7 +311,6 @@ class DatabaseHelper {
         'date': date,
       });
 
-      // 2. إدراج عناصر الفاتورة وتحديث كميات المواد بالمخزن
       for (var item in items) {
         await txn.insert('invoice_items', {
           'invoice_id': invoiceId,
@@ -310,12 +329,12 @@ class DatabaseHelper {
 
         await txn.rawUpdate('''
           UPDATE products 
-          SET quantity = quantity + ? 
+          SET stock_quantity = stock_quantity + ?,
+              quantity = quantity + ? 
           WHERE id = ?
-        ''', [qtyChange, item['product_id']]);
+        ''', [qtyChange, qtyChange, item['product_id']]);
       }
 
-      // 3. تعديل رصيد العميل حسب المتبقي غير المسدد
       if (contactId != null && remaining != 0) {
         double balanceAdjustment = (type == 'sale') ? remaining : -remaining;
         await txn.rawUpdate('''
@@ -325,7 +344,6 @@ class DatabaseHelper {
         ''', [balanceAdjustment, contactId]);
       }
 
-      // 4. تسجيل الدفعة المسددة نقداً في حركة الصندوق
       if (paidAmount > 0) {
         String cashType = (type == 'sale') ? 'income' : 'expense';
         String notes = (type == 'sale')
@@ -362,7 +380,6 @@ class DatabaseHelper {
     final db = await instance.database;
 
     await db.transaction((txn) async {
-      // 1. جلب بيانات الفاتورة القديمة للربط وإلغاء تأثيرها
       final oldInvoiceList = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
       if (oldInvoiceList.isEmpty) return;
 
@@ -373,7 +390,6 @@ class DatabaseHelper {
       final double oldPaid = double.tryParse((oldInvoice['paid_amount'] ?? 0.0).toString()) ?? 0.0;
       final double oldRemaining = oldTotal - oldPaid;
 
-      // إلغاء تأثير رصيد العميل القديم
       if (oldContactId != null && oldRemaining != 0) {
         double reverseAdjustment = (oldType == 'sale') ? -oldRemaining : oldRemaining;
         await txn.rawUpdate('''
@@ -383,7 +399,6 @@ class DatabaseHelper {
         ''', [reverseAdjustment, oldContactId]);
       }
 
-      // إلغاء كميات عناصر الفاتورة القديمة من المخزن
       final oldItems = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
       for (var item in oldItems) {
         final int? prodId = item['product_id'] as int?;
@@ -392,13 +407,13 @@ class DatabaseHelper {
           double reverseQty = (oldType == 'sale') ? qty : -qty;
           await txn.rawUpdate('''
             UPDATE products 
-            SET quantity = quantity + ? 
+            SET stock_quantity = stock_quantity + ?,
+                quantity = quantity + ? 
             WHERE id = ?
-          ''', [reverseQty, prodId]);
+          ''', [reverseQty, reverseQty, prodId]);
         }
       }
 
-      // 2. تحديث بيانات الفاتورة الرئيسية بنفس الـ ID
       final double remaining = totalAmount - paidAmount;
       await txn.update(
         'invoices',
@@ -417,7 +432,6 @@ class DatabaseHelper {
         whereArgs: [invoiceId],
       );
 
-      // 3. مسح بنود الفاتورة القديمة وإضافة البنود المحدثة مع ضبط الكميات الجديدة
       await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
 
       for (var item in items) {
@@ -438,13 +452,13 @@ class DatabaseHelper {
           double newQtyChange = (type == 'sale') ? -qty : qty;
           await txn.rawUpdate('''
             UPDATE products 
-            SET quantity = quantity + ? 
+            SET stock_quantity = stock_quantity + ?,
+                quantity = quantity + ? 
             WHERE id = ?
-          ''', [newQtyChange, prodId]);
+          ''', [newQtyChange, newQtyChange, prodId]);
         }
       }
 
-      // 4. تطبيق تأثير رصيد العميل الجديد بناءً على المبلغ المتبقي الجديد
       if (contactId != null && remaining != 0) {
         double newBalanceAdjustment = (type == 'sale') ? remaining : -remaining;
         await txn.rawUpdate('''

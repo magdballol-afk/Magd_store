@@ -407,28 +407,26 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
     try {
       if (widget.invoiceId != null) {
-        // تحديث الفاتورة عبر دالة المعاملات المالية الشاملة لخصم الدفعة وتعديل أرصدة الحسابات والصندوق
+        // تحديث الفاتورة عبر دالة المعاملات المالية الشاملة
         await DatabaseHelper.instance.updateFullInvoice(
           invoiceId: widget.invoiceId!,
           contactId: _selectedContactId,
-          contactName: _selectedContactName,
           type: _invoiceType,
-          subtotal: _subtotal,
-          discount: _overallDiscount,
           totalAmount: _finalTotal,
+          discount: _overallDiscount,
+          netAmount: _finalTotal,
           paidAmount: _paidAmount,
-          items: _invoiceItems,
+          itemsList: _invoiceItems,
         );
       } else {
         await DatabaseHelper.instance.addFullInvoice(
-          contactId: _selectedContactId,
-          contactName: _selectedContactName,
+          contactId: _selectedContactId ?? 0,
           type: _invoiceType,
-          subtotal: _subtotal,
-          discount: _overallDiscount,
           totalAmount: _finalTotal,
+          discount: _overallDiscount,
+          netAmount: _finalTotal,
           paidAmount: _paidAmount,
-          items: _invoiceItems,
+          itemsList: _invoiceItems,
           date: DateTime.now().toString().split(' ')[0],
         );
       }

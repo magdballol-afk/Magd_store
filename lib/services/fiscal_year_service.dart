@@ -52,8 +52,10 @@ class FiscalYearService {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: () async {
-                final newYear = newYearController.text.trim();
-                if (newYear.isEmpty || int.tryParse(newYear) == null) {
+                final newYearInput = newYearController.text.trim();
+                final newYearInt = int.tryParse(newYearInput);
+
+                if (newYearInput.isEmpty || newYearInt == null) {
                   ScaffoldMessenger.of(dialogContext).showSnackBar(
                     const SnackBar(content: Text('يرجى إدخال سنة مالية صحيحة')),
                   );
@@ -61,7 +63,7 @@ class FiscalYearService {
                 }
 
                 Navigator.pop(dialogContext);
-                await _executeRollover(context, newYear);
+                await _executeRollover(context, newYearInt);
               },
               child: const Text('تأكيد التدوير'),
             ),
@@ -72,7 +74,7 @@ class FiscalYearService {
   }
 
   /// تنفيذ عملية تدوير قاعدة البيانات
-  static Future<void> _executeRollover(BuildContext context, String newYear) async {
+  static Future<void> _executeRollover(BuildContext context, int newYear) async {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
@@ -98,7 +100,7 @@ class FiscalYearService {
     );
 
     try {
-      // 2. تنفيذ التدوير الفعلي في قاعدة البيانات
+      // 2. تنفيذ التدوير الفعلي في قاعدة البيانات بإرسال قيمة int
       await DatabaseHelper.instance.executeFiscalYearRollover(newYear);
 
       navigator.pop(); // إغلاق مؤشر التحميل

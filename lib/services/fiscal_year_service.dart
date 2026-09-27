@@ -53,7 +53,12 @@ class FiscalYearService {
               ),
               onPressed: () async {
                 final newYear = newYearController.text.trim();
-                if (newYear.isEmpty) return;
+                if (newYear.isEmpty || int.tryParse(newYear) == null) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(content: Text('يرجى إدخال سنة مالية صحيحة')),
+                  );
+                  return;
+                }
 
                 Navigator.pop(dialogContext);
                 await _executeRollover(context, newYear);
@@ -68,6 +73,9 @@ class FiscalYearService {
 
   /// تنفيذ عملية تدوير قاعدة البيانات
   static Future<void> _executeRollover(BuildContext context, String newYear) async {
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
     // 1. إظهار مؤشر التحميل
     showDialog(
       context: context,
@@ -93,25 +101,21 @@ class FiscalYearService {
       // 2. تنفيذ التدوير الفعلي في قاعدة البيانات
       await DatabaseHelper.instance.executeFiscalYearRollover(newYear);
 
-      if (context.mounted) {
-        Navigator.pop(context); // إغلاق مؤشر التحميل
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('تمت عملية التدوير للسنة $newYear وتصفير الحركة بنجاح!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      navigator.pop(); // إغلاق مؤشر التحميل
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('تمت عملية التدوير للسنة $newYear وتصفير الحركة بنجاح!'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context); // إغلاق مؤشر التحميل
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('حدث خطأ أثناء التدوير: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      navigator.pop(); // إغلاق مؤشر التحميل
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('حدث خطأ أثناء التدوير: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 }

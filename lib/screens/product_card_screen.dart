@@ -30,10 +30,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   void _showEditDialog(Map<String, dynamic> product) {
     final nameController = TextEditingController(text: product['name']?.toString() ?? '');
     final quantityController = TextEditingController(text: (product['quantity'] ?? 0.0).toString());
-    final buyPriceController = TextEditingController(text: (product['buy_price'] ?? 0.0).toString());
     final retailPriceController = TextEditingController(text: (product['retail_price'] ?? 0.0).toString());
-    final halfWholesaleController = TextEditingController(text: (product['half_wholesale_price'] ?? 0.0).toString());
-    final wholesalePriceController = TextEditingController(text: (product['wholesale_price'] ?? 0.0).toString());
 
     showDialog(
       context: context,
@@ -51,13 +48,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 const SizedBox(height: 10),
                 _buildDialogField(quantityController, 'الكمية الحالية', Icons.dns, isNumber: true),
                 const SizedBox(height: 10),
-                _buildDialogField(buyPriceController, 'سعر الشراء', Icons.shopping_bag_outlined, isNumber: true),
-                const SizedBox(height: 10),
                 _buildDialogField(retailPriceController, 'سعر البيع (مفرق)', Icons.local_offer_outlined, isNumber: true),
-                const SizedBox(height: 10),
-                _buildDialogField(halfWholesaleController, 'سعر نصف الجملة', Icons.storefront_outlined, isNumber: true),
-                const SizedBox(height: 10),
-                _buildDialogField(wholesalePriceController, 'سعر الجملة', Icons.domain_outlined, isNumber: true),
               ],
             ),
           ),
@@ -76,15 +67,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   'id': product['id'],
                   'name': nameController.text.trim(),
                   'quantity': double.tryParse(quantityController.text) ?? 0.0,
-                  'buy_price': double.tryParse(buyPriceController.text) ?? 0.0,
                   'retail_price': double.tryParse(retailPriceController.text) ?? 0.0,
-                  'half_wholesale_price': double.tryParse(halfWholesaleController.text) ?? 0.0,
-                  'wholesale_price': double.tryParse(wholesalePriceController.text) ?? 0.0,
+                  // الاحتفاظ بالأسعار القديمة المخزنة سابقاً في قاعدة البيانات لتجنب تصفيرها
+                  'buy_price': product['buy_price'] ?? 0.0,
+                  'half_wholesale_price': product['half_wholesale_price'] ?? 0.0,
+                  'wholesale_price': product['wholesale_price'] ?? 0.0,
                 };
 
                 await DatabaseHelper.instance.updateProduct(updatedProduct);
-                Navigator.pop(context);
-                _refreshProducts();
+                if (mounted) {
+                  Navigator.pop(context);
+                  _refreshProducts();
+                }
               },
               child: const Text('حفظ', style: TextStyle(color: Colors.white)),
             ),
@@ -97,7 +91,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   Widget _buildDialogField(TextEditingController controller, String label, IconData icon, {bool isNumber = false}) {
     return TextField(
       controller: controller,
-      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+      keyboardType: isNumber ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF5C6BC0)),
@@ -129,7 +123,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       child: ListTile(
                         title: Text(item['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('الكمية: ${item['quantity']} | شراء: ${item['buy_price']} | مفرق: ${item['retail_price']}'),
+                        subtitle: Text('الكمية: ${item['quantity']} | السعر: ${item['retail_price']}'),
                         trailing: IconButton(
                           icon: const Icon(Icons.edit, color: Color(0xFF5C6BC0)),
                           onPressed: () => _showEditDialog(item),

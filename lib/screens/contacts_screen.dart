@@ -30,12 +30,16 @@ class _ContactsScreenState extends State<ContactsScreen> {
   // إعادة تحميل قائمة العملاء من قاعدة البيانات
   Future<void> _refreshContacts() async {
     setState(() => _isLoading = true);
-    final data = await DatabaseHelper.instance.getContacts();
-    setState(() {
-      _allContacts = data;
-      _applySearch(_searchController.text);
-      _isLoading = false;
-    });
+    try {
+      final data = await DatabaseHelper.instance.getContacts();
+      setState(() {
+        _allContacts = data;
+        _applySearch(_searchController.text);
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
   }
 
   // فلترة الحسابات حسب اسم العميل أو الهاتف
@@ -60,95 +64,156 @@ class _ContactsScreenState extends State<ContactsScreen> {
     final phoneController = TextEditingController();
     final balanceController = TextEditingController(text: '0.0');
     final formKey = GlobalKey<FormState>();
+    String selectedType = 'customer'; // القيمة الافتراضية للعميل
+    bool isSaving = false;
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('إضافة حساب / عميل جديد'),
-          content: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: minContentSize,
-                children: [
-                  TextFormField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'اسم العميل / الحساب',
-                      prefixIcon: Icon(Icons.person),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'يرجى إدخال الاسم';
-                      }
-                      return null;
-                    },
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('إضافة حساب / عميل جديد', style: TextStyle(fontWeight: FontWeight.bold)),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // اسم العميل
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'اسم العميل / الحساب *',
+                          prefixIcon: Icon(Icons.person, color: Color(0xFF5C6BC0)),
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'يرجى إدخال الاسم';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      // نوع جهة الاتصال (عميل / مورد)
+                      DropdownButtonFormField<String>(
+                        value: selectedType,
+                        decoration: const InputDecoration(
+                          labelText: 'نوع الحساب',
+                          prefixIcon: Icon(Icons.category, color: Color(0xFF5C6BC0)),
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'customer', child: Text('عميل')),
+                          DropdownMenuItem(value: 'supplier', child: Text('مورد')),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() => selectedType = value);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      // رقم الهاتف
+                      TextFormField(
+                        controller: phoneController,
+                        keyboardType: TextInputType.phone,
+                        decoration: const InputDecoration(
+                          labelText: 'رقم الهاتف (اختياري)',
+                          prefixIcon: Icon(Icons.phone, color: Color(0xFF5C6BC0)),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // الرصيد الأولي
+                      TextFormField(
+                        controller: balanceController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'الرصيد الأولي',
+                          prefixIcon: Icon(Icons.account_balance_wallet, color: Color(0xFF5C6BC0)),
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value != null && value.isNotEmpty && double.tryParse(value.trim()) == null) {
+                            return 'يرجى إدخال رقم صحيح';
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'رقم الهاتف (اختياري)',
-                      prefixIcon: Icon(Icons.phone),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: balanceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'الرصيد الأولي',
-                      prefixIcon: Icon(Icons.account_balance_wallet),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      if (value != null && value.isNotEmpty && double.tryParse(value.trim()) == null) {
-                        return 'يرجى إدخال رقم صحيح';
-                      }
-                      return null;
-                    },
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('إلغاء'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF5C6BC0),
-              ),
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) return;
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(context),
+                  child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF5C6BC0),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          if (!formKey.currentState!.validate()) return;
 
-                final String name = nameController.text.trim();
-                final String phone = phoneController.text.trim();
-                final double balance = double.tryParse(balanceController.text.trim()) ?? 0.0;
+                          setDialogState(() => isSaving = true);
 
-                await DatabaseHelper.instance.insertContact({
-                  'name': name,
-                  'phone': phone,
-                  'balance': balance,
-                });
+                          try {
+                            final String name = nameController.text.trim();
+                            final String phone = phoneController.text.trim();
+                            final double balance = double.tryParse(balanceController.text.trim()) ?? 0.0;
 
-                if (mounted) {
-                  Navigator.pop(context);
-                  _refreshContacts();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تمت إضافة العميل بنجاح')),
-                  );
-                }
-              },
-              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
-            ),
-          ],
+                            // إضافة جميع الحقول المطلوبة لقاعدة البيانات
+                            await DatabaseHelper.instance.insertContact({
+                              'name': name,
+                              'phone': phone,
+                              'type': selectedType, // 🔑 الحقل المهم الذي كان يسبب المشكلة
+                              'balance': balance,
+                            });
+
+                            if (mounted) {
+                              Navigator.pop(context);
+                              _refreshContacts();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('تمت إضافة العميل بنجاح'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            setDialogState(() => isSaving = false);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('حدث خطأ أثناء الحفظ: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('حفظ', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -166,14 +231,13 @@ class _ContactsScreenState extends State<ContactsScreen> {
     ).then((_) => _refreshContacts());
   }
 
-  static const MainAxisSize minContentSize = MainAxisSize.min;
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('إدارة الحسابات والعملاء'),
         backgroundColor: const Color(0xFF5C6BC0),
+        centerTitle: true,
       ),
       body: Column(
         children: [
@@ -287,71 +351,75 @@ class _AccountStatementSheetState extends State<_AccountStatementSheet> {
 
   Future<void> _loadMovements() async {
     setState(() => _loading = true);
-    final db = await DatabaseHelper.instance.database;
-    final int contactId = widget.contact['id'];
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final int contactId = widget.contact['id'];
 
-    // جلب الفواتير المرتطبة بالعميل
-    final invoices = await db.query(
-      'invoices',
-      where: 'contact_id = ?',
-      whereArgs: [contactId],
-    );
+      // جلب الفواتير المرتطبة بالعميل
+      final invoices = await db.query(
+        'invoices',
+        where: 'contact_id = ?',
+        whereArgs: [contactId],
+      );
 
-    // جلب حركات الصندوق المرتبطة بالعميل
-    final cashTx = await db.query(
-      'cash_transactions',
-      where: 'contact_id = ?',
-      whereArgs: [contactId],
-    );
+      // جلب حركات الصندوق المرتبطة بالعميل
+      final cashTx = await db.query(
+        'cash_transactions',
+        where: 'contact_id = ?',
+        whereArgs: [contactId],
+      );
 
-    List<Map<String, dynamic>> list = [];
+      List<Map<String, dynamic>> list = [];
 
-    for (var inv in invoices) {
-      list.add({
-        'id': inv['id'],
-        'source': 'invoice',
-        'title': inv['type'] == 'sale' ? 'فاتورة مبيعات #${inv['id']}' : 'فاتورة مشتريات #${inv['id']}',
-        'amount': inv['total_amount'],
-        'date': inv['date'],
-        'details': inv,
+      for (var inv in invoices) {
+        list.add({
+          'id': inv['id'],
+          'source': 'invoice',
+          'title': inv['type'] == 'sale' ? 'فاتورة مبيعات #${inv['id']}' : 'فاتورة مشتريات #${inv['id']}',
+          'amount': inv['total_amount'],
+          'date': inv['date'],
+          'details': inv,
+        });
+      }
+
+      for (var ctx in cashTx) {
+        list.add({
+          'id': ctx['id'],
+          'source': 'cash',
+          'title': ctx['type'] == 'income' ? 'قبض صندوق #${ctx['id']}' : 'صرف صندوق #${ctx['id']}',
+          'amount': ctx['amount'],
+          'date': ctx['date'],
+          'details': ctx,
+        });
+      }
+
+      // الفلترة بالتاريخ إن وجد
+      if (_startDate != null) {
+        list = list.where((item) {
+          final d = DateTime.tryParse(item['date'].toString());
+          if (d == null) return true;
+          return d.isAfter(_startDate!.subtract(const Duration(days: 1)));
+        }).toList();
+      }
+
+      if (_endDate != null) {
+        list = list.where((item) {
+          final d = DateTime.tryParse(item['date'].toString());
+          if (d == null) return true;
+          return d.isBefore(_endDate!.add(const Duration(days: 1)));
+        }).toList();
+      }
+
+      // ترتيب الحركات حسب التاريخ
+      list.sort((a, b) => b['date'].toString().compareTo(a['date'].toString()));
+
+      setState(() {
+        _movements = list;
+        _loading = false;
       });
+    } catch (_) {
+      setState(() => _loading = false);
     }
-
-    for (var ctx in cashTx) {
-      list.add({
-        'id': ctx['id'],
-        'source': 'cash',
-        'title': ctx['type'] == 'income' ? 'قبض صندوق #${ctx['id']}' : 'صرف صندوق #${ctx['id']}',
-        'amount': ctx['amount'],
-        'date': ctx['date'],
-        'details': ctx,
-      });
-    }
-
-    // الفلترة بالتاريخ إن وجد
-    if (_startDate != null) {
-      list = list.where((item) {
-        final d = DateTime.tryParse(item['date'].toString());
-        if (d == null) return true;
-        return d.isAfter(_startDate!.subtract(const Duration(days: 1)));
-      }).toList();
-    }
-
-    if (_endDate != null) {
-      list = list.where((item) {
-        final d = DateTime.tryParse(item['date'].toString());
-        if (d == null) return true;
-        return d.isBefore(_endDate!.add(const Duration(days: 1)));
-      }).toList();
-    }
-
-    // ترتيب الحركات حسب التاريخ
-    list.sort((a, b) => b['date'].toString().compareTo(a['date'].toString()));
-
-    setState(() {
-      _movements = list;
-      _loading = false;
-    });
   }
 
   void _pickDateRange() async {
@@ -393,7 +461,7 @@ class _AccountStatementSheetState extends State<_AccountStatementSheet> {
               Text('المدفوع: ${details['paid_amount']}'),
               Text('نوع الفاتورة: ${details['type']}'),
             ] else ...[
-              Text('البيان/الملاحظات: ${details['notes'] ?? 'بدون'}'),
+              Text('البيان/الملاحظات: ${details['note'] ?? 'بدون'}'),
             ],
           ],
         ),

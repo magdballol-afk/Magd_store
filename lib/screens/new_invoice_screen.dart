@@ -103,7 +103,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
       _invoiceItems.clear();
       for (var item in itemsResult) {
-        final unitPrice = double.tryParse((item['unit_price'] ?? 0.0).toString()) ?? 0.0;
+        final unitPrice = double.tryParse((item['price'] ?? item['unit_price'] ?? 0.0).toString()) ?? 0.0;
         final quantity = double.tryParse((item['quantity'] ?? 0.0).toString()) ?? 0.0;
         final discount = double.tryParse((item['discount'] ?? 0.0).toString()) ?? 0.0;
         final total = double.tryParse((item['total'] ?? 0.0).toString()) ?? 0.0;
@@ -295,13 +295,22 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                           itemCount: filteredProducts.length,
                           itemBuilder: (context, index) {
                             final prod = filteredProducts[index];
+                            // جلب سعر المفرق بناءً على نوع الفاتورة (أو سعر الشراء إذا كانت فاتورة مشتريات)
+                            final double productRetailPrice = (prod['retail_price'] as num?)?.toDouble() ?? 
+                                                              (prod['buy_price'] as num?)?.toDouble() ?? 0.0;
+
                             return ListTile(
                               title: Text(prod['name'] ?? ''),
-                              subtitle: Text('المتوفر: ${prod['quantity']} | السعر: ${prod['price']}'),
+                              subtitle: Text('المتوفر: ${prod['quantity']} | السعر: $productRetailPrice'),
                               onTap: () {
                                 setDialogState(() {
                                   selectedProduct = prod;
-                                  priceController.text = (prod['price'] ?? 0.0).toString();
+                                  // 🔑 إسناد سعر المفرق المباشر من قاعدة البيانات إلى حقل النص
+                                  final double defaultPrice = _invoiceType == 'purchase' 
+                                      ? (prod['buy_price'] as num?)?.toDouble() ?? 0.0
+                                      : (prod['retail_price'] as num?)?.toDouble() ?? 0.0;
+                                      
+                                  priceController.text = defaultPrice > 0 ? defaultPrice.toString() : '';
                                 });
                               },
                             );
@@ -406,8 +415,14 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     setState(() => _isSaving = true);
 
     try {
+      final List<Map<String, dynamic>> dbItems = _invoiceItems.map((item) => {
+        'product_id': item['product_id'],
+        'quantity': item['quantity'],
+        'price': item['unit_price'],
+        'total': item['total'],
+      }).toList();
+
       if (widget.invoiceId != null) {
-        // تحديث الفاتورة عبر دالة المعاملات المالية الشاملة
         await DatabaseHelper.instance.updateFullInvoice(
           invoiceId: widget.invoiceId!,
           contactId: _selectedContactId,
@@ -416,7 +431,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           discount: _overallDiscount,
           netAmount: _finalTotal,
           paidAmount: _paidAmount,
-          itemsList: _invoiceItems,
+          itemsList: dbItems,
         );
       } else {
         await DatabaseHelper.instance.addFullInvoice(
@@ -426,7 +441,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           discount: _overallDiscount,
           netAmount: _finalTotal,
           paidAmount: _paidAmount,
-          itemsList: _invoiceItems,
+          itemsList: dbItems,
           date: DateTime.now().toString().split(' ')[0],
         );
       }

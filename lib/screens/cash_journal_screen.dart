@@ -14,6 +14,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
   List<Map<String, dynamic>> _dailyTransactions = [];
 
   bool _isLoading = true;
+  bool _isSaving = false;
   String _transactionType = 'income'; // 'income' (قبض) أو 'expense' (دفع)
   int? _selectedContactId;
   String _selectedContactName = 'عام / غير محدد';
@@ -31,20 +32,26 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
   // جلب البيانات
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final contactsData = await DatabaseHelper.instance.getContacts();
-    final formattedDate = _selectedDate.toString().split(' ')[0];
-    final transactionsData = await DatabaseHelper.instance.getDailyTransactions(formattedDate);
+    try {
+      final contactsData = await DatabaseHelper.instance.getContacts();
+      final formattedDate = _selectedDate.toString().split(' ')[0];
+      final transactionsData = await DatabaseHelper.instance.getDailyTransactions(formattedDate);
 
-    setState(() {
-      _contacts = List<Map<String, dynamic>>.from(contactsData);
-      _dailyTransactions = List<Map<String, dynamic>>.from(transactionsData);
-      _isLoading = false;
-    });
+      setState(() {
+        _contacts = List<Map<String, dynamic>>.from(contactsData);
+        _dailyTransactions = List<Map<String, dynamic>>.from(transactionsData);
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
-  // إضافة حركة جديدة وتحديث رصيد العميل
+  // إضافة حركة جديدة وتحديث رصيد العميل وقاعدة البيانات
   Future<void> _submitTransaction() async {
-    final double? amount = double.tryParse(_amountController.text);
+    final double? amount = double.tryParse(_amountController.text.trim());
     if (amount == null || amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى إدخال مبلغ صحيح')),
@@ -52,43 +59,66 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
       return;
     }
 
-    final String formattedDate = _selectedDate.toString().split(' ')[0];
+    setState(() => _isSaving = true);
 
-    // إعداد الخريطة لضمان توافقها المباشر مع DatabaseHelper
-    final Map<String, dynamic> row = {
-      'contact_id': _selectedContactId,
-      'contact_name': _selectedContactName,
-      'type': _transactionType,
-      'amount': amount,
-      'notes': _notesController.text,
-      'date': formattedDate,
-    };
+    try {
+      final String formattedDate = _selectedDate.toString().split(' ')[0];
 
-    await DatabaseHelper.instance.addCashTransaction(row);
+      // 🔑 إعداد الخريطة بأسماء الأعمدة المطابقة لجدول cash_transactions في SQLite
+      final Map<String, dynamic> row = {
+        'contact_id': _selectedContactId ?? 0,
+        'type': _transactionType,
+        'amount': amount,
+        'note': _notesController.text.trim(), // الحقل الصحيح في الجدول هو note وليس notes
+        'date': formattedDate,
+      };
 
-    // تحديث رصيد العميل مباشرة
-    if (_selectedContactId != null) {
-      double adjustment = (_transactionType == 'income') ? -amount : amount;
-      await DatabaseHelper.instance.updateContactBalance(_selectedContactId, adjustment);
-    }
+      // 1. حفظ الحركة في قاعدة البيانات
+      await DatabaseHelper.instance.addCashTransaction(row);
 
-    _amountController.clear();
-    _notesController.clear();
-    _contactSearchController.clear();
-    setState(() {
-      _selectedContactId = null;
-      _selectedContactName = 'عام / غير محدد';
-    });
+      // 2. تحديث رصيد العميل محاسبياً
+      if (_selectedContactId != null && _selectedContactId! > 0) {
+        // قبض (income): يقلل دين العميل (-amount)
+        // دفع (expense): يزيد المستحق للعميل (+amount)
+        double adjustment = (_transactionType == 'income') ? -amount : amount;
+        await DatabaseHelper.instance.updateContactBalance(_selectedContactId, adjustment);
+      }
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تسجيل الحركة وتحديث رصيد العميل بنجاح')),
-      );
-      _loadData();
+      // 3. إعادة ضبط الواجهة
+      _amountController.clear();
+      _notesController.clear();
+      _contactSearchController.clear();
+      setState(() {
+        _selectedContactId = null;
+        _selectedContactName = 'عام / غير محدد';
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم تسجيل الحركة وتحديث رصيد العميل بنجاح'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadData();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('فشل حفظ الحركة: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 
-  // حذف حركة صندوق وتعديل رصيد العميل
+  // حذف حركة صندوق وعكس أثرها على رصيد العميل
   Future<void> _deleteTransaction(Map<String, dynamic> item) async {
     final bool? confirm = await showDialog<bool>(
       context: context,
@@ -110,33 +140,41 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     );
 
     if (confirm == true) {
-      final int transactionId = item['id'];
-      final int? contactId = item['contact_id'];
-      final double amount = ((item['amount'] ?? 0.0) as num).toDouble();
-      final String type = item['type'] ?? 'income';
+      try {
+        final int transactionId = item['id'];
+        final int? contactId = item['contact_id'];
+        final double amount = ((item['amount'] ?? 0.0) as num).toDouble();
+        final String type = item['type'] ?? 'income';
 
-      // 1. عكس التأثير المالي على رصيد العميل
-      if (contactId != null) {
-        double adjustment = (type == 'income') ? amount : -amount;
-        await DatabaseHelper.instance.updateContactBalance(contactId, adjustment);
-      }
+        // 1. عكس التأثير المالي على رصيد العميل
+        if (contactId != null && contactId > 0) {
+          double adjustment = (type == 'income') ? amount : -amount;
+          await DatabaseHelper.instance.updateContactBalance(contactId, adjustment);
+        }
 
-      // 2. حذف الحركة من جدول الحركات
-      await DatabaseHelper.instance.deleteCashTransaction(transactionId);
+        // 2. حذف الحركة
+        await DatabaseHelper.instance.deleteCashTransaction(transactionId);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم حذف الحركة وتحديث رصيد العميل')),
-        );
-        _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم حذف الحركة وتحديث رصيد العميل')),
+          );
+          _loadData();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('حدث خطأ أثناء الحذف: $e')),
+          );
+        }
       }
     }
   }
 
-  // تعديل حركة صندوق وتعديل رصيد العميل
+  // تعديل حركة صندوق وتحديث رصيد العميل
   Future<void> _editTransaction(Map<String, dynamic> item) async {
     final TextEditingController editAmountController = TextEditingController(text: item['amount'].toString());
-    final TextEditingController editNotesController = TextEditingController(text: item['notes'] ?? '');
+    final TextEditingController editNotesController = TextEditingController(text: item['note'] ?? item['notes'] ?? '');
     String editType = item['type'] ?? 'income';
     int? editContactId = item['contact_id'];
     String editContactName = item['contact_name'] ?? 'عام / غير محدد';
@@ -173,7 +211,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                       ],
                     ),
                     DropdownButtonFormField<int?>(
-                      value: editContactId,
+                      value: editContactId == 0 ? null : editContactId,
                       items: [
                         const DropdownMenuItem<int?>(
                           value: null,
@@ -190,7 +228,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                           if (val == null) {
                             editContactName = 'عام / غير محدد';
                           } else {
-                            final c = _contacts.firstWhere((element) => element['id'] == val);
+                            final c = _contacts.firstWhere((element) => element['id'] == val, orElse: () => {});
                             editContactName = c['name'] ?? 'عام / غير محدد';
                           }
                         });
@@ -219,7 +257,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5C6BC0)),
                   onPressed: () async {
-                    final double? newAmount = double.tryParse(editAmountController.text);
+                    final double? newAmount = double.tryParse(editAmountController.text.trim());
                     if (newAmount == null || newAmount <= 0) return;
 
                     final double oldAmount = ((item['amount'] ?? 0.0) as num).toDouble();
@@ -227,25 +265,24 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                     final int? oldContactId = item['contact_id'];
 
                     // 1. إعادة تسوية رصيد العميل القديم
-                    if (oldContactId != null) {
+                    if (oldContactId != null && oldContactId > 0) {
                       double reverseOld = (oldType == 'income') ? oldAmount : -oldAmount;
                       await DatabaseHelper.instance.updateContactBalance(oldContactId, reverseOld);
                     }
 
                     // 2. تطبيق تأثير الحركة الجديدة على رصيد العميل الجديد
-                    if (editContactId != null) {
+                    if (editContactId != null && editContactId > 0) {
                       double applyNew = (editType == 'income') ? -newAmount : newAmount;
                       await DatabaseHelper.instance.updateContactBalance(editContactId, applyNew);
                     }
 
-                    // 3. تحديث الحركة في قاعدة البيانات باختيار الخريطة
+                    // 3. تحديث الحركة في قاعدة البيانات بالأسماء الصحيحة للاستعلام
                     final Map<String, dynamic> row = {
                       'id': item['id'],
-                      'contact_id': editContactId,
-                      'contact_name': editContactName,
+                      'contact_id': editContactId ?? 0,
                       'type': editType,
                       'amount': newAmount,
-                      'notes': editNotesController.text,
+                      'note': editNotesController.text.trim(),
                       'date': item['date'] ?? _selectedDate.toString().split(' ')[0],
                     };
 
@@ -295,6 +332,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
       appBar: AppBar(
         title: const Text('حركة الصندوق اليومية'),
         backgroundColor: const Color(0xFF5C6BC0),
+        centerTitle: true,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -331,7 +369,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // كروت الإحصائيات (مقبوضات ومصروفات)
+                  // كروت المقبوضات والمدفوعات
                   Row(
                     children: [
                       Expanded(
@@ -503,8 +541,10 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF5C6BC0),
                               ),
-                              onPressed: _submitTransaction,
-                              child: const Text('حفظ الحركة', style: TextStyle(color: Colors.white, fontSize: 16)),
+                              onPressed: _isSaving ? null : _submitTransaction,
+                              child: _isSaving
+                                  ? const CircularProgressIndicator(color: Colors.white)
+                                  : const Text('حفظ الحركة', style: TextStyle(color: Colors.white, fontSize: 16)),
                             ),
                           ),
                         ],
@@ -530,6 +570,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                             final item = _dailyTransactions[index];
                             final bool isIncome = item['type'] == 'income';
                             final double amount = ((item['amount'] ?? 0.0) as num).toDouble();
+                            final String notesText = item['note'] ?? item['notes'] ?? '';
 
                             return Card(
                               margin: const EdgeInsets.symmetric(vertical: 4),
@@ -542,9 +583,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                                   ),
                                 ),
                                 title: Text(item['contact_name'] ?? 'عام'),
-                                subtitle: Text(item['notes'] != null && item['notes'].toString().isNotEmpty
-                                    ? item['notes']
-                                    : (isIncome ? 'دفعة مقبوضة' : 'دفعة مدفوعة')),
+                                subtitle: Text(notesText.isNotEmpty ? notesText : (isIncome ? 'دفعة مقبوضة' : 'دفعة مدفوعة')),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [

@@ -64,24 +64,22 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     try {
       final String formattedDate = _selectedDate.toString().split(' ')[0];
 
-      // 🔑 إعداد الخريطة بأسماء الأعمدة المطابقة لجدول cash_transactions في SQLite
       final Map<String, dynamic> row = {
         'contact_id': _selectedContactId ?? 0,
         'type': _transactionType,
         'amount': amount,
-        'note': _notesController.text.trim(), // الحقل الصحيح في الجدول هو note وليس notes
+        'note': _notesController.text.trim(),
         'date': formattedDate,
       };
 
       // 1. حفظ الحركة في قاعدة البيانات
       await DatabaseHelper.instance.addCashTransaction(row);
 
-      // 2. تحديث رصيد العميل محاسبياً
-      if (_selectedContactId != null && _selectedContactId! > 0) {
-        // قبض (income): يقلل دين العميل (-amount)
-        // دفع (expense): يزيد المستحق للعميل (+amount)
+      // 2. تحديث رصيد العميل محاسبياً بشرط Null-Safety آمن
+      final int? contactId = _selectedContactId;
+      if (contactId != null && contactId > 0) {
         double adjustment = (_transactionType == 'income') ? -amount : amount;
-        await DatabaseHelper.instance.updateContactBalance(_selectedContactId, adjustment);
+        await DatabaseHelper.instance.updateContactBalance(contactId, adjustment);
       }
 
       // 3. إعادة ضبط الواجهة
@@ -211,7 +209,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                       ],
                     ),
                     DropdownButtonFormField<int?>(
-                      value: editContactId == 0 ? null : editContactId,
+                      value: (editContactId == null || editContactId == 0) ? null : editContactId,
                       items: [
                         const DropdownMenuItem<int?>(
                           value: null,
@@ -264,19 +262,20 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                     final String oldType = item['type'] ?? 'income';
                     final int? oldContactId = item['contact_id'];
 
-                    // 1. إعادة تسوية رصيد العميل القديم
+                    // 1. إعادة تسوية رصيد العميل القديم (معالجة آمنة من null)
                     if (oldContactId != null && oldContactId > 0) {
                       double reverseOld = (oldType == 'income') ? oldAmount : -oldAmount;
                       await DatabaseHelper.instance.updateContactBalance(oldContactId, reverseOld);
                     }
 
-                    // 2. تطبيق تأثير الحركة الجديدة على رصيد العميل الجديد
-                    if (editContactId != null && editContactId > 0) {
+                    // 2. تطبيق تأثير الحركة الجديدة على رصيد العميل الجديد (معالجة آمنة من null)
+                    final int? newContactId = editContactId;
+                    if (newContactId != null && newContactId > 0) {
                       double applyNew = (editType == 'income') ? -newAmount : newAmount;
-                      await DatabaseHelper.instance.updateContactBalance(editContactId, applyNew);
+                      await DatabaseHelper.instance.updateContactBalance(newContactId, applyNew);
                     }
 
-                    // 3. تحديث الحركة في قاعدة البيانات بالأسماء الصحيحة للاستعلام
+                    // 3. تحديث الحركة في قاعدة البيانات
                     final Map<String, dynamic> row = {
                       'id': item['id'],
                       'contact_id': editContactId ?? 0,

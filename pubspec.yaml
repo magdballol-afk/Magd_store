@@ -15,6 +15,7 @@ dependencies:
 
   # الطباعة الحرارية عبر البلوتوث
   print_bluetooth_thermal: ^1.1.0
+  esc_pos_utils_plus: ^2.0.4
 
   # إدارة قواعد البيانات والملفات
   sqflite: ^2.3.0

@@ -148,7 +148,7 @@ class DatabaseHelper {
   }
 
   Future<void> updateContactBalance(int? contactId, double adjustment) async {
-    if (contactId == null) return;
+    if (contactId == null || contactId <= 0) return;
     final db = await instance.database;
     await db.rawUpdate(
       'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
@@ -209,6 +209,7 @@ class DatabaseHelper {
     int invoiceId = 0;
 
     await db.transaction((txn) async {
+      // 1. إدراج الفاتورة
       invoiceId = await txn.insert('invoices', {
         'contact_id': contactId,
         'type': type,
@@ -219,6 +220,7 @@ class DatabaseHelper {
         'date': date ?? DateTime.now().toIso8601String(),
       });
 
+      // 2. إدراج عناصر الفاتورة وتعديل كميات المنتجات
       for (var item in itemsList) {
         await txn.insert('invoice_items', {
           'invoice_id': invoiceId,
@@ -228,7 +230,6 @@ class DatabaseHelper {
           'total': item['total'],
         });
 
-        // تعديل الكمية
         if (type == 'sale' || type == 'mefraq') {
           await txn.rawUpdate(
             'UPDATE products SET quantity = quantity - ? WHERE id = ?',
@@ -238,6 +239,24 @@ class DatabaseHelper {
           await txn.rawUpdate(
             'UPDATE products SET quantity = quantity + ? WHERE id = ?',
             [item['quantity'], item['product_id']],
+          );
+        }
+      }
+
+      // 3. تحديث رصيد العميل بناءً على المتبقي (غير المسدد)
+      if (contactId > 0) {
+        final double remaining = netAmount - paidAmount;
+        if (remaining != 0) {
+          double adjustment = 0.0;
+          if (type == 'sale' || type == 'mefraq') {
+            adjustment = remaining; // دين إضافي على العميل (+)
+          } else if (type == 'buy' || type == 'purchase') {
+            adjustment = -remaining; // مستحق إضافي للمورد (-)
+          }
+
+          await txn.rawUpdate(
+            'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+            [adjustment, contactId],
           );
         }
       }
@@ -258,16 +277,55 @@ class DatabaseHelper {
   }) async {
     final db = await instance.database;
 
-    final Map<String, dynamic> row = {};
-    if (contactId != null) row['contact_id'] = contactId;
-    if (type != null) row['type'] = type;
-    if (totalAmount != null) row['total_amount'] = totalAmount;
-    if (discount != null) row['discount'] = discount;
-    if (netAmount != null) row['net_amount'] = netAmount;
-    if (paidAmount != null) row['paid_amount'] = paidAmount;
-
     int result = 0;
     await db.transaction((txn) async {
+      // 1. جلب الفاتورة القديمة لإلغاء تأثيرها المالي على العميل والمخزون
+      final oldInvoiceResult = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+      if (oldInvoiceResult.isNotEmpty) {
+        final oldInv = oldInvoiceResult.first;
+        final int oldContactId = (oldInv['contact_id'] as num).toInt();
+        final String oldType = oldInv['type'].toString();
+        final double oldNet = (oldInv['net_amount'] as num).toDouble();
+        final double oldPaid = (oldInv['paid_amount'] as num).toDouble();
+        final double oldRemaining = oldNet - oldPaid;
+
+        // عكس تأثير الرصيد القديم
+        if (oldContactId > 0 && oldRemaining != 0) {
+          double reverseAdjustment = 0.0;
+          if (oldType == 'sale' || oldType == 'mefraq') {
+            reverseAdjustment = -oldRemaining;
+          } else if (oldType == 'buy' || oldType == 'purchase') {
+            reverseAdjustment = oldRemaining;
+          }
+          await txn.rawUpdate(
+            'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+            [reverseAdjustment, oldContactId],
+          );
+        }
+
+        // عكس الكميات القديمة في جدول المنتجات
+        final oldItems = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+        for (var item in oldItems) {
+          final double qty = (item['quantity'] as num).toDouble();
+          final int prodId = (item['product_id'] as num).toInt();
+
+          if (oldType == 'sale' || oldType == 'mefraq') {
+            await txn.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [qty, prodId]);
+          } else if (oldType == 'buy' || oldType == 'purchase') {
+            await txn.rawUpdate('UPDATE products SET quantity = quantity - ? WHERE id = ?', [qty, prodId]);
+          }
+        }
+      }
+
+      // 2. تحديث بيانات الفاتورة
+      final Map<String, dynamic> row = {};
+      if (contactId != null) row['contact_id'] = contactId;
+      if (type != null) row['type'] = type;
+      if (totalAmount != null) row['total_amount'] = totalAmount;
+      if (discount != null) row['discount'] = discount;
+      if (netAmount != null) row['net_amount'] = netAmount;
+      if (paidAmount != null) row['paid_amount'] = paidAmount;
+
       if (row.isNotEmpty) {
         result = await txn.update(
           'invoices',
@@ -277,8 +335,11 @@ class DatabaseHelper {
         );
       }
 
+      // 3. إعادة إدراج عناصر الفاتورة الجدد وتطبيق الكميات الجديدة
       if (itemsList != null) {
         await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+
+        final String currentType = type ?? (oldInvoiceResult.isNotEmpty ? oldInvoiceResult.first['type'].toString() : 'sale');
 
         for (var item in itemsList) {
           await txn.insert('invoice_items', {
@@ -288,7 +349,33 @@ class DatabaseHelper {
             'price': item['price'],
             'total': item['total'],
           });
+
+          if (currentType == 'sale' || currentType == 'mefraq') {
+            await txn.rawUpdate('UPDATE products SET quantity = quantity - ? WHERE id = ?', [item['quantity'], item['product_id']]);
+          } else if (currentType == 'buy' || currentType == 'purchase') {
+            await txn.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [item['quantity'], item['product_id']]);
+          }
         }
+      }
+
+      // 4. تطبيق تأثير الرصيد الجديد على العميل
+      final int newContactId = contactId ?? (oldInvoiceResult.isNotEmpty ? (oldInvoiceResult.first['contact_id'] as num).toInt() : 0);
+      final String newType = type ?? (oldInvoiceResult.isNotEmpty ? oldInvoiceResult.first['type'].toString() : 'sale');
+      final double newNet = netAmount ?? (oldInvoiceResult.isNotEmpty ? (oldInvoiceResult.first['net_amount'] as num).toDouble() : 0.0);
+      final double newPaid = paidAmount ?? (oldInvoiceResult.isNotEmpty ? (oldInvoiceResult.first['paid_amount'] as num).toDouble() : 0.0);
+      final double newRemaining = newNet - newPaid;
+
+      if (newContactId > 0 && newRemaining != 0) {
+        double newAdjustment = 0.0;
+        if (newType == 'sale' || newType == 'mefraq') {
+          newAdjustment = newRemaining;
+        } else if (newType == 'buy' || newType == 'purchase') {
+          newAdjustment = -newRemaining;
+        }
+        await txn.rawUpdate(
+          'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+          [newAdjustment, newContactId],
+        );
       }
     });
 

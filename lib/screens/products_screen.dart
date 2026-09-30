@@ -10,7 +10,10 @@ class ProductsScreen extends StatefulWidget {
 }
 
 class _ProductsScreenState extends State<ProductsScreen> {
-  List<Map<String, dynamic>> _products = [];
+  List<Map<String, dynamic>> _allProducts = [];
+  List<Map<String, dynamic>> _filteredProducts = [];
+  
+  final TextEditingController _searchController = TextEditingController();
   bool _isLoading = true;
 
   @override
@@ -23,9 +26,22 @@ class _ProductsScreenState extends State<ProductsScreen> {
     setState(() => _isLoading = true);
     final data = await DatabaseHelper.instance.getProducts();
     setState(() {
-      _products = data;
+      _allProducts = data;
+      _filterProducts(_searchController.text);
       _isLoading = false;
     });
+  }
+
+  // دالة تصفية المنتجات بناءً على نص البحث
+  void _filterProducts(String query) {
+    if (query.trim().isEmpty) {
+      _filteredProducts = List.from(_allProducts);
+    } else {
+      _filteredProducts = _allProducts.where((product) {
+        final name = (product['name'] ?? '').toString().toLowerCase();
+        return name.contains(query.trim().toLowerCase());
+      }).toList();
+    }
   }
 
   // النافذة المنبثقة المصغرة لتعديل خصائص المادة (3 حقول فقط)
@@ -111,7 +127,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 final newQuantity = double.tryParse(quantityController.text.trim()) ?? (product['quantity'] ?? 0.0);
                 final newRetailPrice = double.tryParse(retailPriceController.text.trim()) ?? currentRetailPrice;
 
-                // إعداد بيانات المادة مع الحفاظ على بقية الأسعار في قاعدة البيانات
                 final Map<String, dynamic> updatedProduct = {
                   'id': product['id'],
                   'name': newName,
@@ -168,6 +183,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
@@ -178,27 +199,87 @@ class _ProductsScreenState extends State<ProductsScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _products.isEmpty
-              ? const Center(child: Text('لا توجد مواد مضافة'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: _products.length,
-                  itemBuilder: (context, index) {
-                    final item = _products[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: ListTile(
-                        title: Text(item['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('الكمية: ${item['quantity']} | مفرق: ${item['retail_price'] ?? 0.0}'),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.edit, color: Color(0xFF0277BD)),
-                          onPressed: () => _showEditDialog(item),
-                        ),
+          : Column(
+              children: [
+                // 🔑 حقل البحث السريع عن مادة
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (val) {
+                      setState(() {
+                        _filterProducts(val);
+                      });
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'ابحث عن مادة بالاسم...',
+                      prefixIcon: const Icon(Icons.search, color: Color(0xFF0277BD)),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, color: Colors.grey),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _filterProducts('');
+                                });
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
                       ),
-                    );
-                  },
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFF0277BD), width: 1.5),
+                      ),
+                    ),
+                  ),
                 ),
+
+                // عرض القائمة المفلترة
+                Expanded(
+                  child: _filteredProducts.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'لا توجد مواد مطابقة للبحث',
+                            style: TextStyle(color: Colors.grey, fontSize: 16),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _filteredProducts.length,
+                          itemBuilder: (context, index) {
+                            final item = _filteredProducts[index];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              child: ListTile(
+                                title: Text(
+                                  item['name'] ?? '',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: Text(
+                                  'الكمية: ${item['quantity']} | مفرق: ${item['retail_price'] ?? 0.0}',
+                                ),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.edit, color: Color(0xFF0277BD)),
+                                  onPressed: () => _showEditDialog(item),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: const Color(0xFF0277BD),
         icon: const Icon(Icons.add, color: Colors.white),

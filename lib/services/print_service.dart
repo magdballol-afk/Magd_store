@@ -1,9 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 class PrintService {
   // ==========================================
-  //  بيانات المنشأة / الشركة (عدّلها حسب حاجتك)
+  // بيانات المنشأة / الشركة
   // ==========================================
   static const String companyName = "شركة التجارة العامة";
   static const String taxNumber = "الرقم الضريبي: 123456789";
@@ -20,8 +21,9 @@ class PrintService {
     required double totalPrice,
     required double paidAmount,
     required double remainingAmount,
-    double? customerBalance, // 👈 المعامل المطلوب لحل الخطأ
+    double? customerBalance,
     String currency = "",
+    bool is58mm = false, // خيار لتحديد قياس الطابعة (80mm أو 58mm)
   }) async {
     bool isConnected = await PrintBluetoothThermal.connectionStatus;
 
@@ -42,7 +44,7 @@ class PrintService {
           context: context,
           builder: (dialogContext) {
             return AlertDialog(
-              title: const Text('اختر طابعة البلوتوث (Bixolon)'),
+              title: const Text('اختر طابعة البلوتوث'),
               content: SizedBox(
                 width: double.maxFinite,
                 child: ListView.builder(
@@ -71,6 +73,7 @@ class PrintService {
                             remainingAmount: remainingAmount,
                             customerBalance: customerBalance,
                             currency: currency,
+                            is58mm: is58mm,
                           );
                         } else if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -98,11 +101,12 @@ class PrintService {
         remainingAmount: remainingAmount,
         customerBalance: customerBalance,
         currency: currency,
+        is58mm: is58mm,
       );
     }
   }
 
-  /// إرسال أوامر الطباعة إلى BIXOLON قياس 80mm
+  /// إرسال أوامر الطباعة
   static Future<void> _printContent({
     required BuildContext context,
     required String invoiceType,
@@ -114,11 +118,13 @@ class PrintService {
     required double remainingAmount,
     double? customerBalance,
     required String currency,
+    required bool is58mm,
   }) async {
     try {
       final StringBuffer receipt = StringBuffer();
-      const int paperWidth = 48; // قياس 80mm لطابعة Bixolon
-
+      
+      // تحديد عرض الورق بناءً على نوع الطابعة
+      final int paperWidth = is58mm ? 32 : 48;
       final String currSuffix = currency.trim().isNotEmpty ? " $currency" : "";
 
       // 1. ترويسة معلومات الشركة
@@ -135,26 +141,45 @@ class PrintService {
       receipt.writeln("العميل: $customerName");
       receipt.writeln("-" * paperWidth);
 
-      // 3. جدول المواد
-      receipt.writeln("المادة                   الكمية   السعر    الإجمالي");
-      receipt.writeln("-" * paperWidth);
+      // 3. جدول المواد (تنسيق متجاوب حسب عرض الورق)
+      if (is58mm) {
+        receipt.writeln("المادة           الكمية السعر الإجمالي");
+        receipt.writeln("-" * paperWidth);
 
-      for (var item in items) {
-        String name = (item['name'] ?? '').toString();
-        double qty = double.tryParse((item['quantity'] ?? 1).toString()) ?? 1.0;
-        double price = double.tryParse((item['price'] ?? 0).toString()) ?? 0.0;
-        double lineTotal = qty * price;
+        for (var item in items) {
+          String name = (item['name'] ?? '').toString();
+          double qty = double.tryParse((item['quantity'] ?? 1).toString()) ?? 1.0;
+          double price = double.tryParse((item['price'] ?? 0).toString()) ?? 0.0;
+          double lineTotal = qty * price;
 
-        if (name.length > 18) {
-          name = name.substring(0, 18);
+          if (name.length > 12) name = name.substring(0, 12);
+
+          String pName = name.padRight(13);
+          String pQty = qty.toStringAsFixed(1).padLeft(5);
+          String pPrice = price.toStringAsFixed(0).padLeft(6);
+          String pTotal = lineTotal.toStringAsFixed(0).padLeft(7);
+
+          receipt.writeln("$pName $pQty $pPrice $pTotal");
         }
+      } else {
+        receipt.writeln("المادة                   الكمية   السعر    الإجمالي");
+        receipt.writeln("-" * paperWidth);
 
-        String pName = name.padRight(22);
-        String pQty = qty.toStringAsFixed(1).padLeft(6);
-        String pPrice = price.toStringAsFixed(0).padLeft(8);
-        String pTotal = lineTotal.toStringAsFixed(0).padLeft(10);
+        for (var item in items) {
+          String name = (item['name'] ?? '').toString();
+          double qty = double.tryParse((item['quantity'] ?? 1).toString()) ?? 1.0;
+          double price = double.tryParse((item['price'] ?? 0).toString()) ?? 0.0;
+          double lineTotal = qty * price;
 
-        receipt.writeln("$pName $pQty $pPrice $pTotal");
+          if (name.length > 18) name = name.substring(0, 18);
+
+          String pName = name.padRight(22);
+          String pQty = qty.toStringAsFixed(1).padLeft(6);
+          String pPrice = price.toStringAsFixed(0).padLeft(8);
+          String pTotal = lineTotal.toStringAsFixed(0).padLeft(10);
+
+          receipt.writeln("$pName $pQty $pPrice $pTotal");
+        }
       }
 
       // 4. المجاميع والختام
@@ -169,9 +194,12 @@ class PrintService {
       }
 
       receipt.writeln("=" * paperWidth);
-      receipt.writeln("شكراً لزيارتكم\n\n");
+      receipt.writeln("شكراً لزيارتكم\n\n\n");
 
-      await PrintBluetoothThermal.writeBytes(receipt.toString().codeUnits);
+      // إرسال البيانات
+      List<int> bytes = receipt.toString().codeUnits;
+      await PrintBluetoothThermal.writeBytes(bytes);
+
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -20,7 +20,8 @@ class PrintService {
     required double totalPrice,
     required double paidAmount,
     required double remainingAmount,
-    String currency = "ل.س",
+    double? customerBalance, // 👈 المعامل المطلوب لحل الخطأ
+    String currency = "",
   }) async {
     bool isConnected = await PrintBluetoothThermal.connectionStatus;
 
@@ -68,6 +69,7 @@ class PrintService {
                             totalPrice: totalPrice,
                             paidAmount: paidAmount,
                             remainingAmount: remainingAmount,
+                            customerBalance: customerBalance,
                             currency: currency,
                           );
                         } else if (context.mounted) {
@@ -94,6 +96,7 @@ class PrintService {
         totalPrice: totalPrice,
         paidAmount: paidAmount,
         remainingAmount: remainingAmount,
+        customerBalance: customerBalance,
         currency: currency,
       );
     }
@@ -109,11 +112,14 @@ class PrintService {
     required double totalPrice,
     required double paidAmount,
     required double remainingAmount,
+    double? customerBalance,
     required String currency,
   }) async {
     try {
       final StringBuffer receipt = StringBuffer();
       const int paperWidth = 48; // قياس 80mm لطابعة Bixolon
+
+      final String currSuffix = currency.trim().isNotEmpty ? " $currency" : "";
 
       // 1. ترويسة معلومات الشركة
       receipt.writeln(companyName);
@@ -153,9 +159,15 @@ class PrintService {
 
       // 4. المجاميع والختام
       receipt.writeln("-" * paperWidth);
-      receipt.writeln("المجموع الإجمالي: ${totalPrice.toStringAsFixed(2)} $currency");
-      receipt.writeln("المدفوع نقداً   : ${paidAmount.toStringAsFixed(2)} $currency");
-      receipt.writeln("المتبقي         : ${remainingAmount.toStringAsFixed(2)} $currency");
+      receipt.writeln("المجموع الإجمالي: ${totalPrice.toStringAsFixed(2)}$currSuffix");
+      receipt.writeln("المدفوع نقداً   : ${paidAmount.toStringAsFixed(2)}$currSuffix");
+      receipt.writeln("المتبقي بالفاتورة: ${remainingAmount.toStringAsFixed(2)}$currSuffix");
+
+      if (customerBalance != null) {
+        receipt.writeln("-" * paperWidth);
+        receipt.writeln("الرصيد الحالي   : ${customerBalance.toStringAsFixed(2)}$currSuffix");
+      }
+
       receipt.writeln("=" * paperWidth);
       receipt.writeln("شكراً لزيارتكم\n\n");
 

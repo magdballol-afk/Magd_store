@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 
 class PrintService {
   // ==========================================
@@ -23,7 +24,7 @@ class PrintService {
     required double remainingAmount,
     double? customerBalance,
     String currency = "",
-    bool is58mm = false, // خيار لتحديد قياس الطابعة (80mm أو 58mm)
+    bool is58mm = false, // 👈 حدد true لـ PT-220 (58mm) و false لـ TYSSO (80mm)
   }) async {
     bool isConnected = await PrintBluetoothThermal.connectionStatus;
 
@@ -106,7 +107,7 @@ class PrintService {
     }
   }
 
-  /// إرسال أوامر الطباعة
+  /// إرسال أوامر الطباعة مع معالجة الترميز العربي ESC/POS
   static Future<void> _printContent({
     required BuildContext context,
     required String invoiceType,
@@ -121,27 +122,34 @@ class PrintService {
     required bool is58mm,
   }) async {
     try {
-      final StringBuffer receipt = StringBuffer();
-      
-      // تحديد عرض الورق بناءً على نوع الطابعة
+      // 1. تحميل مواصفات الطابعة الحرارية Standard ESC/POS
+      final profile = await CapabilityProfile.load();
+      final paperSize = is58mm ? PaperSize.mm58 : PaperSize.mm80;
+      final generator = Generator(paperSize, profile);
+
+      List<int> bytes = [];
+
+      // 2. ضبط الترميز العربي للطابعة (CP864)
+      bytes += generator.setGlobalCodeTable('CP864');
+
       final int paperWidth = is58mm ? 32 : 48;
       final String currSuffix = currency.trim().isNotEmpty ? " $currency" : "";
 
-      // 1. ترويسة معلومات الشركة
+      final StringBuffer receipt = StringBuffer();
+
+      // 3. بناء الفاتورة
       receipt.writeln(companyName);
       receipt.writeln(taxNumber);
       receipt.writeln(companyPhone);
       receipt.writeln(companyAddress);
       receipt.writeln("=" * paperWidth);
 
-      // 2. تفاصيل الفاتورة والعميل
       receipt.writeln(invoiceType);
       receipt.writeln("رقم الفاتورة: #$invoiceNumber");
       receipt.writeln("التاريخ: ${DateTime.now().toString().split(' ')[0]}");
       receipt.writeln("العميل: $customerName");
       receipt.writeln("-" * paperWidth);
 
-      // 3. جدول المواد (تنسيق متجاوب حسب عرض الورق)
       if (is58mm) {
         receipt.writeln("المادة           الكمية السعر الإجمالي");
         receipt.writeln("-" * paperWidth);
@@ -182,7 +190,6 @@ class PrintService {
         }
       }
 
-      // 4. المجاميع والختام
       receipt.writeln("-" * paperWidth);
       receipt.writeln("المجموع الإجمالي: ${totalPrice.toStringAsFixed(2)}$currSuffix");
       receipt.writeln("المدفوع نقداً   : ${paidAmount.toStringAsFixed(2)}$currSuffix");
@@ -196,8 +203,21 @@ class PrintService {
       receipt.writeln("=" * paperWidth);
       receipt.writeln("شكراً لزيارتكم\n\n\n");
 
-      // إرسال البيانات
-      List<int> bytes = receipt.toString().codeUnits;
+      // 4. تحويل النص العربي بأوامر Generator الخاصة بـ ESC/POS
+      bytes += generator.text(
+        receipt.toString(),
+        styles: const PosStyles(
+          codeTable: 'CP864',
+          align: PosAlign.right,
+        ),
+      );
+
+      // أمر قطع الورق التلقائي للطابعات التي تدعم القطع (مثل TYSSO)
+      if (!is58mm) {
+        bytes += generator.cut();
+      }
+
+      // 5. إرسال البايتات المرمزة إلى الطابعة
       await PrintBluetoothThermal.writeBytes(bytes);
 
     } catch (e) {

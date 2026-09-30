@@ -144,6 +144,11 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     return double.tryParse(_paidAmountController.text.trim()) ?? 0.0;
   }
 
+  double get _remainingAmount {
+    final double remaining = _finalTotal - _paidAmount;
+    return remaining < 0 ? 0.0 : remaining;
+  }
+
   /// دالة طباعة الفاتورة عبر البلوتوث
   Future<void> _printInvoice() async {
     if (_invoiceItems.isEmpty) {
@@ -153,7 +158,19 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       return;
     }
 
-    final double remaining = _finalTotal - _paidAmount;
+    // 🔑 جلب الرصيد الحالي للعميل/المورد من قاعدة البيانات
+    double currentContactBalance = 0.0;
+    final int? contactId = _selectedContactId;
+    if (contactId != null && contactId > 0) {
+      final contacts = await DatabaseHelper.instance.getContacts();
+      final contactMatch = contacts.firstWhere(
+        (c) => c['id'] == contactId,
+        orElse: () => {},
+      );
+      if (contactMatch.isNotEmpty) {
+        currentContactBalance = (contactMatch['balance'] as num?)?.toDouble() ?? 0.0;
+      }
+    }
 
     final formattedItems = _invoiceItems.map((item) {
       return {
@@ -169,6 +186,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
     final String displayType = _invoiceType == 'purchase' ? 'فاتورة مشتريات' : 'فاتورة مبيعات';
 
+    // 🔑 تمرير الرصيد الحالي وإلغاء طباعة "ل.س" عبر إرسال سلسلة فارغة
     await PrintService.selectAndPrintInvoice(
       context: context,
       invoiceType: displayType,
@@ -177,8 +195,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       items: formattedItems,
       totalPrice: _finalTotal,
       paidAmount: _paidAmount,
-      remainingAmount: remaining < 0 ? 0.0 : remaining,
-      currency: "ل.س",
+      remainingAmount: _remainingAmount,
+      customerBalance: currentContactBalance,
+      currency: "", // تم حذف ل.س
     );
   }
 
@@ -295,7 +314,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                           itemCount: filteredProducts.length,
                           itemBuilder: (context, index) {
                             final prod = filteredProducts[index];
-                            // جلب سعر المفرق بناءً على نوع الفاتورة (أو سعر الشراء إذا كانت فاتورة مشتريات)
                             final double productRetailPrice = (prod['retail_price'] as num?)?.toDouble() ?? 
                                                               (prod['buy_price'] as num?)?.toDouble() ?? 0.0;
 
@@ -305,7 +323,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                               onTap: () {
                                 setDialogState(() {
                                   selectedProduct = prod;
-                                  // 🔑 إسناد سعر المفرق المباشر من قاعدة البيانات إلى حقل النص
                                   final double defaultPrice = _invoiceType == 'purchase' 
                                       ? (prod['buy_price'] as num?)?.toDouble() ?? 0.0
                                       : (prod['retail_price'] as num?)?.toDouble() ?? 0.0;
@@ -427,7 +444,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           invoiceId: widget.invoiceId!,
           contactId: _selectedContactId,
           type: _invoiceType,
-          totalAmount: _finalTotal,
+          totalAmount: _subtotal,
           discount: _overallDiscount,
           netAmount: _finalTotal,
           paidAmount: _paidAmount,
@@ -437,7 +454,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         await DatabaseHelper.instance.addFullInvoice(
           contactId: _selectedContactId ?? 0,
           type: _invoiceType,
-          totalAmount: _finalTotal,
+          totalAmount: _subtotal,
           discount: _overallDiscount,
           netAmount: _finalTotal,
           paidAmount: _paidAmount,
@@ -610,19 +627,39 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                   const SizedBox(height: 10),
 
+                  // 🔑 عرض تفاصيل القيمة الحالية والمسدد والمتبقي
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
                       children: [
-                        Text('المجموع: ${_subtotal.toStringAsFixed(2)}'),
-                        Text(
-                          'الصافي: ${_finalTotal.toStringAsFixed(2)}',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF5C6BC0)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('المجموع: ${_subtotal.toStringAsFixed(2)}'),
+                            Text(
+                              'قيمة الفاتورة (الصافي): ${_finalTotal.toStringAsFixed(2)}',
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF5C6BC0)),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('المدفوع نقدياً: ${_paidAmount.toStringAsFixed(2)}'),
+                            Text(
+                              'المتبقي (على الحساب): ${_remainingAmount.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: _remainingAmount > 0 ? Colors.red.shade700 : Colors.green.shade700,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

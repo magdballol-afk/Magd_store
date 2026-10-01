@@ -32,8 +32,8 @@ class LicenseHelper {
         // 🔑 إدخال اسم المستخدم وكلمة السر المسبقة التي تنشئها أنت للزبائن
         // يمكنك إدخال أكثر من حساب هنا
         await db.insert('licenses', {
-          'username': 'client1',
-          'password': 'Password123',
+          'username': 'basel',
+          'password': 'basel123',
           'registered_device_id': null // يكون فارغاً في البداية حتى يدخله الزبون
         });
       },

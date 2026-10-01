@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'helpers/license_helper.dart'; // <--- تم إضافة استيراد ملف الترخيص
 import 'screens/add_product_screen.dart';
 import 'screens/cash_journal_screen.dart';
 import 'screens/contacts_screen.dart';
@@ -12,14 +13,21 @@ import 'screens/new_invoice_screen.dart';
 import 'screens/products_screen.dart';
 import 'screens/smart_report_screen.dart';
 import 'services/backup_service.dart';
-import 'services/fiscal_year_service.dart'; // <--- تم إضافة الاستيراد هنا
+import 'services/fiscal_year_service.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // فحص هل التطبيق مرخص ومفعل مسبقاً على هذا الجهاز
+  bool isLicensed = await LicenseHelper.isAppLicensed();
+
+  runApp(MyApp(isLicensed: isLicensed));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  final bool isLicensed;
+
+  const MyApp({Key? key, required this.isLicensed}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +38,146 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         fontFamily: 'Cairo',
       ),
-      home: const MainHomeScreen(),
+      home: isLicensed ? const MainHomeScreen() : const LicenseActivationScreen(),
+    );
+  }
+}
+
+// =======================================================
+// 🔐 شاشة التفعيل بطلب اسم المستخدم وكلمة السر
+// =======================================================
+class LicenseActivationScreen extends StatefulWidget {
+  const LicenseActivationScreen({Key? key}) : super(key: key);
+
+  @override
+  State<LicenseActivationScreen> createState() => _LicenseActivationScreenState();
+}
+
+class _LicenseActivationScreenState extends State<LicenseActivationScreen> {
+  final _userController = TextEditingController();
+  final _passController = TextEditingController();
+  bool _isLoading = false;
+
+  void _handleActivation() async {
+    if (_userController.text.trim().isEmpty || _passController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يرجى إدخال اسم المستخدم وكلمة السر')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    String result = await LicenseHelper.activateApp(
+      _userController.text,
+      _passController.text,
+    );
+
+    setState(() => _isLoading = false);
+
+    if (result == "SUCCESS") {
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MainHomeScreen()),
+      );
+    } else {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('فشل التفعيل'),
+          content: Text(result),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('موافق'),
+            )
+          ],
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F6F9),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Card(
+            elevation: 8,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0277BD).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.lock_person_rounded, size: 60, color: Color(0xFF0277BD)),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    "تفعيل نسخة التطبيق",
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "أدخل اسم المستخدم وكلمة السر الخاصة بك للتفعيل",
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: _userController,
+                    decoration: const InputDecoration(
+                      labelText: "اسم المستخدم",
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _passController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: "كلمة السر",
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.lock),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _handleActivation,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0277BD),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text(
+                              "تفعيل الآن",
+                              style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -162,7 +309,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             subtitle: const Text('ترحيل الأرصدة وإغلاق السنة الحالية'),
             onTap: () {
               Navigator.pop(context);
-              FiscalYearService.showRolloverDialog(context); // <--- تم التعديل هنا
+              FiscalYearService.showRolloverDialog(context);
             },
           ),
           const Divider(),

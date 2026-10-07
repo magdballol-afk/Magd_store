@@ -156,7 +156,112 @@ class DatabaseHelper {
     );
   }
 
-  // ==================== الصندوق / اليومية ====================
+  // ==================== الصندوق / اليومية المربوط بالفواتير ====================
+
+  /// 1. جلب إجمالي المقبوضات الشامل لليوم (مبيعات + سندات قبض)
+  Future<double> getDailyReceipts(String formattedDate) async {
+    final db = await instance.database;
+
+    // أ. المبالغ المقبوضة نقداً في فواتير المبيعات والمفرق
+    final salesResult = await db.rawQuery('''
+      SELECT SUM(paid_amount) as total 
+      FROM invoices 
+      WHERE (type = 'sale' OR type = 'mefraq') AND date LIKE ?
+    ''', ['$formattedDate%']);
+
+    double salesPaid = (salesResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    // ب. المقبوضات اليدوية من حركة الصندوق (سندات القبض)
+    final cashResult = await db.rawQuery('''
+      SELECT SUM(amount) as total 
+      FROM cash_transactions 
+      WHERE (type = 'income' OR type = 'قبض') AND date LIKE ?
+    ''', ['$formattedDate%']);
+
+    double cashIncome = (cashResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    return salesPaid + cashIncome;
+  }
+
+  /// 2. جلب إجمالي المدفوعات الشامل لليوم (مشتريات + سندات دفع/مصاريف)
+  Future<double> getDailyPayments(String formattedDate) async {
+    final db = await instance.database;
+
+    // أ. المبالغ المدفوعة نقداً في فواتير المشتريات
+    final purchaseResult = await db.rawQuery('''
+      SELECT SUM(paid_amount) as total 
+      FROM invoices 
+      WHERE (type = 'buy' OR type = 'purchase') AND date LIKE ?
+    ''', ['$formattedDate%']);
+
+    double purchasePaid = (purchaseResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    // ب. المدفوعات اليدوية من حركة الصندوق (سندات الصرف/الدفع)
+    final cashResult = await db.rawQuery('''
+      SELECT SUM(amount) as total 
+      FROM cash_transactions 
+      WHERE (type = 'expense' OR type = 'دفع') AND date LIKE ?
+    ''', ['$formattedDate%']);
+
+    double cashExpense = (cashResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    return purchasePaid + cashExpense;
+  }
+
+  /// 3. جلب كافة حركات اليوم الشاملة (فواتير + سندات) للعرض في الجدول السفلي
+  Future<List<Map<String, dynamic>>> getAllDailyTransactions(String formattedDate) async {
+    final db = await instance.database;
+
+    // أ. حركات الصندوق اليدوية
+    final cashTx = await db.rawQuery('''
+      SELECT ct.id, 
+             COALESCE(c.name, 'غير محدد') as contact_name, 
+             ct.amount, 
+             ct.type, 
+             COALESCE(ct.note, 'سند صندوق') as note, 
+             ct.date
+      FROM cash_transactions ct
+      LEFT JOIN contacts c ON ct.contact_id = c.id
+      WHERE ct.date LIKE ?
+    ''', ['$formattedDate%']);
+
+    // ب. المقبوضات النقدية من فواتير المبيعات
+    final salesInvoices = await db.rawQuery('''
+      SELECT i.id, 
+             COALESCE(c.name, 'عميل عام') as contact_name, 
+             i.paid_amount as amount, 
+             'قبض' as type, 
+             ('دفعة فاتورة مبيعات #' || i.id) as note, 
+             i.date
+      FROM invoices i
+      LEFT JOIN contacts c ON i.contact_id = c.id
+      WHERE (i.type = 'sale' OR i.type = 'mefraq') 
+        AND i.paid_amount > 0 
+        AND i.date LIKE ?
+    ''', ['$formattedDate%']);
+
+    // ج. المدفوعات النقدية من فواتير المشتريات
+    final purchaseInvoices = await db.rawQuery('''
+      SELECT i.id, 
+             COALESCE(c.name, 'مورد عام') as contact_name, 
+             i.paid_amount as amount, 
+             'دفع' as type, 
+             ('دفعة فاتورة مشتريات #' || i.id) as note, 
+             i.date
+      FROM invoices i
+      LEFT JOIN contacts c ON i.contact_id = c.id
+      WHERE (i.type = 'buy' OR i.type = 'purchase') 
+        AND i.paid_amount > 0 
+        AND i.date LIKE ?
+    ''', ['$formattedDate%']);
+
+    List<Map<String, dynamic>> allList = [];
+    allList.addAll(cashTx);
+    allList.addAll(salesInvoices);
+    allList.addAll(purchaseInvoices);
+
+    return allList;
+  }
 
   Future<List<Map<String, dynamic>>> getDailyTransactions(String formattedDate) async {
     final db = await instance.database;

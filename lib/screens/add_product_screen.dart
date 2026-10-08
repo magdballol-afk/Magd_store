@@ -3,7 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../database/database_helper.dart';
 
 class AddProductScreen extends StatefulWidget {
-  final Map<String, dynamic>? product; // في حال كان تعديل لمادة موجودة
+  final Map<String, dynamic>? product;
 
   const AddProductScreen({Key? key, this.product}) : super(key: key);
 
@@ -44,7 +44,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     super.dispose();
   }
 
-  /// فتح شاشة الكاميرا لمسح الباركود وتعبئة الحقل فقط
   Future<void> _scanBarcode() async {
     final String? scannedBarcode = await Navigator.push<String>(
       context,
@@ -91,13 +90,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
       };
 
       if (widget.product != null && widget.product!['id'] != null) {
-        // تعديل مادة
-        await DatabaseHelper.instance.updateProduct(
-          widget.product!['id'],
-          productData,
-        );
+        // إصلاح الخطأ الأول: تمرير المعرف داخل المخطط Data Map إذا كانت الدالة تتطلب ذلك
+        final Map<String, dynamic> updateData = Map.from(productData);
+        updateData['id'] = widget.product!['id'];
+
+        await DatabaseHelper.instance.updateProduct(updateData);
       } else {
-        // إضافة مادة جديدة
         await DatabaseHelper.instance.insertProduct(productData);
       }
 
@@ -108,7 +106,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context, true); // إغلاق الشاشة فقط عند الضغط على حفظ
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -170,9 +168,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  // إصلاح الخطأ الثاني: تعديل تنسيق IconButton.filled
                   IconButton.filled(
                     icon: const Icon(Icons.qr_code_scanner),
-                    backgroundColor: const Color(0xFF5C6BC0),
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFF5C6BC0),
+                    ),
                     tooltip: 'مسح الباركود بالكاميرا',
                     onPressed: _scanBarcode,
                   ),
@@ -237,7 +238,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
   }
 }
 
-/// شاشة قارئ الباركود المستقلة والآمنة
 class BarcodeScannerSimpleScreen extends StatefulWidget {
   const BarcodeScannerSimpleScreen({Key? key}) : super(key: key);
 
@@ -257,12 +257,12 @@ class _BarcodeScannerSimpleScreenState extends State<BarcodeScannerSimpleScreen>
       ),
       body: MobileScanner(
         onDetect: (capture) {
-          if (_hasScanned) return; // يمنع التكرار والإغلاق المزدوج
+          if (_hasScanned) return;
           final List<Barcode> barcodes = capture.barcodes;
           for (final barcode in barcodes) {
             if (barcode.rawValue != null && barcode.rawValue!.isNotEmpty) {
               setState(() => _hasScanned = true);
-              Navigator.pop(context, barcode.rawValue); // يغلق شاشة الكاميرا فقط ويسلم النتيجة
+              Navigator.pop(context, barcode.rawValue);
               break;
             }
           }

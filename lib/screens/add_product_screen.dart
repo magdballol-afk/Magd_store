@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../database/database_helper.dart';
 
 class AddProductScreen extends StatefulWidget {
@@ -14,6 +15,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _formKey = GlobalKey<FormState>();
 
   late TextEditingController _nameController;
+  late TextEditingController _barcodeController;
   late TextEditingController _buyPriceController;
   late TextEditingController _retailPriceController;
   late TextEditingController _halfWholesalePriceController;
@@ -27,6 +29,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.product?['name']?.toString() ?? '');
+    _barcodeController = TextEditingController(text: widget.product?['barcode']?.toString() ?? '');
     _buyPriceController = TextEditingController(
       text: widget.product?['buy_price'] != null ? widget.product!['buy_price'].toString() : '',
     );
@@ -47,12 +50,29 @@ class _AddProductScreenState extends State<AddProductScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _barcodeController.dispose();
     _buyPriceController.dispose();
     _retailPriceController.dispose();
     _halfWholesalePriceController.dispose();
     _wholesalePriceController.dispose();
     _quantityController.dispose();
     super.dispose();
+  }
+
+  // فتح شاشة الكاميرا لمسح الباركود
+  Future<void> _scanBarcode() async {
+    final scannedBarcode = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const BarcodeScannerSimpleScreen(),
+      ),
+    );
+
+    if (scannedBarcode != null && scannedBarcode.isNotEmpty) {
+      setState(() {
+        _barcodeController.text = scannedBarcode;
+      });
+    }
   }
 
   Future<void> _saveOrUpdateProduct() async {
@@ -63,6 +83,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     try {
       final productData = {
         'name': _nameController.text.trim(),
+        'barcode': _barcodeController.text.trim().isEmpty ? null : _barcodeController.text.trim(),
         'buy_price': double.tryParse(_buyPriceController.text) ?? 0.0,
         'retail_price': double.tryParse(_retailPriceController.text) ?? 0.0,
         'half_wholesale_price': double.tryParse(_halfWholesalePriceController.text) ?? 0.0,
@@ -117,6 +138,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
             children: [
               _buildTextField(_nameController, 'اسم المادة', Icons.inventory_2_outlined, isRequired: true),
               const SizedBox(height: 12),
+              
+              // حقل الباركود مع زر المسح بالكاميرا
+              _buildBarcodeField(),
+              const SizedBox(height: 12),
+
               _buildTextField(_buyPriceController, 'سعر الشراء', Icons.shopping_bag_outlined, isNumber: true),
               const SizedBox(height: 12),
               _buildTextField(_retailPriceController, 'سعر المفرق', Icons.local_offer_outlined, isNumber: true),
@@ -168,6 +194,51 @@ class _AddProductScreenState extends State<AddProductScreen> {
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      ),
+    );
+  }
+
+  Widget _buildBarcodeField() {
+    return TextFormField(
+      controller: _barcodeController,
+      keyboardType: TextInputType.text,
+      decoration: InputDecoration(
+        labelText: 'رمز الباركود',
+        prefixIcon: const Icon(Icons.qr_code, color: Color(0xFF0277BD)),
+        suffixIcon: IconButton(
+          icon: const Icon(Icons.qr_code_scanner, color: Color(0xFF0277BD)),
+          onPressed: _scanBarcode,
+          tooltip: 'مسح الباركود بالكاميرا',
+        ),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      ),
+    );
+  }
+}
+
+// شاشة الكاميرا البسيطة لمسح الباركود
+class BarcodeScannerSimpleScreen extends StatelessWidget {
+  const BarcodeScannerSimpleScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('مسح الباركود'),
+        backgroundColor: const Color(0xFF0277BD),
+      ),
+      body: MobileScanner(
+        onDetect: (capture) {
+          final List<Barcode> barcodes = capture.barcodes;
+          for (final barcode in barcodes) {
+            if (barcode.rawValue != null && barcode.rawValue!.isNotEmpty) {
+              Navigator.pop(context, barcode.rawValue);
+              break;
+            }
+          }
+        },
       ),
     );
   }

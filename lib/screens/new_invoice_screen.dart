@@ -150,7 +150,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     return remaining < 0 ? 0.0 : remaining;
   }
 
-  /// البحث عن منتج بواسطة الباركود وإضافته مباشرةً للفاتورة
   void _addProductByBarcode(String barcodeCode) {
     final String cleanBarcode = barcodeCode.trim();
     if (cleanBarcode.isEmpty) return;
@@ -189,26 +188,29 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         }
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('تمت إضافة: ${productMatch['name']}'),
-          duration: const Duration(seconds: 1),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تمت إضافة: ${productMatch['name']}'),
+            duration: const Duration(seconds: 1),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('لم يتم العثور على مادة بباركود: $cleanBarcode'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('لم يتم العثور على مادة بباركود: $cleanBarcode'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
     }
   }
 
-  /// فتح شاشة الكاميرا لمسح الباركود وإضافته مباشرة
   Future<void> _scanBarcodeAndAdd() async {
-    final scannedBarcode = await Navigator.push<String>(
+    final String? scannedBarcode = await Navigator.push<String>(
       context,
       MaterialPageRoute(
         builder: (context) => const BarcodeScannerSimpleScreen(),
@@ -220,7 +222,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     }
   }
 
-  /// دالة طباعة الفاتورة عبر البلوتوث
   Future<void> _printInvoice() async {
     if (_invoiceItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -284,7 +285,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             }).toList();
 
             return AlertDialog(
-              title: const Text('بحث وااختيار عميل'),
+              title: const Text('بحث واختيار عميل'),
               content: SizedBox(
                 width: double.maxFinite,
                 child: Column(
@@ -353,7 +354,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         String filter = '';
         return StatefulBuilder(
           builder: (context, setDialogState) {
@@ -494,7 +495,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.pop(dialogContext),
                   child: const Text('إلغاء'),
                 ),
                 if (selectedProduct != null)
@@ -520,7 +521,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                         });
                       });
 
-                      Navigator.pop(context);
+                      Navigator.pop(dialogContext);
                     },
                     child: const Text('إضافة', style: TextStyle(color: Colors.white)),
                   ),
@@ -532,7 +533,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     );
   }
 
-  // حفظ أو تحديث الفاتورة مع معالجة آمنة للاستثناءات
   Future<void> _saveInvoice() async {
     if (_invoiceItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -812,9 +812,15 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   }
 }
 
-// شاشة الكاميرا القارئة للباركود
-class BarcodeScannerSimpleScreen extends StatelessWidget {
+class BarcodeScannerSimpleScreen extends StatefulWidget {
   const BarcodeScannerSimpleScreen({Key? key}) : super(key: key);
+
+  @override
+  State<BarcodeScannerSimpleScreen> createState() => _BarcodeScannerSimpleScreenState();
+}
+
+class _BarcodeScannerSimpleScreenState extends State<BarcodeScannerSimpleScreen> {
+  bool _hasScanned = false;
 
   @override
   Widget build(BuildContext context) {
@@ -825,9 +831,11 @@ class BarcodeScannerSimpleScreen extends StatelessWidget {
       ),
       body: MobileScanner(
         onDetect: (capture) {
+          if (_hasScanned) return;
           final List<Barcode> barcodes = capture.barcodes;
           for (final barcode in barcodes) {
             if (barcode.rawValue != null && barcode.rawValue!.isNotEmpty) {
+              setState(() => _hasScanned = true);
               Navigator.pop(context, barcode.rawValue);
               break;
             }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../database/database_helper.dart';
 import '../services/print_service.dart';
 
@@ -149,6 +150,76 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     return remaining < 0 ? 0.0 : remaining;
   }
 
+  /// البحث عن منتج بواسطة الباركود وإضافته مباشرةً للفاتورة
+  void _addProductByBarcode(String barcodeCode) {
+    final String cleanBarcode = barcodeCode.trim();
+    if (cleanBarcode.isEmpty) return;
+
+    final productMatch = _products.firstWhere(
+      (p) => (p['barcode'] ?? '').toString().trim() == cleanBarcode,
+      orElse: () => {},
+    );
+
+    if (productMatch.isNotEmpty) {
+      final double defaultPrice = _invoiceType == 'purchase'
+          ? (productMatch['buy_price'] as num?)?.toDouble() ?? 0.0
+          : (productMatch['retail_price'] as num?)?.toDouble() ?? 0.0;
+
+      final int existingIndex = _invoiceItems.indexWhere((item) => item['product_id'] == productMatch['id']);
+
+      setState(() {
+        if (existingIndex >= 0) {
+          final currentQty = (_invoiceItems[existingIndex]['quantity'] as num).toDouble();
+          final newQty = currentQty + 1.0;
+          final disc = (_invoiceItems[existingIndex]['discount'] as num).toDouble();
+          final unitPrice = (_invoiceItems[existingIndex]['unit_price'] as num).toDouble();
+          final total = (unitPrice * newQty) - disc;
+
+          _invoiceItems[existingIndex]['quantity'] = newQty;
+          _invoiceItems[existingIndex]['total'] = total < 0 ? 0.0 : total;
+        } else {
+          _invoiceItems.add({
+            'product_id': productMatch['id'],
+            'product_name': productMatch['name'] ?? 'مادة',
+            'unit_price': defaultPrice,
+            'quantity': 1.0,
+            'discount': 0.0,
+            'total': defaultPrice,
+          });
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تمت إضافة: ${productMatch['name']}'),
+          duration: const Duration(seconds: 1),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('لم يتم العثور على مادة بباركود: $cleanBarcode'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
+
+  /// فتح شاشة الكاميرا لمسح الباركود وإضافته مباشرة
+  Future<void> _scanBarcodeAndAdd() async {
+    final scannedBarcode = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const BarcodeScannerSimpleScreen(),
+      ),
+    );
+
+    if (scannedBarcode != null && scannedBarcode.isNotEmpty) {
+      _addProductByBarcode(scannedBarcode);
+    }
+  }
+
   /// دالة طباعة الفاتورة عبر البلوتوث
   Future<void> _printInvoice() async {
     if (_invoiceItems.isEmpty) {
@@ -158,7 +229,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       return;
     }
 
-    // 🔑 جلب الرصيد الحالي للعميل/المورد من قاعدة البيانات
     double currentContactBalance = 0.0;
     final int? contactId = _selectedContactId;
     if (contactId != null && contactId > 0) {
@@ -186,7 +256,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
     final String displayType = _invoiceType == 'purchase' ? 'فاتورة مشتريات' : 'فاتورة مبيعات';
 
-    // 🔑 تمرير الرصيد الحالي وإلغاء طباعة "ل.س" عبر إرسال سلسلة فارغة
     await PrintService.selectAndPrintInvoice(
       context: context,
       invoiceType: displayType,
@@ -197,7 +266,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       paidAmount: _paidAmount,
       remainingAmount: _remainingAmount,
       customerBalance: currentContactBalance,
-      currency: "", // تم حذف ل.س
+      currency: "",
     );
   }
 
@@ -215,7 +284,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             }).toList();
 
             return AlertDialog(
-              title: const Text('بحث واختيار عميل'),
+              title: const Text('بحث وااختيار عميل'),
               content: SizedBox(
                 width: double.maxFinite,
                 child: Column(
@@ -289,7 +358,9 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final filteredProducts = _products.where((p) {
-              return (p['name'] ?? '').toString().toLowerCase().contains(filter.toLowerCase());
+              final name = (p['name'] ?? '').toString().toLowerCase();
+              final barcode = (p['barcode'] ?? '').toString().toLowerCase();
+              return name.contains(filter.toLowerCase()) || barcode.contains(filter.toLowerCase());
             }).toList();
 
             return AlertDialog(
@@ -299,13 +370,54 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (selectedProduct == null) ...[
-                      TextField(
-                        decoration: const InputDecoration(
-                          labelText: 'ابحث عن اسم المادة...',
-                          prefixIcon: Icon(Icons.search),
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: (val) => setDialogState(() => filter = val),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              decoration: const InputDecoration(
+                                labelText: 'ابحث باسم المادة أو الباركود...',
+                                prefixIcon: Icon(Icons.search),
+                                border: OutlineInputBorder(),
+                              ),
+                              onChanged: (val) => setDialogState(() => filter = val),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.qr_code_scanner, color: Color(0xFF5C6BC0), size: 30),
+                            tooltip: 'مسح باركود',
+                            onPressed: () async {
+                              final barcode = await Navigator.push<String>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const BarcodeScannerSimpleScreen(),
+                                ),
+                              );
+                              if (barcode != null && barcode.isNotEmpty) {
+                                final found = _products.firstWhere(
+                                  (p) => (p['barcode'] ?? '').toString().trim() == barcode.trim(),
+                                  orElse: () => {},
+                                );
+                                if (found.isNotEmpty) {
+                                  setDialogState(() {
+                                    selectedProduct = found;
+                                    final double defaultPrice = _invoiceType == 'purchase'
+                                        ? (found['buy_price'] as num?)?.toDouble() ?? 0.0
+                                        : (found['retail_price'] as num?)?.toDouble() ?? 0.0;
+
+                                    priceController.text = defaultPrice > 0 ? defaultPrice.toString() : '';
+                                  });
+                                } else {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('لم يتم العثور على مادة بباركود: $barcode')),
+                                    );
+                                  }
+                                }
+                              }
+                            },
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       SizedBox(
@@ -319,7 +431,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
                             return ListTile(
                               title: Text(prod['name'] ?? ''),
-                              subtitle: Text('المتوفر: ${prod['quantity']} | السعر: $productRetailPrice'),
+                              subtitle: Text('المتوفر: ${prod['quantity']} | السعر: $productRetailPrice | باركود: ${prod['barcode'] ?? 'لا يوجد'}'),
                               onTap: () {
                                 setDialogState(() {
                                   selectedProduct = prod;
@@ -502,6 +614,11 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         backgroundColor: const Color(0xFF5C6BC0),
         actions: [
           IconButton(
+            icon: const Icon(Icons.qr_code_scanner),
+            tooltip: 'مسح باركود إضافة مباشرة',
+            onPressed: _scanBarcodeAndAdd,
+          ),
+          IconButton(
             icon: const Icon(Icons.print),
             tooltip: 'طباعة الفاتورة',
             onPressed: _printInvoice,
@@ -546,14 +663,23 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('المواد المضافة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      ElevatedButton.icon(
-                        onPressed: _showAddItemDialog,
-                        icon: const Icon(Icons.add_shopping_cart, size: 18),
-                        label: const Text('إضافة مادة'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF5C6BC0),
-                          foregroundColor: Colors.white,
-                        ),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.qr_code_scanner, color: Color(0xFF5C6BC0)),
+                            tooltip: 'مسح باركود',
+                            onPressed: _scanBarcodeAndAdd,
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: _showAddItemDialog,
+                            icon: const Icon(Icons.add_shopping_cart, size: 18),
+                            label: const Text('إضافة مادة'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF5C6BC0),
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -627,7 +753,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   ),
                   const SizedBox(height: 10),
 
-                  // 🔑 عرض تفاصيل القيمة الحالية والمسدد والمتبقي
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -683,6 +808,32 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+// شاشة الكاميرا القارئة للباركود
+class BarcodeScannerSimpleScreen extends StatelessWidget {
+  const BarcodeScannerSimpleScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('مسح الباركود'),
+        backgroundColor: const Color(0xFF5C6BC0),
+      ),
+      body: MobileScanner(
+        onDetect: (capture) {
+          final List<Barcode> barcodes = capture.barcodes;
+          for (final barcode in barcodes) {
+            if (barcode.rawValue != null && barcode.rawValue!.isNotEmpty) {
+              Navigator.pop(context, barcode.rawValue);
+              break;
+            }
+          }
+        },
+      ),
     );
   }
 }

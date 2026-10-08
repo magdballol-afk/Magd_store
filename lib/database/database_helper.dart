@@ -19,10 +19,13 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3, // زيادة رقم الإصدار لتطبيق التعديلات الجديدة
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
-        // إدارة التحديثات في حال وجود جداول جديدة
+        // إضافة حقل الباركود لجدول المنتجات عند ترقية القاعدة من إصدار قديم
+        if (oldVersion < 3) {
+          await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
+        }
       },
     );
   }
@@ -34,11 +37,12 @@ class DatabaseHelper {
     const realType = 'REAL NOT NULL';
     const integerType = 'INTEGER NOT NULL';
 
-    // جدول المنتجات
+    // جدول المنتجات (مع إضافة حقل الباركود)
     await db.execute('''
       CREATE TABLE products (
         id $idType,
         name $textType,
+        barcode $textNullable,
         buy_price $realType,
         retail_price $realType,
         half_wholesale_price $realType,
@@ -97,7 +101,7 @@ class DatabaseHelper {
     ''');
   }
 
-  // ==================== المنتجات والتحركات ====================
+  // ==================== المنتجات والتحركات والباركود ====================
 
   Future<int> insertProduct(Map<String, dynamic> product) async {
     final db = await instance.database;
@@ -107,6 +111,21 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getProducts() async {
     final db = await instance.database;
     return await db.query('products', orderBy: 'id DESC');
+  }
+
+  /// جلب منتج بواسطة الباركود
+  Future<Map<String, dynamic>?> getProductByBarcode(String barcode) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'products',
+      where: 'barcode = ?',
+      whereArgs: [barcode],
+      limit: 1,
+    );
+    if (result.isNotEmpty) {
+      return result.first;
+    }
+    return null;
   }
 
   Future<int> updateProduct(Map<String, dynamic> product) async {

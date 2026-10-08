@@ -19,10 +19,9 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3, // زيادة رقم الإصدار لتطبيق التعديلات الجديدة
+      version: 3, // رقم الإصدار الحسابي
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
-        // إضافة حقل الباركود لجدول المنتجات عند ترقية القاعدة من إصدار قديم
         if (oldVersion < 3) {
           await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
         }
@@ -35,19 +34,20 @@ class DatabaseHelper {
     const textType = 'TEXT NOT NULL';
     const textNullable = 'TEXT';
     const realType = 'REAL NOT NULL';
+    const realDefaultZero = 'REAL NOT NULL DEFAULT 0.0';
     const integerType = 'INTEGER NOT NULL';
 
-    // جدول المنتجات (مع إضافة حقل الباركود)
+    // جدول المنتجات
     await db.execute('''
       CREATE TABLE products (
         id $idType,
         name $textType,
         barcode $textNullable,
-        buy_price $realType,
-        retail_price $realType,
-        half_wholesale_price $realType,
-        wholesale_price $realType,
-        quantity $realType
+        buy_price $realDefaultZero,
+        retail_price $realDefaultZero,
+        half_wholesale_price $realDefaultZero,
+        wholesale_price $realDefaultZero,
+        quantity $realDefaultZero
       )
     ''');
 
@@ -105,7 +105,16 @@ class DatabaseHelper {
 
   Future<int> insertProduct(Map<String, dynamic> product) async {
     final db = await instance.database;
-    return await db.insert('products', product);
+    final Map<String, dynamic> data = Map.from(product);
+
+    // حماية ضد NOT NULL constraints للشاشات التي لا تحتوي حقول الجملة
+    data['half_wholesale_price'] ??= 0.0;
+    data['wholesale_price'] ??= 0.0;
+    data['buy_price'] ??= 0.0;
+    data['retail_price'] ??= 0.0;
+    data['quantity'] ??= 0.0;
+
+    return await db.insert('products', data);
   }
 
   Future<List<Map<String, dynamic>>> getProducts() async {
@@ -130,11 +139,20 @@ class DatabaseHelper {
 
   Future<int> updateProduct(Map<String, dynamic> product) async {
     final db = await instance.database;
+    final Map<String, dynamic> data = Map.from(product);
+
+    // حماية ضد NOT NULL constraints أثناء التحديث
+    data['half_wholesale_price'] ??= 0.0;
+    data['wholesale_price'] ??= 0.0;
+    data['buy_price'] ??= 0.0;
+    data['retail_price'] ??= 0.0;
+    data['quantity'] ??= 0.0;
+
     return await db.update(
       'products',
-      product,
+      data,
       where: 'id = ?',
-      whereArgs: [product['id']],
+      whereArgs: [data['id']],
     );
   }
 
@@ -525,7 +543,6 @@ class DatabaseHelper {
   Future<void> executeFiscalYearRollover(int newYear) async {
     final db = await instance.database;
     await db.transaction((txn) async {
-      // إزالة حركات السنة القديمة مع الإبقاء على الأرصدة والمنتجات
       await txn.delete('cash_transactions');
       await txn.delete('invoice_items');
       await txn.delete('invoices');

@@ -13,6 +13,9 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
+  # مكتبة مسح الباركود بالكاميرا
+  mobile_scanner: ^5.1.1
+
   # جلب معرّف الجهاز للحماية والترخيص
   device_info_plus: ^10.1.0
 

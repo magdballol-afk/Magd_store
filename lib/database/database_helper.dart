@@ -582,6 +582,57 @@ class DatabaseHelper {
     return result;
   }
 
+  /// حذف فاتورة بالكامل مع عكس تأثيرها على المخزون وأرصدة العملاء وعناصر الفاتورة
+  Future<void> deleteFullInvoice(int invoiceId) async {
+    final db = await instance.database;
+
+    await db.transaction((txn) async {
+      // 1. جلب بيانات الفاتورة المراد حذفها
+      final invoiceResult = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+      if (invoiceResult.isEmpty) return;
+
+      final inv = invoiceResult.first;
+      final int contactId = (inv['contact_id'] as num).toInt();
+      final String type = inv['type'].toString();
+      final double netAmount = (inv['net_amount'] as num).toDouble();
+      final double paidAmount = (inv['paid_amount'] as num).toDouble();
+      final double remaining = netAmount - paidAmount;
+
+      // 2. عكس تأثير الرصيد على العميل أو المورد
+      if (contactId > 0 && remaining != 0) {
+        double reverseAdjustment = 0.0;
+        if (type == 'sale' || type == 'mefraq') {
+          reverseAdjustment = -remaining;
+        } else if (type == 'buy' || type == 'purchase') {
+          reverseAdjustment = remaining;
+        }
+        await txn.rawUpdate(
+          'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+          [reverseAdjustment, contactId],
+        );
+      }
+
+      // 3. عكس كميات المنتجات في المستودع
+      final items = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+      for (var item in items) {
+        final double qty = (item['quantity'] as num).toDouble();
+        final int prodId = (item['product_id'] as num).toInt();
+
+        if (type == 'sale' || type == 'mefraq') {
+          await txn.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [qty, prodId]);
+        } else if (type == 'buy' || type == 'purchase') {
+          await txn.rawUpdate('UPDATE products SET quantity = quantity - ? WHERE id = ?', [qty, prodId]);
+        }
+      }
+
+      // 4. حذف عناصر الفاتورة
+      await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+
+      // 5. حذف الفاتورة نفسها
+      await txn.delete('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+    });
+  }
+
   Future<List<Map<String, dynamic>>> getInvoices() async {
     final db = await instance.database;
     return await db.query('invoices', orderBy: 'id DESC');

@@ -84,6 +84,35 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
     }
   }
 
+  /// تأكيد وحذف الفاتورة بالكامل مع حركاتها
+  void _confirmDeleteInvoice(int invoiceId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف الفاتورة'),
+        content: Text('هل أنت متأكد من حذف الفاتورة رقم #$invoiceId؟ سيتم عكس تأثيرها على المخزون وأرصدة الحسابات.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await DatabaseHelper.instance.deleteFullInvoice(invoiceId);
+              _loadInvoices();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم حذف الفاتورة وعكس حركاتها بنجاح')),
+              );
+            },
+            child: const Text('حذف', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final String dateDisplay = DateFormat('yyyy/MM/dd').format(_selectedDate);
@@ -194,6 +223,7 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
                           final inv = _invoices[index];
                           final bool isSale = inv['type'] == 'sale';
                           final double total = (inv['total_amount'] ?? 0.0).toDouble();
+                          final int invoiceId = inv['id'] as int;
 
                           return Card(
                             margin: const EdgeInsets.only(bottom: 10),
@@ -212,15 +242,25 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    'فاتورة #${inv['id']}',
+                                    'فاتورة #$invoiceId',
                                     style: const TextStyle(fontWeight: FontWeight.bold),
                                   ),
-                                  Text(
-                                    isSale ? 'مبيعات' : 'مشتريات',
-                                    style: TextStyle(
-                                      color: isSale ? Colors.green[800] : Colors.orange[800],
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        isSale ? 'مبيعات' : 'مشتريات',
+                                        style: TextStyle(
+                                          color: isSale ? Colors.green[800] : Colors.orange[800],
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                        onPressed: () => _confirmDeleteInvoice(invoiceId),
+                                        tooltip: 'حذف الفاتورة',
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -235,7 +275,7 @@ class _InvoicesListScreenState extends State<InvoicesListScreen> {
                                 ],
                               ),
                               onTap: () => _openInvoice(
-                                invoiceId: inv['id'] as int?,
+                                invoiceId: invoiceId,
                                 type: inv['type'] as String?,
                               ),
                             ),

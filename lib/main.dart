@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'helpers/license_helper.dart'; // <--- تم إضافة استيراد ملف الترخيص
+import 'helpers/database_helper.dart'; // <--- تم استيراد ملف قاعدة البيانات لاستخدام دالة الربح اليومي
 import 'screens/add_product_screen.dart';
 import 'screens/cash_journal_screen.dart';
 import 'screens/contacts_screen.dart';
@@ -391,6 +392,9 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          // بطاقة عرض الربح اليومي الصافي بناءً على آخر سعر شراء
+          _buildDailyProfitCard(),
           const SizedBox(height: 20),
           const Text(
             'إجراءات سريعة',
@@ -441,6 +445,70 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           const CurrencyRatesCard(),
         ],
       ),
+    );
+  }
+
+  // ويدجت عرض بطاقة الربح اليومي الصافي
+  Widget _buildDailyProfitCard() {
+    final String todayStr = DateTime.now().toString().split(' ')[0];
+
+    return FutureBuilder<double>(
+      future: DatabaseHelper.instance.getDailyProfitUsingLastBuyPrice(todayStr),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        final double dailyProfit = snapshot.data ?? 0.0;
+
+        return Card(
+          elevation: 3,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          color: Colors.green.shade50,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.trending_up, color: Colors.green, size: 28),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'الربح اليومي الصافي:',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  dailyProfit.toStringAsFixed(2),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: dailyProfit >= 0 ? Colors.green.shade800 : Colors.red.shade800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'helpers/license_helper.dart'; // <--- تم إضافة استيراد ملف الترخيص
-import 'helpers/database_helper.dart'; // <--- تم استيراد ملف قاعدة البيانات لاستخدام دالة الربح اليومي
+import 'database/database_helper.dart';
 import 'screens/add_product_screen.dart';
 import 'screens/cash_journal_screen.dart';
 import 'screens/contacts_screen.dart';

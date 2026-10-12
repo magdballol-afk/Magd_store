@@ -172,6 +172,64 @@ class DatabaseHelper {
     ''', [productId]);
   }
 
+  // ==================== أرباح المواد المباعة ====================
+
+  /// حساب صافي الربح اليومي بناءً على "آخر سعر شراء" مسجل للمادة في فواتير المشتريات
+  Future<double> getDailyProfitUsingLastBuyPrice(String formattedDate) async {
+    final db = await instance.database;
+
+    // 1. جلب عناصر مبيعات اليوم
+    final salesItems = await db.rawQuery('''
+      SELECT ii.product_id, ii.quantity, ii.price as sale_price, i.date
+      FROM invoice_items ii
+      JOIN invoices i ON ii.invoice_id = i.id
+      WHERE (i.type = 'sale' OR i.type = 'mefraq') AND i.date LIKE ?
+    ''', ['$formattedDate%']);
+
+    double totalProfit = 0.0;
+
+    for (var item in salesItems) {
+      final int productId = (item['product_id'] as num).toInt();
+      final double qty = (item['quantity'] as num?)?.toDouble() ?? 0.0;
+      final double salePrice = (item['sale_price'] as num?)?.toDouble() ?? 0.0;
+      final String saleDate = item['date'].toString();
+
+      // 2. البحث عن "آخر سعر شراء" لهذه المادة قبل تاريخ أو وقت عملية البيع
+      final lastBuyResult = await db.rawQuery('''
+        SELECT ii.price as buy_price
+        FROM invoice_items ii
+        JOIN invoices i ON ii.invoice_id = i.id
+        WHERE ii.product_id = ? AND (i.type = 'buy' OR i.type = 'purchase') AND i.date <= ?
+        ORDER BY i.date DESC, i.id DESC
+        LIMIT 1
+      ''', [productId, saleDate]);
+
+      double effectiveBuyPrice = 0.0;
+
+      if (lastBuyResult.isNotEmpty) {
+        effectiveBuyPrice = (lastBuyResult.first['buy_price'] as num?)?.toDouble() ?? 0.0;
+      } else {
+        // حل احتياطي في حال عدم وجود فاتورة شراء سابقة
+        final productRes = await db.query(
+          'products',
+          columns: ['buy_price'],
+          where: 'id = ?',
+          whereArgs: [productId],
+          limit: 1,
+        );
+        if (productRes.isNotEmpty) {
+          effectiveBuyPrice = (productRes.first['buy_price'] as num?)?.toDouble() ?? 0.0;
+        }
+      }
+
+      // 3. حساب ربح السطر: (سعر البيع - آخر سعر شراء) × الكمية
+      final double itemProfit = (salePrice - effectiveBuyPrice) * qty;
+      totalProfit += itemProfit;
+    }
+
+    return totalProfit;
+  }
+
   // ==================== جهات الاتصال والرصيد ====================
 
   Future<int> insertContact(Map<String, dynamic> contact) async {

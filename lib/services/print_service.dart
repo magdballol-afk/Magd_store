@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
@@ -8,9 +9,9 @@ class PrintService {
   // ==========================================
   // بيانات المنشأة / الشركة
   // ==========================================
-  static const String companyName = "";
-  static const String taxNumber = "الرقم الضريبي: ";
-  static const String companyPhone = "هاتف:  ";
+  static const String companyName = "شركة التجارة العامة";
+  static const String taxNumber = "الرقم الضريبي: 123456789";
+  static const String companyPhone = "هاتف: 0912345678 / 011123456";
   static const String companyAddress = "العنوان: الشارع العام - المركز الرئيسي";
 
   /// دالة تحويل النص العربي إلى صورة (Bitmap) لطباعتها بدون أخطاء ترميز
@@ -44,7 +45,6 @@ class PrintService {
     
     if (byteData == null) return null;
 
-    // تحويل البيانات إلى صورة متوافقة مع مكتبة image
     return img.decodeImage(byteData.buffer.asUint8List());
   }
 
@@ -165,7 +165,7 @@ class PrintService {
       List<int> bytes = [];
       bytes += generator.reset();
 
-      final int pageWidth = is58mm ? 384 : 576; // عرض البكسلات حسب مقاس الورق
+      final int pageWidth = is58mm ? 384 : 576;
 
       // 1. طباعة ترويسة الشركة كصور لتجنب أي أخطاء عربية
       img.Image? compImg = await _textToImage(companyName, fontSize: 26, bold: true, width: pageWidth);

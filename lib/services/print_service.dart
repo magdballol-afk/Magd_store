@@ -129,90 +129,56 @@ class PrintService {
 
       List<int> bytes = [];
 
-      // 2. ضبط الترميز العربي للطابعة (CP864)
+      // 2. ضبط الترميز وتصفير الإعدادات
       bytes += generator.setGlobalCodeTable('CP864');
+      bytes += generator.reset();
 
       final int paperWidth = is58mm ? 32 : 48;
       final String currSuffix = currency.trim().isNotEmpty ? " $currency" : "";
 
-      final StringBuffer receipt = StringBuffer();
+      // 3. بناء الفاتورة سطر بسطر لتجنب خطأ تنسيق النصوص العربية
+      bytes += generator.text(companyName, styles: const PosStyles(align: PosAlign.center, bold: true, codeTable: 'CP864'));
+      bytes += generator.text(taxNumber, styles: const PosStyles(align: PosAlign.center, codeTable: 'CP864'));
+      bytes += generator.text(companyPhone, styles: const PosStyles(align: PosAlign.center, codeTable: 'CP864'));
+      bytes += generator.text(companyAddress, styles: const PosStyles(align: PosAlign.center, codeTable: 'CP864'));
+      bytes += generator.text("-" * paperWidth, styles: const PosStyles(align: PosAlign.center));
 
-      // 3. بناء الفاتورة
-      receipt.writeln(companyName);
-      receipt.writeln(taxNumber);
-      receipt.writeln(companyPhone);
-      receipt.writeln(companyAddress);
-      receipt.writeln("=" * paperWidth);
+      bytes += generator.text(invoiceType, styles: const PosStyles(align: PosAlign.right, bold: true, codeTable: 'CP864'));
+      bytes += generator.text("رقم الفاتورة: #$invoiceNumber", styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'));
+      bytes += generator.text("التاريخ: ${DateTime.now().toString().split(' ')[0]}", styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'));
+      bytes += generator.text("العميل: $customerName", styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'));
+      bytes += generator.text("-" * paperWidth, styles: const PosStyles(align: PosAlign.center));
 
-      receipt.writeln(invoiceType);
-      receipt.writeln("رقم الفاتورة: #$invoiceNumber");
-      receipt.writeln("التاريخ: ${DateTime.now().toString().split(' ')[0]}");
-      receipt.writeln("العميل: $customerName");
-      receipt.writeln("-" * paperWidth);
+      // طباعة تفاصيل المواد
+      for (var item in items) {
+        String name = (item['name'] ?? '').toString();
+        double qty = double.tryParse((item['quantity'] ?? 1).toString()) ?? 1.0;
+        double price = double.tryParse((item['price'] ?? 0).toString()) ?? 0.0;
+        double lineTotal = qty * price;
 
-      if (is58mm) {
-        receipt.writeln("المادة           الكمية السعر الإجمالي");
-        receipt.writeln("-" * paperWidth);
-
-        for (var item in items) {
-          String name = (item['name'] ?? '').toString();
-          double qty = double.tryParse((item['quantity'] ?? 1).toString()) ?? 1.0;
-          double price = double.tryParse((item['price'] ?? 0).toString()) ?? 0.0;
-          double lineTotal = qty * price;
-
-          if (name.length > 12) name = name.substring(0, 12);
-
-          String pName = name.padRight(13);
-          String pQty = qty.toStringAsFixed(1).padLeft(5);
-          String pPrice = price.toStringAsFixed(0).padLeft(6);
-          String pTotal = lineTotal.toStringAsFixed(0).padLeft(7);
-
-          receipt.writeln("$pName $pQty $pPrice $pTotal");
-        }
-      } else {
-        receipt.writeln("المادة                   الكمية   السعر    الإجمالي");
-        receipt.writeln("-" * paperWidth);
-
-        for (var item in items) {
-          String name = (item['name'] ?? '').toString();
-          double qty = double.tryParse((item['quantity'] ?? 1).toString()) ?? 1.0;
-          double price = double.tryParse((item['price'] ?? 0).toString()) ?? 0.0;
-          double lineTotal = qty * price;
-
-          if (name.length > 18) name = name.substring(0, 18);
-
-          String pName = name.padRight(22);
-          String pQty = qty.toStringAsFixed(1).padLeft(6);
-          String pPrice = price.toStringAsFixed(0).padLeft(8);
-          String pTotal = lineTotal.toStringAsFixed(0).padLeft(10);
-
-          receipt.writeln("$pName $pQty $pPrice $pTotal");
-        }
+        bytes += generator.text(name, styles: const PosStyles(align: PosAlign.right, bold: true, codeTable: 'CP864'));
+        bytes += generator.text(
+          "الكمية: ${qty.toStringAsFixed(1)} | السعر: ${price.toStringAsFixed(0)} | الإجمالي: ${lineTotal.toStringAsFixed(0)}",
+          styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'),
+        );
+        bytes += generator.text("-" * 20, styles: const PosStyles(align: PosAlign.right));
       }
 
-      receipt.writeln("-" * paperWidth);
-      receipt.writeln("المجموع الإجمالي: ${totalPrice.toStringAsFixed(2)}$currSuffix");
-      receipt.writeln("المدفوع نقداً   : ${paidAmount.toStringAsFixed(2)}$currSuffix");
-      receipt.writeln("المتبقي بالفاتورة: ${remainingAmount.toStringAsFixed(2)}$currSuffix");
+      bytes += generator.text("-" * paperWidth, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text("المجموع الإجمالي: ${totalPrice.toStringAsFixed(2)}$currSuffix", styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'));
+      bytes += generator.text("المدفوع نقداً: ${paidAmount.toStringAsFixed(2)}$currSuffix", styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'));
+      bytes += generator.text("المتبقي بالفاتورة: ${remainingAmount.toStringAsFixed(2)}$currSuffix", styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'));
 
       if (customerBalance != null) {
-        receipt.writeln("-" * paperWidth);
-        receipt.writeln("الرصيد الحالي   : ${customerBalance.toStringAsFixed(2)}$currSuffix");
+        bytes += generator.text("الرصيد الحالي: ${customerBalance.toStringAsFixed(2)}$currSuffix", styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'));
       }
 
-      receipt.writeln("=" * paperWidth);
-      receipt.writeln("شكراً لزيارتكم\n\n\n");
+      bytes += generator.text("=" * paperWidth, styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text("شكراً لزيارتكم", styles: const PosStyles(align: PosAlign.center, bold: true, codeTable: 'CP864'));
 
-      // 4. تحويل النص العربي بأوامر Generator الخاصة بـ ESC/POS
-      bytes += generator.text(
-        receipt.toString(),
-        styles: const PosStyles(
-          codeTable: 'CP864',
-          align: PosAlign.right,
-        ),
-      );
+      bytes += generator.feed(2);
 
-      // أمر قطع الورق التلقائي للطابعات التي تدعم القطع (مثل TYSSO)
+      // أمر قطع الورق التلقائي للطابعات الكبيرة التي تدعم القطع
       if (!is58mm) {
         bytes += generator.cut();
       }

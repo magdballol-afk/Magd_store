@@ -14,11 +14,11 @@ class PrintService {
   static const String companyPhone = "هاتف: 0912345678 / 011123456";
   static const String companyAddress = "العنوان: الشارع العام - المركز الرئيسي";
 
-  /// دالة تحويل النص العربي إلى صورة (Bitmap) لطباعتها بدون أخطاء ترميز
-  static Future<img.Image?> _textToImage(String text, {int fontSize = 24, bool bold = false, int width = 384}) async {
+  /// دالة تحويل أي نص عربي إلى صورة (Bitmap) لطباعته بدون أخطاء ترميز
+  static Future<img.Image?> _textToImage(String text, {int fontSize = 22, bool bold = false, int width = 384}) async {
     final ui.ParagraphBuilder pb = ui.ParagraphBuilder(
       ui.ParagraphStyle(
-        textAlign: ui.TextAlign.center,
+        textAlign: ui.TextAlign.right, // محاذاة لليمين لتناسب الفواتير العربية
         fontWeight: bold ? ui.FontWeight.bold : ui.FontWeight.normal,
         fontSize: fontSize.toDouble(),
       ),
@@ -143,7 +143,7 @@ class PrintService {
     }
   }
 
-  /// إرسال أوامر الطباعة عبر تحويل النصوص العربية إلى صور لمنع أخطاء الرموز
+  /// إرسال أوامر الطباعة عبر تحويل كافة النصوص العربية إلى صور لمنع أخطاء الرموز نهائياً
   static Future<void> _printContent({
     required BuildContext context,
     required String invoiceType,
@@ -165,9 +165,9 @@ class PrintService {
       List<int> bytes = [];
       bytes += generator.reset();
 
-      final int pageWidth = is58mm ? 384 : 576;
+      final int pageWidth = is58mm ? 384 : 576; // عرض البكسلات حسب مقاس الورق
 
-      // 1. طباعة ترويسة الشركة كصور لتجنب أي أخطاء عربية
+      // 1. طباعة ترويسة الشركة كصور
       img.Image? compImg = await _textToImage(companyName, fontSize: 26, bold: true, width: pageWidth);
       if (compImg != null) bytes += generator.image(compImg);
 
@@ -197,7 +197,7 @@ class PrintService {
 
       bytes += generator.text("-" * (is58mm ? 32 : 48), styles: const PosStyles(align: PosAlign.center));
 
-      // 3. طباعة تفاصيل المواد
+      // 3. طباعة تفاصيل المواد (اسم المادة والكمية والسعر كصور لتفادي الخطأ)
       for (var item in items) {
         String name = (item['name'] ?? '').toString();
         double qty = double.tryParse((item['quantity'] ?? 1).toString()) ?? 1.0;
@@ -207,22 +207,32 @@ class PrintService {
         img.Image? itemNameImg = await _textToImage(name, fontSize: 20, bold: true, width: pageWidth);
         if (itemNameImg != null) bytes += generator.image(itemNameImg);
 
-        bytes += generator.text(
-          "الكمية: ${qty.toStringAsFixed(1)} | السعر: ${price.toStringAsFixed(0)} | الإجمالي: ${lineTotal.toStringAsFixed(0)}",
-          styles: const PosStyles(align: PosAlign.right),
-        );
-        bytes += generator.text("-" * 20, styles: const PosStyles(align: PosAlign.right));
+        String detailsText = "الكمية: ${qty.toStringAsFixed(1)} | السعر: ${price.toStringAsFixed(0)} | الإجمالي: ${lineTotal.toStringAsFixed(0)}";
+        img.Image? itemDetailsImg = await _textToImage(detailsText, fontSize: 16, width: pageWidth);
+        if (itemDetailsImg != null) bytes += generator.image(itemDetailsImg);
+
+        bytes += generator.text("-" * 20, styles: const PosStyles(align: PosAlign.center));
       }
 
       bytes += generator.text("-" * (is58mm ? 32 : 48), styles: const PosStyles(align: PosAlign.center));
 
-      // 4. المجاميع النهائية
-      bytes += generator.text("المجموع الإجمالي: ${totalPrice.toStringAsFixed(2)} $currency", styles: const PosStyles(align: PosAlign.right));
-      bytes += generator.text("المدفوع نقداً: ${paidAmount.toStringAsFixed(2)} $currency", styles: const PosStyles(align: PosAlign.right));
-      bytes += generator.text("المتبقي بالفاتورة: ${remainingAmount.toStringAsFixed(2)} $currency", styles: const PosStyles(align: PosAlign.right));
+      // 4. المجاميع النهائية كصور
+      String totalText = "المجموع الإجمالي: ${totalPrice.toStringAsFixed(2)} $currency";
+      img.Image? totalImg = await _textToImage(totalText, fontSize: 18, bold: true, width: pageWidth);
+      if (totalImg != null) bytes += generator.image(totalImg);
+
+      String paidText = "المدفوع نقداً: ${paidAmount.toStringAsFixed(2)} $currency";
+      img.Image? paidImg = await _textToImage(paidText, fontSize: 18, width: pageWidth);
+      if (paidImg != null) bytes += generator.image(paidImg);
+
+      String remainingText = "المتبقي بالفاتورة: ${remainingAmount.toStringAsFixed(2)} $currency";
+      img.Image? remainingImg = await _textToImage(remainingText, fontSize: 18, bold: true, width: pageWidth);
+      if (remainingImg != null) bytes += generator.image(remainingImg);
 
       if (customerBalance != null) {
-        bytes += generator.text("الرصيد الحالي: ${customerBalance.toStringAsFixed(2)} $currency", styles: const PosStyles(align: PosAlign.right));
+        String balanceText = "الرصيد الحالي: ${customerBalance.toStringAsFixed(2)} $currency";
+        img.Image? balanceImg = await _textToImage(balanceText, fontSize: 18, width: pageWidth);
+        if (balanceImg != null) bytes += generator.image(balanceImg);
       }
 
       bytes += generator.text("=" * (is58mm ? 32 : 48), styles: const PosStyles(align: PosAlign.center));

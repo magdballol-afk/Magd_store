@@ -9,9 +9,9 @@ class PrintService {
   // ==========================================
   // بيانات المنشأة / الشركة
   // ==========================================
-  static const String companyName = "شركة التجارة العامة";
-  static const String taxNumber = "الرقم الضريبي: 123456789";
-  static const String companyPhone = "هاتف: 0912345678 / 011123456";
+  static const String companyName = "";
+  static const String taxNumber = "";
+  static const String companyPhone = " ";
   static const String companyAddress = "العنوان: الشارع العام - المركز الرئيسي";
 
   /// دالة محسنة لتحويل النصوص العربية إلى صور عالية الوضوح تناسب طابعة PT-220 (58mm)

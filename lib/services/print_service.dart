@@ -12,6 +12,13 @@ class PrintService {
   static const String companyPhone = "هاتف: 0912345678 / 011123456";
   static const String companyAddress = "العنوان: الشارع العام - المركز الرئيسي";
 
+  /// دالة مساعدة لتنظيف النصوص من الرموز الخاصة وعلامات الترقيم المسببة لأخطاء الطباعة
+  static String cleanText(String text) {
+    if (text.isEmpty) return "";
+    // إزالة علامات التنصيص المزدوجة، الفردية، والرموز التي قد تسبب استثناءات في ترميز الطابعة
+    return text.replaceAll(RegExp(r'["„“”«»\x00-\x1F\x7F-\x9F]'), '').trim();
+  }
+
   /// دالة اختيار الطابعة والطباعة
   static Future<void> selectAndPrintInvoice({
     required BuildContext context,
@@ -107,7 +114,7 @@ class PrintService {
     }
   }
 
-  /// إرسال أوامر الطباعة مع معالجة الترميز العربي ESC/POS
+  /// إرسال أوامر الطباعة مع معالجة الترميز العربي وتنظيف النصوص الآمنة ESC/POS
   static Future<void> _printContent({
     required BuildContext context,
     required String invoiceType,
@@ -134,24 +141,24 @@ class PrintService {
       bytes += generator.reset();
 
       final int paperWidth = is58mm ? 32 : 48;
-      final String currSuffix = currency.trim().isNotEmpty ? " $currency" : "";
+      final String currSuffix = currency.trim().isNotEmpty ? " ${cleanText(currency)}" : "";
 
-      // 3. بناء الفاتورة سطر بسطر لتجنب خطأ تنسيق النصوص العربية
-      bytes += generator.text(companyName, styles: const PosStyles(align: PosAlign.center, bold: true, codeTable: 'CP864'));
-      bytes += generator.text(taxNumber, styles: const PosStyles(align: PosAlign.center, codeTable: 'CP864'));
-      bytes += generator.text(companyPhone, styles: const PosStyles(align: PosAlign.center, codeTable: 'CP864'));
-      bytes += generator.text(companyAddress, styles: const PosStyles(align: PosAlign.center, codeTable: 'CP864'));
+      // 3. بناء الفاتورة سطر بسطر مع تنظيف النصوص لمنع أخطاء الرموز الخاصة
+      bytes += generator.text(cleanText(companyName), styles: const PosStyles(align: PosAlign.center, bold: true, codeTable: 'CP864'));
+      bytes += generator.text(cleanText(taxNumber), styles: const PosStyles(align: PosAlign.center, codeTable: 'CP864'));
+      bytes += generator.text(cleanText(companyPhone), styles: const PosStyles(align: PosAlign.center, codeTable: 'CP864'));
+      bytes += generator.text(cleanText(companyAddress), styles: const PosStyles(align: PosAlign.center, codeTable: 'CP864'));
       bytes += generator.text("-" * paperWidth, styles: const PosStyles(align: PosAlign.center));
 
-      bytes += generator.text(invoiceType, styles: const PosStyles(align: PosAlign.right, bold: true, codeTable: 'CP864'));
-      bytes += generator.text("رقم الفاتورة: #$invoiceNumber", styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'));
+      bytes += generator.text(cleanText(invoiceType), styles: const PosStyles(align: PosAlign.right, bold: true, codeTable: 'CP864'));
+      bytes += generator.text("رقم الفاتورة: #${cleanText(invoiceNumber)}", styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'));
       bytes += generator.text("التاريخ: ${DateTime.now().toString().split(' ')[0]}", styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'));
-      bytes += generator.text("العميل: $customerName", styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'));
+      bytes += generator.text("العميل: ${cleanText(customerName)}", styles: const PosStyles(align: PosAlign.right, codeTable: 'CP864'));
       bytes += generator.text("-" * paperWidth, styles: const PosStyles(align: PosAlign.center));
 
       // طباعة تفاصيل المواد
       for (var item in items) {
-        String name = (item['name'] ?? '').toString();
+        String name = cleanText((item['name'] ?? '').toString());
         double qty = double.tryParse((item['quantity'] ?? 1).toString()) ?? 1.0;
         double price = double.tryParse((item['price'] ?? 0).toString()) ?? 0.0;
         double lineTotal = qty * price;

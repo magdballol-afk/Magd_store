@@ -354,7 +354,11 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     final priceController = TextEditingController();
     final quantityController = TextEditingController(text: '1');
     final discountController = TextEditingController(text: '0');
-    final expiryController = TextEditingController(); // 👈 متحكم تاريخ الصلاحية
+    final expiryController = TextEditingController();
+
+    // متغيرات خاصة بدفات الشراء عند البيع
+    List<Map<String, dynamic>> availableBatches = [];
+    String? selectedBatchExpiry;
 
     showDialog(
       context: context,
@@ -369,7 +373,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             }).toList();
 
             return AlertDialog(
-              title: const Text('إضافة مادة للفاتورة'),
+              title: Text(_invoiceType == 'purchase' ? 'إضافة مادة لشراء' : 'إضافة مادة للبيع (اختر الدفعة)'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -404,13 +408,31 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                   orElse: () => {},
                                 );
                                 if (found.isNotEmpty) {
+                                  final double defaultPrice = _invoiceType == 'purchase'
+                                      ? (found['buy_price'] as num?)?.toDouble() ?? 0.0
+                                      : (found['retail_price'] as num?)?.toDouble() ?? 0.0;
+
+                                  // إذا كانت الفاتورة مبيعات، جلب الدفعات المتوفرة لهذه المادة مرتبة حسب الأقرب انتهاءً
+                                  List<Map<String, dynamic>> batches = [];
+                                  if (_invoiceType == 'sale') {
+                                    final db = await DatabaseHelper.instance.database;
+                                    batches = await db.rawQuery('''
+                                      SELECT ii.expiry_date, ii.quantity, ii.price
+                                      FROM invoice_items ii
+                                      JOIN invoices i ON ii.invoice_id = i.id
+                                      WHERE ii.product_id = ? AND (i.type = 'buy' OR i.type = 'purchase') 
+                                        AND ii.expiry_date IS NOT NULL AND ii.expiry_date != ''
+                                      ORDER BY ii.expiry_date ASC
+                                    ''', [found['id']]);
+                                  }
+
                                   setDialogState(() {
                                     selectedProduct = found;
-                                    final double defaultPrice = _invoiceType == 'purchase'
-                                        ? (found['buy_price'] as num?)?.toDouble() ?? 0.0
-                                        : (found['retail_price'] as num?)?.toDouble() ?? 0.0;
-
                                     priceController.text = defaultPrice > 0 ? defaultPrice.toString() : '';
+                                    availableBatches = batches;
+                                    if (batches.isNotEmpty) {
+                                      selectedBatchExpiry = batches.first['expiry_date']?.toString();
+                                    }
                                   });
                                 } else {
                                   if (mounted) {
@@ -436,15 +458,32 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
                             return ListTile(
                               title: Text(prod['name'] ?? ''),
-                              subtitle: Text('المتوفر: ${prod['quantity']} | السعر: $productRetailPrice | باركود: ${prod['barcode'] ?? 'لا يوجد'}'),
-                              onTap: () {
+                              subtitle: Text('المتوفر: ${prod['quantity']} | السعر: $productRetailPrice \vert{} باركود: ${prod['barcode'] ?? 'لا يوجد'}'),
+                              onTap: () async {
+                                final double defaultPrice = _invoiceType == 'purchase' 
+                                    ? (prod['buy_price'] as num?)?.toDouble() ?? 0.0
+                                    : (prod['retail_price'] as num?)?.toDouble() ?? 0.0;
+                                    
+                                List<Map<String, dynamic>> batches = [];
+                                if (_invoiceType == 'sale') {
+                                  final db = await DatabaseHelper.instance.database;
+                                  batches = await db.rawQuery('''
+                                    SELECT ii.expiry_date, ii.quantity, ii.price
+                                    FROM invoice_items ii
+                                    JOIN invoices i ON ii.invoice_id = i.id
+                                    WHERE ii.product_id = ? AND (i.type = 'buy' OR i.type = 'purchase') 
+                                      AND ii.expiry_date IS NOT NULL AND ii.expiry_date != ''
+                                    ORDER BY ii.expiry_date ASC
+                                  ''', [prod['id']]);
+                                }
+
                                 setDialogState(() {
                                   selectedProduct = prod;
-                                  final double defaultPrice = _invoiceType == 'purchase' 
-                                      ? (prod['buy_price'] as num?)?.toDouble() ?? 0.0
-                                      : (prod['retail_price'] as num?)?.toDouble() ?? 0.0;
-                                      
                                   priceController.text = defaultPrice > 0 ? defaultPrice.toString() : '';
+                                  availableBatches = batches;
+                                  if (batches.isNotEmpty) {
+                                    selectedBatchExpiry = batches.first['expiry_date']?.toString();
+                                  }
                                 });
                               },
                             );
@@ -459,11 +498,47 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                           subtitle: Text('المخزون الحالي: ${selectedProduct!['quantity']}'),
                           trailing: IconButton(
                             icon: const Icon(Icons.close, color: Colors.red),
-                            onPressed: () => setDialogState(() => selectedProduct = null),
+                            onPressed: () => setDialogState(() {
+                              selectedProduct = null;
+                              availableBatches.clear();
+                              selectedBatchExpiry = null;
+                            }),
                           ),
                         ),
                       ),
                       const SizedBox(height: 12),
+
+                      // عرض قائمة الدفعات وتواريخ الصلاحية عند المبيعات لتمكين الصيدلي من اختيار الدفعة الأقرب انتهاءً
+                      if (_invoiceType == 'sale') ...[
+                        if (availableBatches.isNotEmpty) ...[
+                          DropdownButtonFormField<String>(
+                            value: selectedBatchExpiry,
+                            decoration: const InputDecoration(
+                              labelText: 'اختر دفعة الصلاحية المراد صرفها (FIFO)',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.hourglass_bottom),
+                            ),
+                            items: availableBatches.map((batch) {
+                              final String exp = batch['expiry_date'].toString();
+                              final double qty = (batch['quantity'] as num?)?.toDouble() ?? 0.0;
+                              return DropdownMenuItem<String>(
+                                value: exp,
+                                child: Text('صلاحية: $exp (المتوفر بالدفعة: $qty)'),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              setDialogState(() {
+                                selectedBatchExpiry = val;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                        ] else ...[
+                          const Text('لا توجد تواريخ صلاحية مسجلة مسبقاً لهذه المادة', style: TextStyle(color: Colors.orange, fontSize: 13)),
+                          const SizedBox(height: 12),
+                        ],
+                      ],
+
                       TextFormField(
                         controller: priceController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -493,30 +568,33 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                           prefixIcon: Icon(Icons.local_offer),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      // 👈 حقل اختيار تاريخ الصلاحية
-                      TextFormField(
-                        controller: expiryController,
-                        readOnly: true,
-                        decoration: const InputDecoration(
-                          labelText: 'تاريخ انتهاء الصلاحية (اختياري)',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.date_range),
+                      
+                      // حقل إدخال تاريخ الصلاحية يظهر فقط في فواتير الشراء
+                      if (_invoiceType == 'purchase') ...[
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: expiryController,
+                          readOnly: true,
+                          decoration: const InputDecoration(
+                            labelText: 'تاريخ انتهاء الصلاحية للدفعة الجديدة',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.date_range),
+                          ),
+                          onTap: () async {
+                            DateTime? picked = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime.now().add(const Duration(days: 365)),
+                              firstDate: DateTime.now(),
+                              lastDate: DateTime(2045),
+                            );
+                            if (picked != null) {
+                              setDialogState(() {
+                                expiryController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                              });
+                            }
+                          },
                         ),
-                        onTap: () async {
-                          DateTime? picked = await showDatePicker(
-                            context: context,
-                            initialDate: DateTime.now().add(const Duration(days: 365)),
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime(2045),
-                          );
-                          if (picked != null) {
-                            setDialogState(() {
-                              expiryController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-                            });
-                          }
-                        },
-                      ),
+                      ],
                     ],
                   ],
                 ),
@@ -533,7 +611,11 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       final double price = double.tryParse(priceController.text.trim()) ?? 0.0;
                       final double qty = double.tryParse(quantityController.text.trim()) ?? 0.0;
                       final double disc = double.tryParse(discountController.text.trim()) ?? 0.0;
-                      final String expiry = expiryController.text.trim();
+                      
+                      // تحديد تاريخ الصلاحية بناءً على نوع الفاتورة (مشتريات أو مبيعات)
+                      final String expiry = _invoiceType == 'purchase' 
+                          ? expiryController.text.trim() 
+                          : (selectedBatchExpiry ?? '');
 
                       if (qty <= 0) return;
 
@@ -547,7 +629,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                           'quantity': qty,
                           'discount': disc,
                           'total': total < 0 ? 0.0 : total,
-                          'expiry_date': expiry, // 👈 حفظ تاريخ الصلاحية هنا
+                          'expiry_date': expiry, // ربط سطر الفاتورة بتشغيلة الصلاحية المختارة
                         });
                       });
 
@@ -579,7 +661,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         'quantity': item['quantity'],
         'price': item['unit_price'],
         'total': item['total'],
-        'expiry_date': item['expiry_date'] ?? '', // 👈 تمرير تاريخ الصلاحية لقاعدة البيانات
+        'expiry_date': item['expiry_date'] ?? '',
       }).toList();
 
       if (widget.invoiceId != null) {
@@ -729,7 +811,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                 child: ListTile(
                                   title: Text(item['product_name'] ?? 'مادة'),
                                   subtitle: Text(
-                                    'الكمية: ${item['quantity']} × السعر: ${item['unit_price']} ${item['discount'] > 0 ? '| حسم: ${item['discount']}' : ''}${expiry.isNotEmpty ? '\nانتهاء الصلاحية: $expiry' : ''}',
+                                    'الكمية: ${item['quantity']} × السعر: ${item['unit_price']} ${item['discount'] > 0 ? '\vert{} حسم: ${item['discount']}' : ''}${expiry.isNotEmpty ? '\nانتهاء الصلاحية الصادر: $expiry' : ''}',
                                   ),
                                   isThreeLine: expiry.isNotEmpty,
                                   trailing: Row(
@@ -846,7 +928,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 }
 
 class BarcodeScannerSimpleScreen extends StatefulWidget {
-  const BarcodeScannerSimpleScreen({Key? key}) : super(key: key);
+  const BarcodeScannerSimpleScreen({Key? key}) : key;
 
   @override
   State<BarcodeScannerSimpleScreen> createState() => _BarcodeScannerSimpleScreenState();
@@ -856,25 +938,10 @@ class _BarcodeScannerSimpleScreenState extends State<BarcodeScannerSimpleScreen>
   bool _hasScanned = false;
 
   @override
-  Widget build(BuildContext context) {
+  Widget andBuild(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('مسح الباركود'),
         backgroundColor: const Color(0xFF5C6BC0),
       ),
       body: MobileScanner(
-        onDetect: (capture) {
-          if (_hasScanned) return;
-          final List<Barcode> barcodes = capture.barcodes;
-          for (final barcode in barcodes) {
-            if (barcode.rawValue != null && barcode.rawValue!.isNotEmpty) {
-              setState(() => _hasScanned = true);
-              Navigator.pop(context, barcode.rawValue);
-              break;
-            }
-          }
-        },
-      ),
-    );
-  }
-}

@@ -414,14 +414,31 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                   List<Map<String, dynamic>> batches = [];
                                   if (_invoiceType == 'sale') {
                                     final db = await DatabaseHelper.instance.database;
+                                    // استعلام ديناميكي لحساب المتبقي الفعلي بالدفعة (شراء ناقص مبيعات)
                                     batches = await db.rawQuery('''
-                                      SELECT ii.expiry_date, ii.quantity, ii.price
-                                      FROM invoice_items ii
-                                      JOIN invoices i ON ii.invoice_id = i.id
-                                      WHERE ii.product_id = ? AND (i.type = 'buy' OR i.type = 'purchase') 
-                                        AND ii.expiry_date IS NOT NULL AND ii.expiry_date != ''
-                                      ORDER BY ii.expiry_date ASC
-                                    ''', [found['id']]);
+                                      SELECT 
+                                        buy_batch.expiry_date, 
+                                        (buy_batch.total_bought - COALESCE(sold_batch.total_sold, 0.0)) AS quantity,
+                                        buy_batch.price
+                                      FROM (
+                                        SELECT ii.expiry_date, SUM(ii.quantity) AS total_bought, ii.price
+                                        FROM invoice_items ii
+                                        JOIN invoices i ON ii.invoice_id = i.id
+                                        WHERE ii.product_id = ? AND (i.type = 'buy' OR i.type = 'purchase')
+                                          AND ii.expiry_date IS NOT NULL AND ii.expiry_date != ''
+                                        GROUP BY ii.expiry_date
+                                      ) buy_batch
+                                      LEFT JOIN (
+                                        SELECT ii.expiry_date, SUM(ii.quantity) AS total_sold
+                                        FROM invoice_items ii
+                                        JOIN invoices i ON ii.invoice_id = i.id
+                                        WHERE ii.product_id = ? AND i.type = 'sale'
+                                          AND ii.expiry_date IS NOT NULL AND ii.expiry_date != ''
+                                        GROUP BY ii.expiry_date
+                                      ) sold_batch ON buy_batch.expiry_date = sold_batch.expiry_date
+                                      WHERE (buy_batch.total_bought - COALESCE(sold_batch.total_sold, 0.0)) > 0
+                                      ORDER BY buy_batch.expiry_date ASC
+                                    ''', [found['id'], found['id']]);
                                   }
 
                                   setDialogState(() {
@@ -465,14 +482,31 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                 List<Map<String, dynamic>> batches = [];
                                 if (_invoiceType == 'sale') {
                                   final db = await DatabaseHelper.instance.database;
+                                  // استعلام ديناميكي لحساب المتبقي الفعلي بالدفعة (شراء ناقص مبيعات)
                                   batches = await db.rawQuery('''
-                                    SELECT ii.expiry_date, ii.quantity, ii.price
-                                    FROM invoice_items ii
-                                    JOIN invoices i ON ii.invoice_id = i.id
-                                    WHERE ii.product_id = ? AND (i.type = 'buy' OR i.type = 'purchase') 
-                                      AND ii.expiry_date IS NOT NULL AND ii.expiry_date != ''
-                                    ORDER BY ii.expiry_date ASC
-                                  ''', [prod['id']]);
+                                    SELECT 
+                                      buy_batch.expiry_date, 
+                                      (buy_batch.total_bought - COALESCE(sold_batch.total_sold, 0.0)) AS quantity,
+                                      buy_batch.price
+                                    FROM (
+                                      SELECT ii.expiry_date, SUM(ii.quantity) AS total_bought, ii.price
+                                      FROM invoice_items ii
+                                      JOIN invoices i ON ii.invoice_id = i.id
+                                      WHERE ii.product_id = ? AND (i.type = 'buy' OR i.type = 'purchase')
+                                        AND ii.expiry_date IS NOT NULL AND ii.expiry_date != ''
+                                      GROUP BY ii.expiry_date
+                                    ) buy_batch
+                                    LEFT JOIN (
+                                      SELECT ii.expiry_date, SUM(ii.quantity) AS total_sold
+                                      FROM invoice_items ii
+                                      JOIN invoices i ON ii.invoice_id = i.id
+                                      WHERE ii.product_id = ? AND i.type = 'sale'
+                                        AND ii.expiry_date IS NOT NULL AND ii.expiry_date != ''
+                                      GROUP BY ii.expiry_date
+                                    ) sold_batch ON buy_batch.expiry_date = sold_batch.expiry_date
+                                    WHERE (buy_batch.total_bought - COALESCE(sold_batch.total_sold, 0.0)) > 0
+                                    ORDER BY buy_batch.expiry_date ASC
+                                  ''', [prod['id'], prod['id']]);
                                 }
 
                                 setDialogState(() {
@@ -531,7 +565,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                           ),
                           const SizedBox(height: 12),
                         ] else ...[
-                          const Text('لا توجد تواريخ صلاحية مسجلة مسبقاً لهذه المادة', style: TextStyle(color: Colors.orange, fontSize: 13)),
+                          const Text('لا توجد تواريخ صلاحية مسجلة مسبقاً لهذه المادة أو نفدت الكميات', style: TextStyle(color: Colors.orange, fontSize: 13)),
                           const SizedBox(height: 12),
                         ],
                       ],

@@ -175,21 +175,38 @@ class DatabaseHelper {
     ''', [productId]);
   }
 
-  // ==================== تقرير مراقبة تواريخ الصلاحية ====================
+  // ==================== تقرير مراقبة تواريخ الصلاحية (الديناميكي المحدث) ====================
   
-  /// تقرير تفصيلي بالمواد وتواريخ صلاحيتها مرتبطة بفواتير المشتريات
+  /// تقرير تفصيلي بالمواد وتواريخ صلاحيتها المتبقية فعلياً في المستودع (شراء ناقص مبيعات)
   Future<List<Map<String, dynamic>>> getExpiryReport() async {
-    final db = await instance.database;
+    final db = await database;
     return await db.rawQuery('''
-      SELECT ii.expiry_date, ii.quantity, ii.price, p.name AS product_name, c.name AS supplier_name, i.date AS invoice_date
-      FROM invoice_items ii
-      JOIN invoices i ON ii.invoice_id = i.id
-      JOIN products p ON ii.product_id = p.id
-      LEFT JOIN contacts c ON i.contact_id = c.id
-      WHERE (i.type = 'buy' OR i.type = 'purchase') 
-        AND ii.expiry_date IS NOT NULL 
-        AND ii.expiry_date != ''
-      ORDER BY ii.expiry_date ASC
+      SELECT 
+        p.name AS product_name,
+        buy_batch.expiry_date,
+        (buy_batch.total_bought - COALESCE(sold_batch.total_sold, 0.0)) AS quantity,
+        buy_batch.price,
+        c.name AS supplier_name
+      FROM (
+        SELECT ii.product_id, ii.expiry_date, SUM(ii.quantity) AS total_bought, ii.price, i.contact_id
+        FROM invoice_items ii
+        JOIN invoices i ON ii.invoice_id = i.id
+        WHERE (i.type = 'buy' OR i.type = 'purchase')
+          AND ii.expiry_date IS NOT NULL AND ii.expiry_date != ''
+        GROUP BY ii.product_id, ii.expiry_date
+      ) buy_batch
+      JOIN products p ON buy_batch.product_id = p.id
+      LEFT JOIN contacts c ON buy_batch.contact_id = c.id
+      LEFT JOIN (
+        SELECT ii.product_id, ii.expiry_date, SUM(ii.quantity) AS total_sold
+        FROM invoice_items ii
+        JOIN invoices i ON ii.invoice_id = i.id
+        WHERE i.type = 'sale'
+          AND ii.expiry_date IS NOT NULL AND ii.expiry_date != ''
+        GROUP BY ii.product_id, ii.expiry_date
+      ) sold_batch ON buy_batch.product_id = sold_batch.product_id AND buy_batch.expiry_date = sold_batch.expiry_date
+      WHERE (buy_batch.total_bought - COALESCE(sold_batch.total_sold, 0.0)) > 0
+      ORDER BY buy_batch.expiry_date ASC
     ''');
   }
 

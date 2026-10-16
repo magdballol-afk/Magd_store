@@ -19,11 +19,15 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3, // رقم الإصدار الحسابي
+      version: 4, // 👈 تم رفع الإصدار إلى 4 لدعم تاريخ الصلاحية
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 3) {
           await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
+        }
+        if (oldVersion < 4) {
+          // 👈 إضافة حقل تاريخ الصلاحية عند تحديث الإصدار
+          await db.execute('ALTER TABLE invoice_items ADD COLUMN expiry_date TEXT');
         }
       },
     );
@@ -76,7 +80,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول عناصر الفاتورة
+    // جدول عناصر الفاتورة (محدث ليشمل تاريخ الصلاحية)
     await db.execute('''
       CREATE TABLE invoice_items (
         id $idType,
@@ -84,7 +88,8 @@ class DatabaseHelper {
         product_id $integerType,
         quantity $realType,
         price $realType,
-        total $realType
+        total $realType,
+        expiry_date $textNullable
       )
     ''');
 
@@ -107,7 +112,6 @@ class DatabaseHelper {
     final db = await instance.database;
     final Map<String, dynamic> data = Map.from(product);
 
-    // حماية ضد NOT NULL constraints للشاشات التي لا تحتوي حقول الجملة
     data['half_wholesale_price'] ??= 0.0;
     data['wholesale_price'] ??= 0.0;
     data['buy_price'] ??= 0.0;
@@ -141,7 +145,6 @@ class DatabaseHelper {
     final db = await instance.database;
     final Map<String, dynamic> data = Map.from(product);
 
-    // حماية ضد NOT NULL constraints أثناء التحديث
     data['half_wholesale_price'] ??= 0.0;
     data['wholesale_price'] ??= 0.0;
     data['buy_price'] ??= 0.0;
@@ -172,13 +175,29 @@ class DatabaseHelper {
     ''', [productId]);
   }
 
+  // ==================== تقرير مراقبة تواريخ الصلاحية ====================
+  
+  /// تقرير تفصيلي بالمواد وتواريخ صلاحيتها مرتبطة بفواتير المشتريات
+  Future<List<Map<String, dynamic>>> getExpiryReport() async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT ii.expiry_date, ii.quantity, ii.price, p.name AS product_name, c.name AS supplier_name, i.date AS invoice_date
+      FROM invoice_items ii
+      JOIN invoices i ON ii.invoice_id = i.id
+      JOIN products p ON ii.product_id = p.id
+      LEFT JOIN contacts c ON i.contact_id = c.id
+      WHERE (i.type = 'buy' OR i.type = 'purchase') 
+        AND ii.expiry_date IS NOT NULL 
+        AND ii.expiry_date != ''
+      ORDER BY ii.expiry_date ASC
+    ''');
+  }
+
   // ==================== أرباح المواد المباعة ====================
 
-  /// حساب صافي الربح اليومي بناءً على "آخر سعر شراء" مسجل للمادة في فواتير المشتريات
   Future<double> getDailyProfitUsingLastBuyPrice(String formattedDate) async {
     final db = await instance.database;
 
-    // 1. جلب عناصر مبيعات اليوم
     final salesItems = await db.rawQuery('''
       SELECT ii.product_id, ii.quantity, ii.price as sale_price, i.date
       FROM invoice_items ii
@@ -194,7 +213,6 @@ class DatabaseHelper {
       final double salePrice = (item['sale_price'] as num?)?.toDouble() ?? 0.0;
       final String saleDate = item['date'].toString();
 
-      // 2. البحث عن "آخر سعر شراء" لهذه المادة قبل تاريخ أو وقت عملية البيع
       final lastBuyResult = await db.rawQuery('''
         SELECT ii.price as buy_price
         FROM invoice_items ii
@@ -209,7 +227,6 @@ class DatabaseHelper {
       if (lastBuyResult.isNotEmpty) {
         effectiveBuyPrice = (lastBuyResult.first['buy_price'] as num?)?.toDouble() ?? 0.0;
       } else {
-        // حل احتياطي في حال عدم وجود فاتورة شراء سابقة
         final productRes = await db.query(
           'products',
           columns: ['buy_price'],
@@ -222,7 +239,6 @@ class DatabaseHelper {
         }
       }
 
-      // 3. حساب ربح السطر: (سعر البيع - آخر سعر شراء) × الكمية
       final double itemProfit = (salePrice - effectiveBuyPrice) * qty;
       totalProfit += itemProfit;
     }
@@ -253,11 +269,9 @@ class DatabaseHelper {
 
   // ==================== الصندوق / اليومية المربوط بالفواتير ====================
 
-  /// 1. جلب إجمالي المقبوضات الشامل لليوم (مبيعات + سندات قبض)
   Future<double> getDailyReceipts(String formattedDate) async {
     final db = await instance.database;
 
-    // أ. المبالغ المقبوضة نقداً في فواتير المبيعات والمفرق
     final salesResult = await db.rawQuery('''
       SELECT SUM(paid_amount) as total 
       FROM invoices 
@@ -266,7 +280,6 @@ class DatabaseHelper {
 
     double salesPaid = (salesResult.first['total'] as num?)?.toDouble() ?? 0.0;
 
-    // ب. المقبوضات اليدوية من حركة الصندوق (سندات القبض)
     final cashResult = await db.rawQuery('''
       SELECT SUM(amount) as total 
       FROM cash_transactions 
@@ -278,11 +291,9 @@ class DatabaseHelper {
     return salesPaid + cashIncome;
   }
 
-  /// 2. جلب إجمالي المدفوعات الشامل لليوم (مشتريات + سندات دفع/مصاريف)
   Future<double> getDailyPayments(String formattedDate) async {
     final db = await instance.database;
 
-    // أ. المبالغ المدفوعة نقداً في فواتير المشتريات
     final purchaseResult = await db.rawQuery('''
       SELECT SUM(paid_amount) as total 
       FROM invoices 
@@ -291,7 +302,6 @@ class DatabaseHelper {
 
     double purchasePaid = (purchaseResult.first['total'] as num?)?.toDouble() ?? 0.0;
 
-    // ب. المدفوعات اليدوية من حركة الصندوق (سندات الصرف/الدفع)
     final cashResult = await db.rawQuery('''
       SELECT SUM(amount) as total 
       FROM cash_transactions 
@@ -303,11 +313,9 @@ class DatabaseHelper {
     return purchasePaid + cashExpense;
   }
 
-  /// 3. جلب كافة حركات اليوم الشاملة (فواتير + سندات) للعرض في الجدول السفلي
   Future<List<Map<String, dynamic>>> getAllDailyTransactions(String formattedDate) async {
     final db = await instance.database;
 
-    // أ. حركات الصندوق اليدوية
     final cashTx = await db.rawQuery('''
       SELECT ct.id, 
              COALESCE(c.name, 'غير محدد') as contact_name, 
@@ -320,7 +328,6 @@ class DatabaseHelper {
       WHERE ct.date LIKE ?
     ''', ['$formattedDate%']);
 
-    // ب. المقبوضات النقدية من فواتير المبيعات
     final salesInvoices = await db.rawQuery('''
       SELECT i.id, 
              COALESCE(c.name, 'عميل عام') as contact_name, 
@@ -335,7 +342,6 @@ class DatabaseHelper {
         AND i.date LIKE ?
     ''', ['$formattedDate%']);
 
-    // ج. المدفوعات النقدية من فواتير المشتريات
     final purchaseInvoices = await db.rawQuery('''
       SELECT i.id, 
              COALESCE(c.name, 'مورد عام') as contact_name, 
@@ -409,7 +415,6 @@ class DatabaseHelper {
     int invoiceId = 0;
 
     await db.transaction((txn) async {
-      // 1. إدراج الفاتورة
       invoiceId = await txn.insert('invoices', {
         'contact_id': contactId,
         'type': type,
@@ -420,7 +425,6 @@ class DatabaseHelper {
         'date': date ?? DateTime.now().toIso8601String(),
       });
 
-      // 2. إدراج عناصر الفاتورة وتعديل كميات المنتجات
       for (var item in itemsList) {
         await txn.insert('invoice_items', {
           'invoice_id': invoiceId,
@@ -428,6 +432,7 @@ class DatabaseHelper {
           'quantity': item['quantity'],
           'price': item['price'],
           'total': item['total'],
+          'expiry_date': item['expiry_date'], // 👈 حفظ تاريخ الصلاحية
         });
 
         if (type == 'sale' || type == 'mefraq') {
@@ -443,15 +448,14 @@ class DatabaseHelper {
         }
       }
 
-      // 3. تحديث رصيد العميل بناءً على المتبقي (غير المسدد)
       if (contactId > 0) {
         final double remaining = netAmount - paidAmount;
         if (remaining != 0) {
           double adjustment = 0.0;
           if (type == 'sale' || type == 'mefraq') {
-            adjustment = remaining; // دين إضافي على العميل (+)
+            adjustment = remaining;
           } else if (type == 'buy' || type == 'purchase') {
-            adjustment = -remaining; // مستحق إضافي للمورد (-)
+            adjustment = -remaining;
           }
 
           await txn.rawUpdate(
@@ -479,7 +483,6 @@ class DatabaseHelper {
 
     int result = 0;
     await db.transaction((txn) async {
-      // 1. جلب الفاتورة القديمة لإلغاء تأثيرها المالي على العميل والمخزون
       final oldInvoiceResult = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
       if (oldInvoiceResult.isNotEmpty) {
         final oldInv = oldInvoiceResult.first;
@@ -489,7 +492,6 @@ class DatabaseHelper {
         final double oldPaid = (oldInv['paid_amount'] as num).toDouble();
         final double oldRemaining = oldNet - oldPaid;
 
-        // عكس تأثير الرصيد القديم
         if (oldContactId > 0 && oldRemaining != 0) {
           double reverseAdjustment = 0.0;
           if (oldType == 'sale' || oldType == 'mefraq') {
@@ -503,7 +505,6 @@ class DatabaseHelper {
           );
         }
 
-        // عكس الكميات القديمة في جدول المنتجات
         final oldItems = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
         for (var item in oldItems) {
           final double qty = (item['quantity'] as num).toDouble();
@@ -517,7 +518,6 @@ class DatabaseHelper {
         }
       }
 
-      // 2. تحديث بيانات الفاتورة
       final Map<String, dynamic> row = {};
       if (contactId != null) row['contact_id'] = contactId;
       if (type != null) row['type'] = type;
@@ -535,7 +535,6 @@ class DatabaseHelper {
         );
       }
 
-      // 3. إعادة إدراج عناصر الفاتورة الجدد وتطبيق الكميات الجديدة
       if (itemsList != null) {
         await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
 
@@ -548,6 +547,7 @@ class DatabaseHelper {
             'quantity': item['quantity'],
             'price': item['price'],
             'total': item['total'],
+            'expiry_date': item['expiry_date'], // 👈 حفظ تاريخ الصلاحية الجديد
           });
 
           if (currentType == 'sale' || currentType == 'mefraq') {
@@ -558,7 +558,6 @@ class DatabaseHelper {
         }
       }
 
-      // 4. تطبيق تأثير الرصيد الجديد على العميل
       final int newContactId = contactId ?? (oldInvoiceResult.isNotEmpty ? (oldInvoiceResult.first['contact_id'] as num).toInt() : 0);
       final String newType = type ?? (oldInvoiceResult.isNotEmpty ? oldInvoiceResult.first['type'].toString() : 'sale');
       final double newNet = netAmount ?? (oldInvoiceResult.isNotEmpty ? (oldInvoiceResult.first['net_amount'] as num).toDouble() : 0.0);
@@ -582,12 +581,10 @@ class DatabaseHelper {
     return result;
   }
 
-  /// حذف فاتورة بالكامل مع عكس تأثيرها على المخزون وأرصدة العملاء وعناصر الفاتورة
   Future<void> deleteFullInvoice(int invoiceId) async {
     final db = await instance.database;
 
     await db.transaction((txn) async {
-      // 1. جلب بيانات الفاتورة المراد حذفها
       final invoiceResult = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
       if (invoiceResult.isEmpty) return;
 
@@ -598,7 +595,6 @@ class DatabaseHelper {
       final double paidAmount = (inv['paid_amount'] as num).toDouble();
       final double remaining = netAmount - paidAmount;
 
-      // 2. عكس تأثير الرصيد على العميل أو المورد
       if (contactId > 0 && remaining != 0) {
         double reverseAdjustment = 0.0;
         if (type == 'sale' || type == 'mefraq') {
@@ -612,7 +608,6 @@ class DatabaseHelper {
         );
       }
 
-      // 3. عكس كميات المنتجات في المستودع
       final items = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
       for (var item in items) {
         final double qty = (item['quantity'] as num).toDouble();
@@ -625,10 +620,7 @@ class DatabaseHelper {
         }
       }
 
-      // 4. حذف عناصر الفاتورة
       await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
-
-      // 5. حذف الفاتورة نفسها
       await txn.delete('invoices', where: 'id = ?', whereArgs: [invoiceId]);
     });
   }

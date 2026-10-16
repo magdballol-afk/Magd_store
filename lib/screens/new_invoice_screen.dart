@@ -356,7 +356,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     final discountController = TextEditingController(text: '0');
     final expiryController = TextEditingController();
 
-    // متغيرات خاصة بدفات الشراء عند البيع
     List<Map<String, dynamic>> availableBatches = [];
     String? selectedBatchExpiry;
 
@@ -412,7 +411,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                       ? (found['buy_price'] as num?)?.toDouble() ?? 0.0
                                       : (found['retail_price'] as num?)?.toDouble() ?? 0.0;
 
-                                  // إذا كانت الفاتورة مبيعات، جلب الدفعات المتوفرة لهذه المادة مرتبة حسب الأقرب انتهاءً
                                   List<Map<String, dynamic>> batches = [];
                                   if (_invoiceType == 'sale') {
                                     final db = await DatabaseHelper.instance.database;
@@ -458,7 +456,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 
                             return ListTile(
                               title: Text(prod['name'] ?? ''),
-                              subtitle: Text('المتوفر: ${prod['quantity']} | السعر: $productRetailPrice \vert{} باركود: ${prod['barcode'] ?? 'لا يوجد'}'),
+                              subtitle: Text('المتوفر: ${prod['quantity']} | السعر: $productRetailPrice | باركود: ${prod['barcode'] ?? 'لا يوجد'}'),
                               onTap: () async {
                                 final double defaultPrice = _invoiceType == 'purchase' 
                                     ? (prod['buy_price'] as num?)?.toDouble() ?? 0.0
@@ -508,7 +506,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       ),
                       const SizedBox(height: 12),
 
-                      // عرض قائمة الدفعات وتواريخ الصلاحية عند المبيعات لتمكين الصيدلي من اختيار الدفعة الأقرب انتهاءً
                       if (_invoiceType == 'sale') ...[
                         if (availableBatches.isNotEmpty) ...[
                           DropdownButtonFormField<String>(
@@ -569,7 +566,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                         ),
                       ),
                       
-                      // حقل إدخال تاريخ الصلاحية يظهر فقط في فواتير الشراء
                       if (_invoiceType == 'purchase') ...[
                         const SizedBox(height: 12),
                         TextFormField(
@@ -612,7 +608,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       final double qty = double.tryParse(quantityController.text.trim()) ?? 0.0;
                       final double disc = double.tryParse(discountController.text.trim()) ?? 0.0;
                       
-                      // تحديد تاريخ الصلاحية بناءً على نوع الفاتورة (مشتريات أو مبيعات)
                       final String expiry = _invoiceType == 'purchase' 
                           ? expiryController.text.trim() 
                           : (selectedBatchExpiry ?? '');
@@ -629,7 +624,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                           'quantity': qty,
                           'discount': disc,
                           'total': total < 0 ? 0.0 : total,
-                          'expiry_date': expiry, // ربط سطر الفاتورة بتشغيلة الصلاحية المختارة
+                          'expiry_date': expiry,
                         });
                       });
 
@@ -811,7 +806,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                 child: ListTile(
                                   title: Text(item['product_name'] ?? 'مادة'),
                                   subtitle: Text(
-                                    'الكمية: ${item['quantity']} × السعر: ${item['unit_price']} ${item['discount'] > 0 ? '\vert{} حسم: ${item['discount']}' : ''}${expiry.isNotEmpty ? '\nانتهاء الصلاحية الصادر: $expiry' : ''}',
+                                    'الكمية: ${item['quantity']} × السعر: ${item['unit_price']} ${item['discount'] > 0 ? '| حسم: ${item['discount']}' : ''}${expiry.isNotEmpty ? '\nانتهاء الصلاحية الصادر: $expiry' : ''}',
                                   ),
                                   isThreeLine: expiry.isNotEmpty,
                                   trailing: Row(
@@ -928,7 +923,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
 }
 
 class BarcodeScannerSimpleScreen extends StatefulWidget {
-  const BarcodeScannerSimpleScreen({Key? key}) : key;
+  const BarcodeScannerSimpleScreen({Key? key}) : super(key: key);
 
   @override
   State<BarcodeScannerSimpleScreen> createState() => _BarcodeScannerSimpleScreenState();
@@ -938,10 +933,25 @@ class _BarcodeScannerSimpleScreenState extends State<BarcodeScannerSimpleScreen>
   bool _hasScanned = false;
 
   @override
-  Widget andBuild(BuildContext context) {
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('مسح الباركود'),
         backgroundColor: const Color(0xFF5C6BC0),
       ),
       body: MobileScanner(
+        onDetect: (capture) {
+          if (_hasScanned) return;
+          final List<Barcode> barcodes = capture.barcodes;
+          for (final barcode in barcodes) {
+            if (barcode.rawValue != null && barcode.rawValue!.isNotEmpty) {
+              setState(() => _hasScanned = true);
+              Navigator.pop(context, barcode.rawValue);
+              break;
+            }
+          }
+        },
+      ),
+    );
+  }
+}

@@ -108,6 +108,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         final quantity = double.tryParse((item['quantity'] ?? 0.0).toString()) ?? 0.0;
         final discount = double.tryParse((item['discount'] ?? 0.0).toString()) ?? 0.0;
         final total = double.tryParse((item['total'] ?? 0.0).toString()) ?? 0.0;
+        final expiryDate = item['expiry_date']?.toString() ?? '';
 
         _invoiceItems.add({
           'product_id': item['product_id'],
@@ -116,6 +117,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           'quantity': quantity,
           'discount': discount,
           'total': total,
+          'expiry_date': expiryDate,
         });
       }
     }
@@ -184,6 +186,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
             'quantity': 1.0,
             'discount': 0.0,
             'total': defaultPrice,
+            'expiry_date': '',
           });
         }
       });
@@ -233,8 +236,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     double currentContactBalance = 0.0;
     final int? contactId = _selectedContactId;
     if (contactId != null && contactId > 0) {
-      final contacts = await DatabaseHelper.instance.getContacts();
-      final contactMatch = contacts.firstWhere(
+      final contactMatch = _contacts.firstWhere(
         (c) => c['id'] == contactId,
         orElse: () => {},
       );
@@ -248,6 +250,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         'name': item['product_name'] ?? 'مادة',
         'quantity': item['quantity'] ?? 1,
         'price': item['unit_price'] ?? 0.0,
+        'expiry_date': item['expiry_date'] ?? '',
       };
     }).toList();
 
@@ -351,6 +354,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
     final priceController = TextEditingController();
     final quantityController = TextEditingController(text: '1');
     final discountController = TextEditingController(text: '0');
+    final expiryController = TextEditingController(); // 👈 متحكم تاريخ الصلاحية
 
     showDialog(
       context: context,
@@ -489,6 +493,30 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                           prefixIcon: Icon(Icons.local_offer),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      // 👈 حقل اختيار تاريخ الصلاحية
+                      TextFormField(
+                        controller: expiryController,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: 'تاريخ انتهاء الصلاحية (اختياري)',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.date_range),
+                        ),
+                        onTap: () async {
+                          DateTime? picked = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now().add(const Duration(days: 365)),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime(2045),
+                          );
+                          if (picked != null) {
+                            setDialogState(() {
+                              expiryController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                            });
+                          }
+                        },
+                      ),
                     ],
                   ],
                 ),
@@ -505,6 +533,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       final double price = double.tryParse(priceController.text.trim()) ?? 0.0;
                       final double qty = double.tryParse(quantityController.text.trim()) ?? 0.0;
                       final double disc = double.tryParse(discountController.text.trim()) ?? 0.0;
+                      final String expiry = expiryController.text.trim();
 
                       if (qty <= 0) return;
 
@@ -518,6 +547,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                           'quantity': qty,
                           'discount': disc,
                           'total': total < 0 ? 0.0 : total,
+                          'expiry_date': expiry, // 👈 حفظ تاريخ الصلاحية هنا
                         });
                       });
 
@@ -549,6 +579,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
         'quantity': item['quantity'],
         'price': item['unit_price'],
         'total': item['total'],
+        'expiry_date': item['expiry_date'] ?? '', // 👈 تمرير تاريخ الصلاحية لقاعدة البيانات
       }).toList();
 
       if (widget.invoiceId != null) {
@@ -692,13 +723,15 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                             itemCount: _invoiceItems.length,
                             itemBuilder: (context, index) {
                               final item = _invoiceItems[index];
+                              final expiry = item['expiry_date']?.toString() ?? '';
                               return Card(
                                 margin: const EdgeInsets.symmetric(vertical: 4),
                                 child: ListTile(
                                   title: Text(item['product_name'] ?? 'مادة'),
                                   subtitle: Text(
-                                    'الكمية: ${item['quantity']} × السعر: ${item['unit_price']} ${item['discount'] > 0 ? '| حسم: ${item['discount']}' : ''}',
+                                    'الكمية: ${item['quantity']} × السعر: ${item['unit_price']} ${item['discount'] > 0 ? '| حسم: ${item['discount']}' : ''}${expiry.isNotEmpty ? '\nانتهاء الصلاحية: $expiry' : ''}',
                                   ),
+                                  isThreeLine: expiry.isNotEmpty,
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [

@@ -11,6 +11,8 @@ import 'screens/add_product_screen.dart';
 import 'screens/cash_journal_screen.dart';
 import 'screens/contacts_screen.dart';
 import 'screens/invoices_screen.dart';
+import 'screens/products_screen.dart'; // <--- تم إضافة استيراد شاشة المنتجات
+import 'screens/new_invoice_screen.dart'; // <--- تم إضافة استيراد شاشة الفواتير
 import 'screens/smart_report_screen.dart';
 import 'services/backup_service.dart';
 import 'services/fiscal_year_service.dart';
@@ -71,14 +73,17 @@ class LicenseHelper {
     return deviceId;
   }
 
-  // عملية التفعيل (يمكنك مطابقتها مع اسم المستخدم ومعرف الجهاز المسجل لديك)
+  // عملية التفعيل والتحقق من اسم المستخدم ومعرف الجهاز للزبون
   static Future<String> activateApp(String username, String password) async {
     try {
       String currentDevice = await getDeviceId();
 
-      // [ملاحظة لك]: هنا يمكنك وضع بيانات العميل واسم المستخدم المسموح به
-      // وتستطيع لاحقاً ربطه بقاعدة بيانات سحابية أو شروط برمجية خاصة بكل زبون
+      // [ملاحظة لك يا مهندس]: ضع هنا اسم المستخدم، كلمة السر، ومعرف الجهاز الخاص بالزبون الذي أرسله لك
       if (username.trim() == "client1" && password.trim() == "123456") {
+        
+        // (اختياري لربط الجهاز): يمكنك تفعيل السطر التالي إذا أردت تقييد الحهاز تماماً
+        // if (currentDevice != "معرف_جهاز_الزبون_هنا") return "هذا الحساب مرتبط بجهاز آخر!";
+
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('is_licensed', true);
         await prefs.setString('activated_device', currentDevice);
@@ -461,7 +466,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                 title: '+ فاتورة جديدة',
                 color: const Color(0xFF00B0FF),
                 onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInvoiceScreen()));
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInvoiceScreen(type: 'sale')));
                 },
               ),
               _buildActionButton(

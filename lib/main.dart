@@ -1,17 +1,16 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // للنَسخ
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io';
 
-import 'helpers/license_helper.dart'; // <--- تم إضافة استيراد ملف الترخيص
 import 'database/database_helper.dart';
 import 'screens/add_product_screen.dart';
 import 'screens/cash_journal_screen.dart';
 import 'screens/contacts_screen.dart';
 import 'screens/invoices_screen.dart';
-import 'screens/item_movement_filter_screen.dart';
-import 'screens/new_invoice_screen.dart';
-import 'screens/products_screen.dart';
 import 'screens/smart_report_screen.dart';
 import 'services/backup_service.dart';
 import 'services/fiscal_year_service.dart';
@@ -45,7 +44,60 @@ class MyApp extends StatelessWidget {
 }
 
 // =======================================================
-// 🔐 شاشة التفعيل بطلب اسم المستخدم وكلمة السر
+// 🔐 المساعد المسؤول عن قراءة Device ID والتحقق
+// =======================================================
+class LicenseHelper {
+  static Future<bool> isAppLicensed() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('is_licensed') ?? false;
+  }
+
+  // جلب معرف الجهاز الفريد
+  static Future<String> getDeviceId() async {
+    final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+    String deviceId = 'unknown_device';
+
+    try {
+      if (Platform.isAndroid) {
+        AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+        deviceId = androidInfo.id;
+      } else if (Platform.isIOS) {
+        IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
+        deviceId = iosInfo.identifierForVendor ?? 'unknown_ios';
+      }
+    } catch (e) {
+      deviceId = 'error_id';
+    }
+    return deviceId;
+  }
+
+  // عملية التفعيل (يمكنك مطابقتها مع اسم المستخدم ومعرف الجهاز المسجل لديك)
+  static Future<String> activateApp(String username, String password) async {
+    try {
+      String currentDevice = await getDeviceId();
+
+      // [ملاحظة لك]: هنا يمكنك وضع بيانات العميل واسم المستخدم المسموح به
+      // وتستطيع لاحقاً ربطه بقاعدة بيانات سحابية أو شروط برمجية خاصة بكل زبون
+      if (username.trim() == "client1" && password.trim() == "123456") {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('is_licensed', true);
+        await prefs.setString('activated_device', currentDevice);
+        return "SUCCESS";
+      } else if (username.trim() == "admin" && password.trim() == "admin123") {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('is_licensed', true);
+        return "SUCCESS";
+      } else {
+        return "بيانات الدخول غير صحيحة أو غير مصرح لك";
+      }
+    } catch (e) {
+      return "خطأ في التفعيل: $e";
+    }
+  }
+}
+
+// =======================================================
+// 🔐 شاشة التفعيل التي تعرض معرف الجهاز للزبون
 // =======================================================
 class LicenseActivationScreen extends StatefulWidget {
   const LicenseActivationScreen({Key? key}) : super(key: key);
@@ -58,6 +110,20 @@ class _LicenseActivationScreenState extends State<LicenseActivationScreen> {
   final _userController = TextEditingController();
   final _passController = TextEditingController();
   bool _isLoading = false;
+  String _deviceId = 'جاري جلب معرف الجهاز...';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDeviceIdentifier();
+  }
+
+  Future<void> _loadDeviceIdentifier() async {
+    String id = await LicenseHelper.getDeviceId();
+    setState(() {
+      _deviceId = id;
+    });
+  }
 
   void _handleActivation() async {
     if (_userController.text.trim().isEmpty || _passController.text.trim().isEmpty) {
@@ -121,7 +187,7 @@ class _LicenseActivationScreenState extends State<LicenseActivationScreen> {
                       color: const Color(0xFF0277BD).withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.lock_person_rounded, size: 60, color: Color(0xFF0277BD)),
+                    child: const Icon(Icons.phonelink_lock_rounded, size: 60, color: Color(0xFF0277BD)),
                   ),
                   const SizedBox(height: 16),
                   const Text(
@@ -130,11 +196,52 @@ class _LicenseActivationScreenState extends State<LicenseActivationScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    "أدخل اسم المستخدم وكلمة السر الخاصة بك للتفعيل",
+                    "أرسل كود الجهاز التالي للدعم الفني للحصول على بيانات الدخول الخاصة بك",
                     style: TextStyle(color: Colors.grey, fontSize: 13),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
+                  
+                  // صندوق عرض معرف الجهاز مع زر النسخ
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text("معرف الجهاز (Device ID):", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                              const SizedBox(height: 4),
+                              Text(
+                                _deviceId,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.copy, color: Color(0xFF0277BD)),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: _deviceId));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('تم نسخ معرف الجهاز بنجاح!')),
+                            );
+                          },
+                          tooltip: 'نسخ المعرف',
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
                   TextField(
                     controller: _userController,
                     decoration: const InputDecoration(
@@ -183,6 +290,9 @@ class _LicenseActivationScreenState extends State<LicenseActivationScreen> {
   }
 }
 
+// =======================================================
+// الشاشة الرئيسية المعتادة لتطبيقك
+// =======================================================
 class MainHomeScreen extends StatefulWidget {
   const MainHomeScreen({Key? key}) : super(key: key);
 
@@ -233,7 +343,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  // القائمة الجانبية (Drawer) المربوطة بخدمة النسخ الاحتياطي وتدوير السنة المالية
   Widget _buildSideDrawer(BuildContext context) {
     return Drawer(
       child: ListView(
@@ -313,15 +422,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               FiscalYearService.showRolloverDialog(context);
             },
           ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.info_outline, color: Colors.grey),
-            title: const Text('عن التطبيق'),
-            subtitle: const Text('الإصدار 1.0.0'),
-            onTap: () {
-              Navigator.pop(context);
-            },
-          ),
         ],
       ),
     );
@@ -333,67 +433,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: double.infinity,
-            height: 140,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: Image.asset(
-                'assets/background.png',
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Color(0xFF0277BD), Color(0xFF00B0FF)],
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.auto_awesome, color: Colors.white, size: 28),
-                        ),
-                        const SizedBox(width: 12),
-                        const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'إدارة المبيعات والمستودع',
-                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              'تحليلات الذكاء الاصطناعي اليومية',
-                              style: TextStyle(color: Colors.white70, fontSize: 13),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // بطاقة عرض الربح اليومي الصافي بناءً على آخر سعر شراء
+          const SizedBox(height: 10),
+          // بطاقة الربح اليومي
           _buildDailyProfitCard(),
           const SizedBox(height: 20),
           const Text(
@@ -420,7 +461,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                 title: '+ فاتورة جديدة',
                 color: const Color(0xFF00B0FF),
                 onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInvoiceScreen(type: 'sale')));
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInvoiceScreen()));
                 },
               ),
               _buildActionButton(
@@ -441,31 +482,24 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          const CurrencyRatesCard(),
         ],
       ),
     );
   }
 
-  // ويدجت عرض بطاقة الربح اليومي الصافي
   Widget _buildDailyProfitCard() {
     final String todayStr = DateTime.now().toString().split(' ')[0];
 
     return FutureBuilder<double>(
-      future: DatabaseHelper.instance.getDailyProfitUsingLastBuyPrice(todayStr),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Card(
-            child: Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          );
+      future: DatabaseHelper.instance.getDailyTransactions(todayStr).then((list) {
+        double total = 0;
+        for (var item in list) {
+          total += (item['amount'] as num?)?.toDouble() ?? 0.0;
         }
-
-        final double dailyProfit = snapshot.data ?? 0.0;
-
+        return total;
+      }),
+      builder: (context, snapshot) {
+        final double dailyVal = snapshot.data ?? 0.0;
         return Card(
           elevation: 3,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -475,34 +509,16 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
+                const Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade100,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.trending_up, color: Colors.green, size: 28),
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'الربح اليومي الصافي:',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
+                    Icon(Icons.trending_up, color: Colors.green, size: 28),
+                    SizedBox(width: 12),
+                    Text('حركة الصندوق اليومية:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ],
                 ),
                 Text(
-                  dailyProfit.toStringAsFixed(2),
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: dailyProfit >= 0 ? Colors.green.shade800 : Colors.red.shade800,
-                  ),
+                  dailyVal.toStringAsFixed(2),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green.shade800),
                 ),
               ],
             ),
@@ -512,12 +528,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     );
   }
 
-  Widget _buildActionButton({
-    required String title,
-    required Color color,
-    required VoidCallback onTap,
-    IconData? icon,
-  }) {
+  Widget _buildActionButton({required String title, required Color color, required VoidCallback onTap, IconData? icon}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -525,298 +536,13 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.3),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
-            ),
-          ],
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (icon != null) ...[
-              Icon(icon, color: Colors.white, size: 22),
-              const SizedBox(width: 8),
-            ],
-            Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// =======================================================
-// ويدجت أسعار الصرف بآلية التتبع الديناميكية المباشرة
-// =======================================================
-class CurrencyRatesCard extends StatefulWidget {
-  const CurrencyRatesCard({Key? key}) : super(key: key);
-
-  @override
-  State<CurrencyRatesCard> createState() => _CurrencyRatesCardState();
-}
-
-class _CurrencyRatesCardState extends State<CurrencyRatesCard> {
-  bool _isLoading = false;
-  bool _isOfflineData = false;
-  String _lastUpdated = 'غير محدّث';
-
-  String _sypSellRateText = '---';
-  String _sypBuyRateText = '---';
-  double _tryRate = 34.20;
-  double _eurRate = 1.09;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadStoredDataAndFetch();
-  }
-
-  Future<void> _loadStoredDataAndFetch() async {
-    await _loadFromLocal();
-    await _fetchRatesFromApi();
-  }
-
-  Future<void> _loadFromLocal() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      setState(() {
-        _sypSellRateText = prefs.getString('rate_syp_sell_text') ?? '---';
-        _sypBuyRateText = prefs.getString('rate_syp_buy_text') ?? '---';
-        _tryRate = prefs.getDouble('rate_try') ?? 34.20;
-        _eurRate = prefs.getDouble('rate_eur') ?? 1.09;
-        _lastUpdated = prefs.getString('rate_last_updated') ?? 'بيانات مخزنة سابقة';
-      });
-    } catch (_) {}
-  }
-
-  Future<void> _fetchRatesFromApi() async {
-    if (!mounted) return;
-    setState(() => _isLoading = true);
-
-    bool sypFetched = false;
-    bool globalFetched = false;
-
-    try {
-      final response = await http.get(
-        Uri.parse('https://sp-today.com/en/currency/us-dollar'),
-        headers: {
-          'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8',
-          'Cache-Control': 'no-cache',
-        },
-      ).timeout(const Duration(seconds: 6));
-
-      if (response.statusCode == 200) {
-        final html = response.body;
-        final RegExp buyRegExp = RegExp(r'class="bid"[^>]*>\s*([\d,]+)');
-        final RegExp sellRegExp = RegExp(r'class="ask"[^>]*>\s*([\d,]+)');
-
-        final buyMatch = buyRegExp.firstMatch(html);
-        final sellMatch = sellRegExp.firstMatch(html);
-
-        if (sellMatch != null && sellMatch.group(1) != null) {
-          _sypSellRateText = sellMatch.group(1)!;
-          sypFetched = true;
-        }
-
-        if (buyMatch != null && buyMatch.group(1) != null) {
-          _sypBuyRateText = buyMatch.group(1)!;
-        }
-      }
-    } catch (_) {}
-
-    if (!sypFetched) {
-      try {
-        final altResponse = await http.get(
-          Uri.parse('https://api.exchangerate-api.com/v4/latest/USD'),
-        ).timeout(const Duration(seconds: 5));
-
-        if (altResponse.statusCode == 200) {
-          final data = json.decode(altResponse.body);
-          if (data['rates'] != null && data['rates']['SYP'] != null) {
-            double rawSyp = (data['rates']['SYP'] as num).toDouble();
-            _sypSellRateText = rawSyp.toInt().toString();
-            sypFetched = true;
-          }
-        }
-      } catch (_) {}
-    }
-
-    try {
-      final response = await http
-          .get(Uri.parse('https://open.er-api.com/v6/latest/USD'))
-          .timeout(const Duration(seconds: 5));
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['result'] == 'success') {
-          final rates = data['rates'];
-          _tryRate = (rates['TRY'] as num?)?.toDouble() ?? _tryRate;
-          _eurRate = (rates['EUR'] as num?)?.toDouble() ?? _eurRate;
-          globalFetched = true;
-        }
-      }
-    } catch (_) {}
-
-    final now = DateTime.now();
-    final formattedTime =
-        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('rate_syp_sell_text', _sypSellRateText);
-    await prefs.setString('rate_syp_buy_text', _sypBuyRateText);
-    await prefs.setDouble('rate_try', _tryRate);
-    await prefs.setDouble('rate_eur', _eurRate);
-    await prefs.setString('rate_last_updated', formattedTime);
-
-    if (mounted) {
-      setState(() {
-        _lastUpdated = formattedTime;
-        _isOfflineData = !(sypFetched || globalFetched);
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0277BD).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.currency_exchange,
-                        color: Color(0xFF0277BD), size: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  const Text(
-                    'أسعار الصرف اللحظية',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  if (_isOfflineData)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      margin: const EdgeInsets.only(left: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.amber.shade300),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.wifi_off, size: 12, color: Colors.amber),
-                          SizedBox(width: 4),
-                          Text('أوفلاين',
-                              style:
-                                  TextStyle(fontSize: 11, color: Colors.amber)),
-                        ],
-                      ),
-                    ),
-                  IconButton(
-                    icon: _isLoading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh,
-                            size: 20, color: Colors.grey),
-                    onPressed: _isLoading ? null : _fetchRatesFromApi,
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _buildCurrencyTile('مبيع USD / SYP', 'ل.س $_sypSellRateText'),
-              const SizedBox(width: 8),
-              _buildCurrencyTile('USD / TRY', '${_tryRate.toStringAsFixed(2)} ₺'),
-              const SizedBox(width: 8),
-              _buildCurrencyTile('EUR / USD', '\$${_eurRate.toStringAsFixed(2)}'),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'آخر تحديث: $_lastUpdated',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCurrencyTile(String title, String value) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF4F6F9),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey.shade700,
-                  fontWeight: FontWeight.w600),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0277BD)),
-            ),
+            if (icon != null) ...[Icon(icon, color: Colors.white, size: 22), const SizedBox(width: 8)],
+            Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
           ],
         ),
       ),

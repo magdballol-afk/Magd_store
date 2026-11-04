@@ -19,14 +19,13 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4, // 👈 تم رفع الإصدار إلى 4 لدعم تاريخ الصلاحية
+      version: 4,
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 3) {
           await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
         }
         if (oldVersion < 4) {
-          // 👈 إضافة حقل تاريخ الصلاحية عند تحديث الإصدار
           await db.execute('ALTER TABLE invoice_items ADD COLUMN expiry_date TEXT');
         }
       },
@@ -41,7 +40,6 @@ class DatabaseHelper {
     const realDefaultZero = 'REAL NOT NULL DEFAULT 0.0';
     const integerType = 'INTEGER NOT NULL';
 
-    // جدول المنتجات
     await db.execute('''
       CREATE TABLE products (
         id $idType,
@@ -55,7 +53,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول جهات الاتصال (العملاء والموردين)
     await db.execute('''
       CREATE TABLE contacts (
         id $idType,
@@ -66,7 +63,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول الفواتير
     await db.execute('''
       CREATE TABLE invoices (
         id $idType,
@@ -80,7 +76,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول عناصر الفاتورة (محدث ليشمل تاريخ الصلاحية)
     await db.execute('''
       CREATE TABLE invoice_items (
         id $idType,
@@ -93,7 +88,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول حركة الصندوق (دفتر اليومية)
     await db.execute('''
       CREATE TABLE cash_transactions (
         id $idType,
@@ -175,7 +169,7 @@ class DatabaseHelper {
     ''', [productId]);
   }
 
-  // ==================== تقرير مراقبة تواريخ الصلاحية (الديناميكي المحدث) ====================
+  // ==================== تقرير مراقبة تواريخ الصلاحية ====================
   
   Future<List>> getExpiryReport() async {
     final db = await database;
@@ -209,7 +203,7 @@ class DatabaseHelper {
     ''');
   }
 
-  // ==================== أرباح المواد المباعة (محدث ومدعوم بالمرونة) ====================
+  // ==================== أرباح المواد المباعة ====================
 
   Future<double> getDailyProfitUsingLastBuyPrice(String formattedDate) async {
     final db = await instance.database;

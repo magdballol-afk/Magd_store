@@ -309,7 +309,11 @@ class MainHomeScreen extends StatefulWidget {
 
 class _MainHomeScreenState extends State<MainHomeScreen> {
   int _selectedIndex = 0;
-  String _exchangeRateText = 'جاري جلب أسعار الصرف...';
+  double _sypRate = 0.0;
+  double _tryRate = 0.0;
+  double _eurRate = 0.0;
+  bool _isFetchingRates = false;
+  String _lastUpdateFormatted = '';
 
   @override
   void initState() {
@@ -317,27 +321,27 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     _fetchExchangeRates();
   }
 
-  // جلب نشرة أسعار الصرف (نشرة الصرف)
+  // جلب أسعار الصرف اللحظية (نشرة الصرف) من الإنترنت
   Future<void> _fetchExchangeRates() async {
+    setState(() => _isFetchingRates = true);
     try {
       final response = await http.get(Uri.parse('https://open.er-api.com/v6/latest/USD'));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final double? sypRate = data['rates']['SYP'] ?? data['rates']['SYP']?.toDouble();
-        if (sypRate != null && mounted) {
-          setState(() {
-            _exchangeRateText = '1 دولار = ${sypRate.toStringAsFixed(2)} ليرة سورية';
-          });
-        } else if (mounted) {
-          setState(() {
-            _exchangeRateText = 'نشرة الصرف: متوفرة';
-          });
-        }
+        setState(() {
+          _sypRate = (data['rates']['SYP'] as num?)?.toDouble() ?? 121.0;
+          _tryRate = (data['rates']['TRY'] as num?)?.toDouble() ?? 49.48;
+          _eurRate = (data['rates']['EUR'] as num?)?.toDouble() ?? 0.89;
+          
+          final now = DateTime.now();
+          _lastUpdateFormatted = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+          _isFetchingRates = false;
+        });
       } else {
-        if (mounted) setState(() => _exchangeRateText = 'تعذر جلب أسعار الصرف');
+        setState(() => _isFetchingRates = false);
       }
     } catch (e) {
-      if (mounted) setState(() => _exchangeRateText = 'خطأ في الاتصال بالإنترنت');
+      setState(() => _isFetchingRates = false);
     }
   }
 
@@ -471,44 +475,46 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // عرض صورة أو شعار mz المعتاد في أعلى لوحة التحكم
+          // 1. الشعار أو الصورة في الأعلى (Banner)
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: Image.asset(
-              'assets/mz.png', // مسار صورة الشعار mz
-              height: 100,
+              'assets/mz.png',
+              height: 110,
               width: double.infinity,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => Container(
-                height: 80,
+                height: 110,
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0277BD), Color(0xFF00B0FF)],
+                    begin: Alignment.topRight,
+                    end: Alignment.bottomLeft,
+                  ),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.blue.shade100),
                 ),
-                child: Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.show_chart, color: Color(0xFF0277BD)),
-                      const SizedBox(width: 8),
-                      Text(_exchangeRateText, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0277BD))),
-                    ],
+                child: const Center(
+                  child: Text(
+                    'ثقة .. أمان',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
-          // بطاقة حركة الصندوق اليومية ونشرة الصرف
+          // 2. بطاقة الربح اليومي الصافي
           _buildDailyProfitCard(),
           const SizedBox(height: 20),
+
           const Text(
             'إجراءات سريعة',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
           ),
           const SizedBox(height: 14),
+          
+          // 3. أزرار الإجراءات السريعة الأربعة
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
@@ -518,14 +524,14 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             childAspectRatio: 2.1,
             children: [
               _buildActionButton(
-                title: '+ إضافة منتج',
+                title: 'إضافة منتج +',
                 color: const Color(0xFF00ACC1),
                 onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const AddProductScreen()));
                 },
               ),
               _buildActionButton(
-                title: '+ فاتورة جديدة',
+                title: 'فاتورة جديدة +',
                 color: const Color(0xFF00B0FF),
                 onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInvoiceScreen(type: 'sale')));
@@ -549,11 +555,16 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 20),
+
+          // 4. بطاقة أسعار الصرف اللحظية (نشرة الصرف المتكاملة)
+          _buildExchangeRatesWidget(),
         ],
       ),
     );
   }
 
+  // بطاقة الربح اليومي
   Widget _buildDailyProfitCard() {
     final String todayStr = DateTime.now().toString().split(' ')[0];
 
@@ -580,7 +591,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                   children: [
                     Icon(Icons.trending_up, color: Colors.green, size: 28),
                     SizedBox(width: 12),
-                    Text('حركة الصندوق اليومية:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text('الربح اليومي الصافي:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ],
                 ),
                 Text(
@@ -592,6 +603,122 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
           ),
         );
       },
+    );
+  }
+
+  // بطاقة أسعار الصرف اللحظية
+  Widget _buildExchangeRatesWidget() {
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.currency_exchange, color: Color(0xFF0277BD)),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'أسعار الصرف اللحظية',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: _isFetchingRates
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.refresh, size: 20, color: Colors.grey),
+                  onPressed: _fetchExchangeRates,
+                  tooltip: 'تحديث الأسعار',
+                ),
+              ],
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                // مربع سعر صرف الليرة السورية
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('USD / SYP مبيع', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_sypRate.toStringAsFixed(0)} ل.س',
+                          style: const TextStyle(fontWeight: اللعب bold = FontWeight.bold, fontSize: 14, color: Colors.black87),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // مربع سعر صرف التركي
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('USD / TRY', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_tryRate.toStringAsFixed(2)} ₺',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // مربع سعر صرف اليورو
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('EUR / USD', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '\$${_eurRate.toStringAsFixed(2)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_lastUpdateFormatted.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'آخر تحديث: $_lastUpdateFormatted',
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 

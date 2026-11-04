@@ -73,21 +73,24 @@ class LicenseHelper {
     return deviceId;
   }
 
-  // عملية التفعيل والتحقق من اسم المستخدم ومعرف الجهاز للزبون
+  // عملية التفعيل والتحقق القسري من اسم المستخدم ومعرف الجهاز الخاص بك
   static Future<String> activateApp(String username, String password) async {
     try {
       String currentDevice = await getDeviceId();
 
-      // [ملاحظة لك يا مهندس]: ضع هنا اسم المستخدم، كلمة السر، ومعرف الجهاز الخاص بالزبون الذي أرسله لك
-      if (username.trim() == "client1" && password.trim() == "123456") {
+      // التحقق القسري لحسابك مع ربطه الحصري بمعرف جهازك HONORNIC-L42
+      if (username.trim() == "basel" && password.trim() == "basel123") {
         
-        // (اختياري لربط الجهاز): يمكنك تفعيل السطر التالي إذا أردت تقييد الحهاز تماماً
-        // if (currentDevice != "معرف_جهاز_الزبون_هنا") return "هذا الحساب مرتبط بجهاز آخر!";
+        // الشرط القسري الصارم لمطابقة المعرف حرفياً
+        if (currentDevice == "HONORNIC-L42") {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('is_licensed', true);
+          await prefs.setString('activated_device', currentDevice);
+          return "SUCCESS";
+        } else {
+          return "هذا الحساب مرتبط بجهاز آخر (HONORNIC-L42) ولا يمكن تشغيله على هذا الهاتف!";
+        }
 
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('is_licensed', true);
-        await prefs.setString('activated_device', currentDevice);
-        return "SUCCESS";
       } else if (username.trim() == "admin" && password.trim() == "admin123") {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('is_licensed', true);

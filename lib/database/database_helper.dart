@@ -121,13 +121,13 @@ class DatabaseHelper {
     return await db.insert('products', data);
   }
 
-  Future<List<Map<String, dynamic>>> getProducts() async {
+  Future<List>> getProducts() async {
     final db = await instance.database;
     return await db.query('products', orderBy: 'id DESC');
   }
 
   /// جلب منتج بواسطة الباركود
-  Future<Map<String, dynamic>?> getProductByBarcode(String barcode) async {
+  Future?> getProductByBarcode(String barcode) async {
     final db = await instance.database;
     final result = await db.query(
       'products',
@@ -164,7 +164,7 @@ class DatabaseHelper {
     return await db.delete('products', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<List<Map<String, dynamic>>> getProductMovements(int productId) async {
+  Future<List>> getProductMovements(int productId) async {
     final db = await instance.database;
     return await db.rawQuery('''
       SELECT ii.*, i.date, i.type as invoice_type 
@@ -177,8 +177,7 @@ class DatabaseHelper {
 
   // ==================== تقرير مراقبة تواريخ الصلاحية (الديناميكي المحدث) ====================
   
-  /// تقرير تفصيلي بالمواد وتواريخ صلاحيتها المتبقية فعلياً في المستودع (شراء ناقص مبيعات)
-  Future<List<Map<String, dynamic>>> getExpiryReport() async {
+  Future<List>> getExpiryReport() async {
     final db = await database;
     return await db.rawQuery('''
       SELECT 
@@ -210,17 +209,20 @@ class DatabaseHelper {
     ''');
   }
 
-  // ==================== أرباح المواد المباعة ====================
+  // ==================== أرباح المواد المباعة (محدث ومدعوم بالمرونة) ====================
 
   Future<double> getDailyProfitUsingLastBuyPrice(String formattedDate) async {
     final db = await instance.database;
+
+    final cleanDate = formattedDate.replaceAll('/', '-').split('T')[0];
 
     final salesItems = await db.rawQuery('''
       SELECT ii.product_id, ii.quantity, ii.price as sale_price, i.date
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
-      WHERE (i.type = 'sale' OR i.type = 'mefraq') AND i.date LIKE ?
-    ''', ['$formattedDate%']);
+      WHERE (i.type = 'sale' OR i.type = 'mefraq') 
+        AND (i.date LIKE ? OR i.date LIKE ?)
+    ''', ['$cleanDate%', '$formattedDate%']);
 
     double totalProfit = 0.0;
 
@@ -270,7 +272,7 @@ class DatabaseHelper {
     return await db.insert('contacts', contact);
   }
 
-  Future<List<Map<String, dynamic>>> getContacts() async {
+  Future<List>> getContacts() async {
     final db = await instance.database;
     return await db.query('contacts', orderBy: 'name ASC');
   }
@@ -330,7 +332,7 @@ class DatabaseHelper {
     return purchasePaid + cashExpense;
   }
 
-  Future<List<Map<String, dynamic>>> getAllDailyTransactions(String formattedDate) async {
+  Future<List>> getAllDailyTransactions(String formattedDate) async {
     final db = await instance.database;
 
     final cashTx = await db.rawQuery('''
@@ -373,7 +375,7 @@ class DatabaseHelper {
         AND i.date LIKE ?
     ''', ['$formattedDate%']);
 
-    List<Map<String, dynamic>> allList = [];
+    List> allList = [];
     allList.addAll(cashTx);
     allList.addAll(salesInvoices);
     allList.addAll(purchaseInvoices);
@@ -381,7 +383,7 @@ class DatabaseHelper {
     return allList;
   }
 
-  Future<List<Map<String, dynamic>>> getDailyTransactions(String formattedDate) async {
+  Future<List>> getDailyTransactions(String formattedDate) async {
     final db = await instance.database;
     return await db.rawQuery('''
       SELECT ct.*, c.name as contact_name 
@@ -425,7 +427,7 @@ class DatabaseHelper {
     required double discount,
     required double netAmount,
     required double paidAmount,
-    required List<Map<String, dynamic>> itemsList,
+    required List> itemsList,
     String? date,
   }) async {
     final db = await instance.database;
@@ -449,7 +451,7 @@ class DatabaseHelper {
           'quantity': item['quantity'],
           'price': item['price'],
           'total': item['total'],
-          'expiry_date': item['expiry_date'], // 👈 حفظ تاريخ الصلاحية
+          'expiry_date': item['expiry_date'],
         });
 
         if (type == 'sale' || type == 'mefraq') {
@@ -494,7 +496,7 @@ class DatabaseHelper {
     double? discount,
     double? netAmount,
     double? paidAmount,
-    List<Map<String, dynamic>>? itemsList,
+    List>? itemsList,
   }) async {
     final db = await instance.database;
 
@@ -564,7 +566,7 @@ class DatabaseHelper {
             'quantity': item['quantity'],
             'price': item['price'],
             'total': item['total'],
-            'expiry_date': item['expiry_date'], // 👈 حفظ تاريخ الصلاحية الجديد
+            'expiry_date': item['expiry_date'],
           });
 
           if (currentType == 'sale' || currentType == 'mefraq') {
@@ -642,12 +644,12 @@ class DatabaseHelper {
     });
   }
 
-  Future<List<Map<String, dynamic>>> getInvoices() async {
+  Future<List>> getInvoices() async {
     final db = await instance.database;
     return await db.query('invoices', orderBy: 'id DESC');
   }
 
-  Future<List<Map<String, dynamic>>> getInvoiceItems(int invoiceId) async {
+  Future<List>> getInvoiceItems(int invoiceId) async {
     final db = await instance.database;
     return await db.query(
       'invoice_items',

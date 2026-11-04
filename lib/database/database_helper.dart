@@ -216,7 +216,7 @@ class DatabaseHelper {
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE (i.type = 'sale' OR i.type = 'mefraq') 
         AND (i.date LIKE ? OR i.date LIKE ?)
-    ''', ['$cleanDate\%', '$formattedDate%']);
+    ''', ['$cleanDate%', '$formattedDate%']);
 
     double totalProfit = 0.0;
 
@@ -421,8 +421,8 @@ class DatabaseHelper {
     required double discount,
     required double netAmount,
     required double paidAmount,
-    required List> items,
-    String? invoiceDate,
+    required List> itemsList,
+    String? date,
   }) async {
     final db = await instance.database;
     int invoiceId = 0;
@@ -435,10 +435,10 @@ class DatabaseHelper {
         'discount': discount,
         'net_amount': netAmount,
         'paid_amount': paidAmount,
-        'date': invoiceDate ?? DateTime.now().toIso8601String(),
+        'date': date ?? DateTime.now().toIso8601String(),
       });
 
-      for (var item in items) {
+      for (var item in itemsList) {
         await txn.insert('invoice_items', {
           'invoice_id': invoiceId,
           'product_id': item['product_id'],
@@ -490,7 +490,7 @@ class DatabaseHelper {
     double? discount,
     double? netAmount,
     double? paidAmount,
-    List>? items,
+    List>? itemsList,
   }) async {
     final db = await instance.database;
 
@@ -507,4 +507,164 @@ class DatabaseHelper {
 
         if (oldContactId > 0 && oldRemaining != 0) {
           double reverseAdjustment = 0.0;
-          if (oldType ==
+          if (oldType == 'sale' || oldType == 'mefraq') {
+            reverseAdjustment = -oldRemaining;
+          } else if (oldType == 'buy' || oldType == 'purchase') {
+            reverseAdjustment = oldRemaining;
+          }
+          await txn.rawUpdate(
+            'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+            [reverseAdjustment, oldContactId],
+          );
+        }
+
+        final oldItems = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+        for (var item in oldItems) {
+          final double qty = (item['quantity'] as num).toDouble();
+          final int prodId = (item['product_id'] as num).toInt();
+
+          if (oldType == 'sale' || oldType == 'mefraq') {
+            await txn.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [qty, prodId]);
+          } else if (oldType == 'buy' || oldType == 'purchase') {
+            await txn.rawUpdate('UPDATE products SET quantity = quantity - ? WHERE id = ?', [qty, prodId]);
+          }
+        }
+      }
+
+      final Map<String, dynamic> row = {};
+      if (contactId != null) row['contact_id'] = contactId;
+      if (type != null) row['type'] = type;
+      if (totalAmount != null) row['total_amount'] = totalAmount;
+      if (discount != null) row['discount'] = discount;
+      if (netAmount != null) row['net_amount'] = netAmount;
+      if (paidAmount != null) row['paid_amount'] = paidAmount;
+
+      if (row.isNotEmpty) {
+        result = await txn.update(
+          'invoices',
+          row,
+          where: 'id = ?',
+          whereArgs: [invoiceId],
+        );
+      }
+
+      if (itemsList != null) {
+        await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+
+        final String currentType = type ?? (oldInvoiceResult.isNotEmpty ? oldInvoiceResult.first['type'].toString() : 'sale');
+
+        for (var item in itemsList) {
+          await txn.insert('invoice_items', {
+            'invoice_id': invoiceId,
+            'product_id': item['product_id'],
+            'quantity': item['quantity'],
+            'price': item['price'],
+            'total': item['total'],
+            'expiry_date': item['expiry_date'],
+          });
+
+          if (currentType == 'sale' || currentType == 'mefraq') {
+            await txn.rawUpdate('UPDATE products SET quantity = quantity - ? WHERE id = ?', [item['quantity'], item['product_id']]);
+          } else if (currentType == 'buy' || currentType == 'purchase') {
+            await txn.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [item['quantity'], item['product_id']]);
+          }
+        }
+      }
+
+      final int newContactId = contactId ?? (oldInvoiceResult.isNotEmpty ? (oldInvoiceResult.first['contact_id'] as num).toInt() : 0);
+      final String newType = type ?? (oldInvoiceResult.isNotEmpty ? oldInvoiceResult.first['type'].toString() : 'sale');
+      final double newNet = netAmount ?? (oldInvoiceResult.isNotEmpty ? (oldInvoiceResult.first['net_amount'] as num).toDouble() : 0.0);
+      final double newPaid = paidAmount ?? (oldInvoiceResult.isNotEmpty ? (oldInvoiceResult.first['paid_amount'] as num).toDouble() : 0.0);
+      final double newRemaining = newNet - newPaid;
+
+      if (newContactId > 0 && newRemaining != 0) {
+        double newAdjustment = 0.0;
+        if (newType == 'sale' || newType == 'mefraq') {
+          newAdjustment = newRemaining;
+        } else if (newType == 'buy' || newType == 'purchase') {
+          newAdjustment = -newRemaining;
+        }
+        await txn.rawUpdate(
+          'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+          [newAdjustment, newContactId],
+        );
+      }
+    });
+
+    return result;
+  }
+
+  Future<void> deleteFullInvoice(int invoiceId) async {
+    final db = await instance.database;
+
+    await db.transaction((txn) async {
+      final invoiceResult = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+      if (invoiceResult.isEmpty) return;
+
+      final inv = invoiceResult.first;
+      final int contactId = (inv['contact_id'] as num).toInt();
+      final String type = inv['type'].toString();
+      final double netAmount = (inv['net_amount'] as num).toDouble();
+      final double paidAmount = (inv['paid_amount'] as num).toDouble();
+      final double remaining = netAmount - paidAmount;
+
+      if (contactId > 0 && remaining != 0) {
+        double reverseAdjustment = 0.0;
+        if (type == 'sale' || type == 'mefraq') {
+          reverseAdjustment = -remaining;
+        } else if (type == 'buy' || type == 'purchase') {
+          reverseAdjustment = remaining;
+        }
+        await txn.rawUpdate(
+          'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+          [reverseAdjustment, contactId],
+        );
+      }
+
+      final dbItems = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+      for (var item in dbItems) {
+        final double qty = (item['quantity'] as num).toDouble();
+        final int prodId = (item['product_id'] as num).toInt();
+
+        if (type == 'sale' || type == 'mefraq') {
+          await txn.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [qty, prodId]);
+        } else if (type == 'buy' || type == 'purchase') {
+          await txn.rawUpdate('UPDATE products SET quantity = quantity - ? WHERE id = ?', [qty, prodId]);
+        }
+      }
+
+      await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+      await txn.delete('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+    });
+  }
+
+  Future<List>> getInvoices() async {
+    final db = await instance.database;
+    return await db.query('invoices', orderBy: 'id DESC');
+  }
+
+  Future<List>> getInvoiceItems(int invoiceId) async {
+    final db = await instance.database;
+    return await db.query(
+      'invoice_items',
+      where: 'invoice_id = ?',
+      whereArgs: [invoiceId],
+    );
+  }
+
+  // ==================== إغلاق السنة المالية ====================
+
+  Future<void> executeFiscalYearRollover(int newYear) async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      await txn.delete('cash_transactions');
+      await txn.delete('invoice_items');
+      await txn.delete('invoices');
+    });
+  }
+
+  Future<void> close() async {
+    final db = await instance.database;
+    db.close();
+  }
+}

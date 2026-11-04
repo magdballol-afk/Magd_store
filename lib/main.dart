@@ -11,8 +11,8 @@ import 'screens/add_product_screen.dart';
 import 'screens/cash_journal_screen.dart';
 import 'screens/contacts_screen.dart';
 import 'screens/invoices_screen.dart';
-import 'screens/products_screen.dart'; // <--- تم إضافة استيراد شاشة المنتجات
-import 'screens/new_invoice_screen.dart'; // <--- تم إضافة استيراد شاشة الفواتير
+import 'screens/products_screen.dart';
+import 'screens/new_invoice_screen.dart';
 import 'screens/smart_report_screen.dart';
 import 'services/backup_service.dart';
 import 'services/fiscal_year_service.dart';
@@ -73,7 +73,7 @@ class LicenseHelper {
     return deviceId;
   }
 
-  // عملية التفعيل والتحقق القسري من اسم المستخدم ومعرف الجهاز الخاص بك
+  // عملية التفعيل والتحقق القسري لمعرف جهازك واسم المستخدم
   static Future<String> activateApp(String username, String password) async {
     try {
       String currentDevice = await getDeviceId();
@@ -81,7 +81,6 @@ class LicenseHelper {
       // التحقق القسري لحسابك مع ربطه الحصري بمعرف جهازك HONORNIC-L42
       if (username.trim() == "basel" && password.trim() == "basel123") {
         
-        // الشرط القسري الصارم لمطابقة المعرف حرفياً
         if (currentDevice == "HONORNIC-L42") {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('is_licensed', true);
@@ -310,6 +309,37 @@ class MainHomeScreen extends StatefulWidget {
 
 class _MainHomeScreenState extends State<MainHomeScreen> {
   int _selectedIndex = 0;
+  String _exchangeRateText = 'جاري جلب أسعار الصرف...';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchExchangeRates();
+  }
+
+  // جلب نشرة أسعار الصرف (نشرة الصرف)
+  Future<void> _fetchExchangeRates() async {
+    try {
+      final response = await http.get(Uri.parse('https://open.er-api.com/v6/latest/USD'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final double? sypRate = data['rates']['SYP'] ?? data['rates']['SYP']?.toDouble();
+        if (sypRate != null && mounted) {
+          setState(() {
+            _exchangeRateText = '1 دولار = ${sypRate.toStringAsFixed(2)} ليرة سورية';
+          });
+        } else if (mounted) {
+          setState(() {
+            _exchangeRateText = 'نشرة الصرف: متوفرة';
+          });
+        }
+      } else {
+        if (mounted) setState(() => _exchangeRateText = 'تعذر جلب أسعار الصرف');
+      }
+    } catch (e) {
+      if (mounted) setState(() => _exchangeRateText = 'خطأ في الاتصال بالإنترنت');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -441,8 +471,37 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 10),
-          // بطاقة الربح اليومي
+          // عرض صورة أو شعار mz المعتاد في أعلى لوحة التحكم
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Image.asset(
+              'assets/mz.png', // مسار صورة الشعار mz
+              height: 100,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.blue.shade100),
+                ),
+                child: Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.show_chart, color: Color(0xFF0277BD)),
+                      const SizedBox(width: 8),
+                      Text(_exchangeRateText, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0277BD))),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // بطاقة حركة الصندوق اليومية ونشرة الصرف
           _buildDailyProfitCard(),
           const SizedBox(height: 20),
           const Text(

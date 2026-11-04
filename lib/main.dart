@@ -475,28 +475,34 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. الشعار أو الصورة في الأعلى (Banner)
+          // 1. الصورة أو الخلفية المعرفة في الأعلى (Banner) بنفس الأبعاد والامتداد
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: Image.asset(
-              'assets/mz.png',
-              height: 110,
+              'assets/background.png',
+              height: 130,
               width: double.infinity,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                height: 110,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0277BD), Color(0xFF00B0FF)],
-                    begin: Alignment.topRight,
-                    end: Alignment.bottomLeft,
+              errorBuilder: (context, error, stackTrace) => Image.asset(
+                'assets/mz.png',
+                height: 130,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace2) => Container(
+                  height: 130,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0277BD), Color(0xFF00B0FF)],
+                      begin: Alignment.topRight,
+                      end: Alignment.bottomLeft,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Center(
-                  child: Text(
-                    'ثقة .. أمان',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  child: const Center(
+                    child: Text(
+                      'ثقة .. أمان',
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ),

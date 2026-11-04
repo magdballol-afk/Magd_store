@@ -369,12 +369,12 @@ class DatabaseHelper {
         AND i.date LIKE ?
     ''', ['$formattedDate%']);
 
-    List> allList = [];
-    allList.addAll(cashTx);
-    allList.addAll(salesInvoices);
-    allList.addAll(purchaseInvoices);
+    List> resultsList = [];
+    resultsList.addAll(cashTx);
+    resultsList.addAll(salesInvoices);
+    resultsList.addAll(purchaseInvoices);
 
-    return allList;
+    return resultsList;
   }
 
   Future<List>> getDailyTransactions(String formattedDate) async {
@@ -421,8 +421,8 @@ class DatabaseHelper {
     required double discount,
     required double netAmount,
     required double paidAmount,
-    required List> itemsList,
-    String? date,
+    required List> items,
+    String? invoiceDate,
   }) async {
     final db = await instance.database;
     int invoiceId = 0;
@@ -435,10 +435,10 @@ class DatabaseHelper {
         'discount': discount,
         'net_amount': netAmount,
         'paid_amount': paidAmount,
-        'date': date ?? DateTime.now().toIso8601String(),
+        'date': invoiceDate ?? DateTime.now().toIso8601String(),
       });
 
-      for (var item in itemsList) {
+      for (var item in items) {
         await txn.insert('invoice_items', {
           'invoice_id': invoiceId,
           'product_id': item['product_id'],
@@ -490,7 +490,7 @@ class DatabaseHelper {
     double? discount,
     double? netAmount,
     double? paidAmount,
-    List>? itemsList,
+    List>? items,
   }) async {
     final db = await instance.database;
 
@@ -548,12 +548,12 @@ class DatabaseHelper {
         );
       }
 
-      if (itemsList != null) {
+      if (items != null) {
         await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
 
         final String currentType = type ?? (oldInvoiceResult.isNotEmpty ? oldInvoiceResult.first['type'].toString() : 'sale');
 
-        for (var item in itemsList) {
+        for (var item in items) {
           await txn.insert('invoice_items', {
             'invoice_id': invoiceId,
             'product_id': item['product_id'],
@@ -621,8 +621,8 @@ class DatabaseHelper {
         );
       }
 
-      final items = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
-      for (var item in items) {
+      final dbItems = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+      for (var item in dbItems) {
         final double qty = (item['quantity'] as num).toDouble();
         final int prodId = (item['product_id'] as num).toInt();
 

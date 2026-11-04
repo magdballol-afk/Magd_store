@@ -619,11 +619,11 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
+                const Row(
                   children: [
-                    const Icon(Icons.currency_exchange, color: Color(0xFF0277BD)),
-                    const SizedBox(width: 8),
-                    const Text(
+                    Icon(Icons.currency_exchange, color: Color(0xFF0277BD)),
+                    SizedBox(width: 8),
+                    Text(
                       'أسعار الصرف اللحظية',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
@@ -657,7 +657,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                         const SizedBox(height: 4),
                         Text(
                           '${_sypRate.toStringAsFixed(0)} ل.س',
-                          style: const TextStyle(fontWeight: اللعب bold = FontWeight.bold, fontSize: 14, color: Colors.black87),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
                         ),
                       ],
                     ),

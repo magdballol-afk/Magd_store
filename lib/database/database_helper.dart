@@ -203,7 +203,7 @@ class DatabaseHelper {
     ''');
   }
 
-  // ==================== أرباح المواد المباعة (محدثة وتعمل بكفاءة) ====================
+  // ==================== أرباح المواد المباعة ====================
 
   Future<double> getDailyProfitUsingLastBuyPrice(String formattedDate) async {
     final db = await instance.database;

@@ -10,8 +10,8 @@ class ProductsScreen extends StatefulWidget {
 }
 
 class _ProductsScreenState extends State<ProductsScreen> {
-  List<Map<String, dynamic>> _allProducts = [];
-  List<Map<String, dynamic>> _filteredProducts = [];
+  List> _allProducts = [];
+  List> _filteredProducts = [];
   
   final TextEditingController _searchController = TextEditingController();
   bool _isLoading = true;
@@ -42,6 +42,45 @@ class _ProductsScreenState extends State<ProductsScreen> {
         return name.contains(query.trim().toLowerCase());
       }).toList();
     }
+  }
+
+  // دالة تأكيد وحذف المادة
+  void _confirmDeleteProduct(Map<String, dynamic> product) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('حذف مادة', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text('هل أنت متأكد من رغبتك في حذف "${product['name']}" نهائياً من قاعدة البيانات؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () async {
+              Navigator.pop(context);
+              final int productId = (product['id'] as num).toInt();
+              await DatabaseHelper.instance.deleteProduct(productId);
+              await _refreshProducts();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('تم حذف المادة بنجاح'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+            child: const Text('حذف', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   // النافذة المنبثقة المصغرة لتعديل خصائص المادة (3 حقول فقط)
@@ -269,9 +308,22 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                 subtitle: Text(
                                   'الكمية: ${item['quantity']} | مفرق: ${item['retail_price'] ?? 0.0}',
                                 ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.edit, color: Color(0xFF0277BD)),
-                                  onPressed: () => _showEditDialog(item),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // ✏️ زر التعديل
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, color: Color(0xFF0277BD)),
+                                      onPressed: () => _showEditDialog(item),
+                                      tooltip: 'تعديل',
+                                    ),
+                                    // 🗑️ زر الحذف الجديد
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                      onPressed: () => _confirmDeleteProduct(item),
+                                      tooltip: 'حذف',
+                                    ),
+                                  ],
                                 ),
                               ),
                             );

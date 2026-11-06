@@ -10,9 +10,10 @@ class ProductsScreen extends StatefulWidget {
 }
 
 class _ProductsScreenState extends State<ProductsScreen> {
-  List> _allProducts = [];
-  List> _filteredProducts = [];
   
+  List<dynamic> _allProducts = [];
+List<dynamic> _filteredProducts = [];
+
   final TextEditingController _searchController = TextEditingController();
   bool _isLoading = true;
 

@@ -115,14 +115,14 @@ class DatabaseHelper {
     return await db.insert('products', data);
   }
 
-  Future<List<dynamic>> getProducts() async {
+  Future<List>> getProducts() async {
     final db = await instance.database;
-    return await db.query('products', orderBy: 'id DESC');
+    final result = await db.query('products', orderBy: 'id DESC');
+    return result.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   /// جلب منتج بواسطة الباركود
-  Future
-    getProductByBarcode(String barcode) async {
+  Future<int> getProductByBarcode(String barcode) async {
     final db = await instance.database;
     final result = await db.query(
       'products',
@@ -131,7 +131,7 @@ class DatabaseHelper {
       limit: 1,
     );
     if (result.isNotEmpty) {
-      return result.first;
+      return Map<String, dynamic>.from(result.first);
     }
     return null;
   }
@@ -159,22 +159,23 @@ class DatabaseHelper {
     return await db.delete('products', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<List<dynamic>> getProductMovements(int productId) async {
+  Future<List>> getProductMovements(int productId) async {
     final db = await instance.database;
-    return await db.rawQuery('''
+    final result = await db.rawQuery('''
       SELECT ii.*, i.date, i.type as invoice_type 
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE ii.product_id = ?
       ORDER BY i.date DESC
     ''', [productId]);
+    return result.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   // ==================== تقرير مراقبة تواريخ الصلاحية ====================
   
-  Future<List<dynamic>> getExpiryReport() async {
+  Future<List>> getExpiryReport() async {
     final db = await database;
-    return await db.rawQuery('''
+    final result = await db.rawQuery('''
       SELECT 
         p.name AS product_name,
         buy_batch.expiry_date,
@@ -202,6 +203,7 @@ class DatabaseHelper {
       WHERE (buy_batch.total_bought - COALESCE(sold_batch.total_sold, 0.0)) > 0
       ORDER BY buy_batch.expiry_date ASC
     ''');
+    return result.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   // ==================== أرباح المواد المباعة ====================
@@ -211,13 +213,13 @@ class DatabaseHelper {
 
     final cleanDate = formattedDate.replaceAll('/', '-').split('T')[0];
 
-    final List<dynamic> salesItems = await db.rawQuery('''
+    final List> salesItems = await db.rawQuery('''
       SELECT ii.product_id, ii.quantity, ii.price as sale_price, i.date
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE (i.type = 'sale' OR i.type = 'mefraq') 
         AND (i.date LIKE ? OR i.date LIKE ?)
-    ''', ['$cleanDate\%', '$formattedDate%']);
+    ''', ['$cleanDate%', '$formattedDate%']);
 
     double totalProfit = 0.0;
 
@@ -227,7 +229,7 @@ class DatabaseHelper {
       final double salePrice = (item['sale_price'] as num?)?.toDouble() ?? 0.0;
       final String saleDate = item['date'].toString();
 
-      final List<dynamic> lastBuyResult = await db.rawQuery('''
+      final List> lastBuyResult = await db.rawQuery('''
         SELECT ii.price as buy_price
         FROM invoice_items ii
         JOIN invoices i ON ii.invoice_id = i.id
@@ -241,7 +243,7 @@ class DatabaseHelper {
       if (lastBuyResult.isNotEmpty) {
         effectiveBuyPrice = (lastBuyResult.first['buy_price'] as num?)?.toDouble() ?? 0.0;
       } else {
-        final List<dynamic> productRes = await db.query(
+        final List> productRes = await db.query(
           'products',
           columns: ['buy_price'],
           where: 'id = ?',
@@ -267,9 +269,10 @@ class DatabaseHelper {
     return await db.insert('contacts', contact);
   }
 
-  Future<List<dynamic>> getContacts() async {
+  Future<List>> getContacts() async {
     final db = await instance.database;
-    return await db.query('contacts', orderBy: 'name ASC');
+    final result = await db.query('contacts', orderBy: 'name ASC');
+    return result.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   Future<void> updateContactBalance(int? contactId, double adjustment) async {
@@ -329,7 +332,7 @@ class DatabaseHelper {
     return purchasePaid + cashExpense;
   }
 
-  Future<List<dynamic>> getAllDailyTransactions(String formattedDate) async {
+  Future<List>> getAllDailyTransactions(String formattedDate) async {
     final db = await instance.database;
 
     final cashTx = await db.rawQuery('''
@@ -372,23 +375,24 @@ class DatabaseHelper {
         AND i.date LIKE ?
     ''', ['$formattedDate%']);
 
-    List<dynamic> resultsList = [];
-    resultsList.addAll(cashTx);
-    resultsList.addAll(salesInvoices);
-    resultsList.addAll(purchaseInvoices);
+    List> resultsList = [];
+    resultsList.addAll(cashTx.map((e) => Map<String, dynamic>.from(e)));
+    resultsList.addAll(salesInvoices.map((e) => Map<String, dynamic>.from(e)));
+    resultsList.addAll(purchaseInvoices.map((e) => Map<String, dynamic>.from(e)));
 
     return resultsList;
   }
 
-  Future<List<dynamic>> getDailyTransactions(String formattedDate) async {
+  Future<List>> getDailyTransactions(String formattedDate) async {
     final db = await instance.database;
-    return await db.rawQuery('''
+    final result = await db.rawQuery('''
       SELECT ct.*, c.name as contact_name 
       FROM cash_transactions ct
       LEFT JOIN contacts c ON ct.contact_id = c.id
       WHERE ct.date LIKE ?
       ORDER BY ct.id DESC
     ''', ['$formattedDate%']);
+    return result.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   Future<int> addCashTransaction(Map<String, dynamic> row) async {
@@ -424,7 +428,7 @@ class DatabaseHelper {
     required double discount,
     required double netAmount,
     required double paidAmount,
-    required List<dynamic> itemsList,
+    required List> itemsList,
     String? date,
   }) async {
     final db = await instance.database;
@@ -493,7 +497,7 @@ class DatabaseHelper {
     double? discount,
     double? netAmount,
     double? paidAmount,
-    List<dynamic>? itemsList,
+    List>? itemsList,
   }) async {
     final db = await instance.database;
 
@@ -589,4 +593,87 @@ class DatabaseHelper {
         }
         await txn.rawUpdate(
           'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
-          [newAdjustment, newContactId
+          [newAdjustment, newContactId],
+        );
+      }
+    });
+
+    return result;
+  }
+
+  Future<void> deleteFullInvoice(int invoiceId) async {
+    final db = await instance.database;
+
+    await db.transaction((txn) async {
+      final invoiceResult = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+      if (invoiceResult.isEmpty) return;
+
+      final inv = invoiceResult.first;
+      final int contactId = (inv['contact_id'] as num).toInt();
+      final String type = inv['type'].toString();
+      final double netAmount = (inv['net_amount'] as num).toDouble();
+      final double paidAmount = (inv['paid_amount'] as num).toDouble();
+      final double remaining = netAmount - paidAmount;
+
+      if (contactId > 0 && remaining != 0) {
+        double reverseAdjustment = 0.0;
+        if (type == 'sale' || type == 'mefraq') {
+          reverseAdjustment = -remaining;
+        } else if (type == 'buy' || type == 'purchase') {
+          reverseAdjustment = remaining;
+        }
+        await txn.rawUpdate(
+          'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+          [reverseAdjustment, contactId],
+        );
+      }
+
+      final dbItems = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+      for (var item in dbItems) {
+        final double qty = (item['quantity'] as num).toDouble();
+        final int prodId = (item['product_id'] as num).toInt();
+
+        if (type == 'sale' || type == 'mefraq') {
+          await txn.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [qty, prodId]);
+        } else if (type == 'buy' || type == 'purchase') {
+          await txn.rawUpdate('UPDATE products SET quantity = quantity - ? WHERE id = ?', [qty, prodId]);
+        }
+      }
+
+      await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+      await txn.delete('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+    });
+  }
+
+  Future<List>> getInvoices() async {
+    final db = await instance.database;
+    final result = await db.query('invoices', orderBy: 'id DESC');
+    return result.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<List>> getInvoiceItems(int invoiceId) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'invoice_items',
+      where: 'invoice_id = ?',
+      whereArgs: [invoiceId],
+    );
+    return result.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  // ==================== إغلاق السنة المالية ====================
+
+  Future<void> executeFiscalYearRollover(int newYear) async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      await txn.delete('cash_transactions');
+      await txn.delete('invoice_items');
+      await txn.delete('invoices');
+    });
+  }
+
+  Future<void> close() async {
+    final db = await instance.database;
+    db.close();
+  }
+}

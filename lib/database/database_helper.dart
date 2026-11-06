@@ -1,341 +1,670 @@
-import 'package:flutter/material.dart';
-import '../database/database_helper.dart';
-import 'add_product_screen.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
 
-class ProductsScreen extends StatefulWidget {
-  const ProductsScreen({Key? key}) : super(key: key);
+class DatabaseHelper {
+  static final DatabaseHelper instance = DatabaseHelper._init();
+  static Database? _database;
 
-  @override
-  State<ProductsScreen> createState() => _ProductsScreenState();
-}
+  DatabaseHelper._init();
 
-class _ProductsScreenState extends State<ProductsScreen> {
-  List> _allProducts = [];
-  List> _filteredProducts = [];
-  
-  final TextEditingController _searchController = TextEditingController();
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _refreshProducts();
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDB('app_database.db');
+    return _database!;
   }
 
-  Future<void> _refreshProducts() async {
-    setState(() => _isLoading = true);
-    final data = await DatabaseHelper.instance.getProducts();
-    setState(() {
-      _allProducts = data;
-      _filterProducts(_searchController.text);
-      _isLoading = false;
-    });
-  }
+  Future<Database> _initDB(String filePath) async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, filePath);
 
-  // دالة تصفية المنتجات بناءً على نص البحث
-  void _filterProducts(String query) {
-    if (query.trim().isEmpty) {
-      _filteredProducts = List.from(_allProducts);
-    } else {
-      _filteredProducts = _allProducts.where((product) {
-        final name = (product['name'] ?? '').toString().toLowerCase();
-        return name.contains(query.trim().toLowerCase());
-      }).toList();
-    }
-  }
-
-  // دالة تأكيد وحذف المادة من قاعدة البيانات
-  void _confirmDeleteProduct(Map<String, dynamic> product) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('حذف مادة', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Text('هل أنت متأكد من رغبتك في حذف "${product['name']}" نهائياً؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () async {
-              Navigator.pop(context);
-              final int productId = (product['id'] as num).toInt();
-              await DatabaseHelper.instance.deleteProduct(productId);
-              await _refreshProducts();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('تم حذف المادة بنجاح'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
-            },
-            child: const Text('حذف', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // النافذة المنبثقة المصغرة لتعديل خصائص المادة (3 حقول فقط)
-  void _showEditDialog(Map<String, dynamic> product) {
-    final currentRetailPrice = product['retail_price'] ?? product['price'] ?? 0.0;
-
-    final nameController = TextEditingController(
-      text: product['name']?.toString() ?? '',
-    );
-    final quantityController = TextEditingController(
-      text: (product['quantity'] ?? 0.0).toString(),
-    );
-    final retailPriceController = TextEditingController(
-      text: currentRetailPrice.toString(),
-    );
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Center(
-            child: Text(
-              'تعديل خصائص المادة',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 1. حقل اسم المادة
-                TextField(
-                  controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: 'اسم المادة',
-                    prefixIcon: const Icon(Icons.inventory_2_outlined, color: Color(0xFF0277BD)),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // 2. حقل الكمية الحالية
-                TextField(
-                  controller: quantityController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                    labelText: 'الكمية الحالية',
-                    prefixIcon: const Icon(Icons.dns_outlined, color: Color(0xFF0277BD)),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // 3. حقل سعر البيع (مفرق) - retail_price
-                TextField(
-                  controller: retailPriceController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                    labelText: 'سعر البيع (مفرق)',
-                    prefixIcon: const Icon(Icons.local_offer_outlined, color: Color(0xFF0277BD)),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('إلغاء', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0277BD),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () async {
-                final newName = nameController.text.trim().isEmpty ? product['name'] : nameController.text.trim();
-                final newQuantity = double.tryParse(quantityController.text.trim()) ?? (product['quantity'] ?? 0.0);
-                final newRetailPrice = double.tryParse(retailPriceController.text.trim()) ?? currentRetailPrice;
-
-                final Map<String, dynamic> updatedProduct = {
-                  'id': product['id'],
-                  'name': newName,
-                  'quantity': newQuantity,
-                  'retail_price': newRetailPrice,
-                  'buy_price': product['buy_price'] ?? 0.0,
-                  'half_wholesale_price': product['half_wholesale_price'] ?? 0.0,
-                  'wholesale_price': product['wholesale_price'] ?? 0.0,
-                };
-
-                final rowsAffected = await DatabaseHelper.instance.updateProduct(updatedProduct);
-
-                if (mounted) {
-                  Navigator.pop(context);
-
-                  if (rowsAffected > 0) {
-                    await _refreshProducts();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('تم حفظ التعديلات بنجاح'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('خطأ: لم يتم العثور على المادة لتحديثها'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const Text('حفظ', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
+    return await openDatabase(
+      path,
+      version: 4,
+      onCreate: _createDB,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 3) {
+          await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
+        }
+        if (oldVersion < 4) {
+          await db.execute('ALTER TABLE invoice_items ADD COLUMN expiry_date TEXT');
+        }
       },
     );
   }
 
-  // الانتقال لشاشة إدراج مادة جديدة كاملة
-  void _navigateToAddProductScreen() async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AddProductScreen(),
-      ),
-    );
+  Future<void> _createDB(Database db, int version) async {
+    const idType = 'INTEGER PRIMARY KEY AUTOINCREMENT';
+    const textType = 'TEXT NOT NULL';
+    const textNullable = 'TEXT';
+    const realType = 'REAL NOT NULL';
+    const realDefaultZero = 'REAL NOT NULL DEFAULT 0.0';
+    const integerType = 'INTEGER NOT NULL';
 
-    if (result == true) {
-      _refreshProducts();
+    await db.execute('''
+      CREATE TABLE products (
+        id $idType,
+        name $textType,
+        barcode $textNullable,
+        buy_price $realDefaultZero,
+        retail_price $realDefaultZero,
+        half_wholesale_price $realDefaultZero,
+        wholesale_price $realDefaultZero,
+        quantity $realDefaultZero
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE contacts (
+        id $idType,
+        name $textType,
+        phone $textNullable,
+        type $textType,
+        balance $realType DEFAULT 0.0
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE invoices (
+        id $idType,
+        contact_id $integerType,
+        type $textType,
+        total_amount $realType,
+        discount $realType,
+        net_amount $realType,
+        paid_amount $realType,
+        date $textType
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE invoice_items (
+        id $idType,
+        invoice_id $integerType,
+        product_id $integerType,
+        quantity $realType,
+        price $realType,
+        total $realType,
+        expiry_date $textNullable
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE cash_transactions (
+        id $idType,
+        contact_id $integerType,
+        amount $realType,
+        type $textType,
+        note $textNullable,
+        date $textType
+      )
+    ''');
+  }
+
+  // ==================== المنتجات والتحركات والباركود ====================
+
+  Future<int> insertProduct(Map<String, dynamic> product) async {
+    final db = await instance.database;
+    final Map<String, dynamic> data = Map.from(product);
+
+    data['half_wholesale_price'] ??= 0.0;
+    data['wholesale_price'] ??= 0.0;
+    data['buy_price'] ??= 0.0;
+    data['retail_price'] ??= 0.0;
+    data['quantity'] ??= 0.0;
+
+    return await db.insert('products', data);
+  }
+
+  Future<List>> getProducts() async {
+    final db = await instance.database;
+    return await db.query('products', orderBy: 'id DESC');
+  }
+
+  /// جلب منتج بواسطة الباركود
+  Future?> getProductByBarcode(String barcode) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'products',
+      where: 'barcode = ?',
+      whereArgs: [barcode],
+      limit: 1,
+    );
+    if (result.isNotEmpty) {
+      return result.first;
     }
+    return null;
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
+  Future<int> updateProduct(Map<String, dynamic> product) async {
+    final db = await instance.database;
+    final Map<String, dynamic> data = Map.from(product);
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
-      appBar: AppBar(
-        title: const Text('إدارة المنتجات والمواد'),
-        backgroundColor: const Color(0xFF0277BD),
-        centerTitle: true,
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // 🔑 حقل البحث السريع عن مادة
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: (val) {
-                      setState(() {
-                        _filterProducts(val);
-                      });
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'ابحث عن مادة بالاسم...',
-                      prefixIcon: const Icon(Icons.search, color: Color(0xFF0277BD)),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, color: Colors.grey),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() {
-                                  _filterProducts('');
-                                });
-                              },
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF0277BD), width: 1.5),
-                      ),
-                    ),
-                  ),
-                ),
+    data['half_wholesale_price'] ??= 0.0;
+    data['wholesale_price'] ??= 0.0;
+    data['buy_price'] ??= 0.0;
+    data['retail_price'] ??= 0.0;
+    data['quantity'] ??= 0.0;
 
-                // عرض القائمة المفلترة
-                Expanded(
-                  child: _filteredProducts.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'لا توجد مواد مطابقة للبحث',
-                            style: TextStyle(color: Colors.grey, fontSize: 16),
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(12),
-                          itemCount: _filteredProducts.length,
-                          itemBuilder: (context, index) {
-                            final item = _filteredProducts[index];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              child: ListTile(
-                                title: Text(
-                                  item['name'] ?? '',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Text(
-                                  'الكمية: ${item['quantity']} | مفرق: ${item['retail_price'] ?? 0.0}',
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // ✏️ زر التعديل
-                                    IconButton(
-                                      icon: const Icon(Icons.edit, color: Color(0xFF0277BD)),
-                                      onPressed: () => _showEditDialog(item),
-                                    ),
-                                    // 🗑️ زر الحذف الجديد
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                      onPressed: () => _confirmDeleteProduct(item),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0277BD),
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('إضافة مادة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        onPressed: _navigateToAddProductScreen,
-      ),
+    return await db.update(
+      'products',
+      data,
+      where: 'id = ?',
+      whereArgs: [data['id']],
     );
+  }
+
+  Future<int> deleteProduct(int id) async {
+    final db = await instance.database;
+    return await db.delete('products', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List>> getProductMovements(int productId) async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT ii.*, i.date, i.type as invoice_type 
+      FROM invoice_items ii
+      JOIN invoices i ON ii.invoice_id = i.id
+      WHERE ii.product_id = ?
+      ORDER BY i.date DESC
+    ''', [productId]);
+  }
+
+  // ==================== تقرير مراقبة تواريخ الصلاحية ====================
+  
+  Future<List>> getExpiryReport() async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT 
+        p.name AS product_name,
+        buy_batch.expiry_date,
+        (buy_batch.total_bought - COALESCE(sold_batch.total_sold, 0.0)) AS quantity,
+        buy_batch.price,
+        c.name AS supplier_name
+      FROM (
+        SELECT ii.product_id, ii.expiry_date, SUM(ii.quantity) AS total_bought, ii.price, i.contact_id
+        FROM invoice_items ii
+        JOIN invoices i ON ii.invoice_id = i.id
+        WHERE (i.type = 'buy' OR i.type = 'purchase')
+          AND ii.expiry_date IS NOT NULL AND ii.expiry_date != ''
+        GROUP BY ii.product_id, ii.expiry_date
+      ) buy_batch
+      JOIN products p ON buy_batch.product_id = p.id
+      LEFT JOIN contacts c ON buy_batch.contact_id = c.id
+      LEFT JOIN (
+        SELECT ii.product_id, ii.expiry_date, SUM(ii.quantity) AS total_sold
+        FROM invoice_items ii
+        JOIN invoices i ON ii.invoice_id = i.id
+        WHERE i.type = 'sale'
+          AND ii.expiry_date IS NOT NULL AND ii.expiry_date != ''
+        GROUP BY ii.product_id, ii.expiry_date
+      ) sold_batch ON buy_batch.product_id = sold_batch.product_id AND buy_batch.expiry_date = sold_batch.expiry_date
+      WHERE (buy_batch.total_bought - COALESCE(sold_batch.total_sold, 0.0)) > 0
+      ORDER BY buy_batch.expiry_date ASC
+    ''');
+  }
+
+  // ==================== أرباح المواد المباعة ====================
+
+  Future<double> getDailyProfitUsingLastBuyPrice(String formattedDate) async {
+    final db = await instance.database;
+
+    final cleanDate = formattedDate.replaceAll('/', '-').split('T')[0];
+
+    final List> salesItems = await db.rawQuery('''
+      SELECT ii.product_id, ii.quantity, ii.price as sale_price, i.date
+      FROM invoice_items ii
+      JOIN invoices i ON ii.invoice_id = i.id
+      WHERE (i.type = 'sale' OR i.type = 'mefraq') 
+        AND (i.date LIKE ? OR i.date LIKE ?)
+    ''', ['$cleanDate%', '$formattedDate%']);
+
+    double totalProfit = 0.0;
+
+    for (var item in salesItems) {
+      final int productId = (item['product_id'] as num).toInt();
+      final double qty = (item['quantity'] as num?)?.toDouble() ?? 0.0;
+      final double salePrice = (item['sale_price'] as num?)?.toDouble() ?? 0.0;
+      final String saleDate = item['date'].toString();
+
+      final List> lastBuyResult = await db.rawQuery('''
+        SELECT ii.price as buy_price
+        FROM invoice_items ii
+        JOIN invoices i ON ii.invoice_id = i.id
+        WHERE ii.product_id = ? AND (i.type = 'buy' OR i.type = 'purchase') AND i.date <= ?
+        ORDER BY i.date DESC, i.id DESC
+        LIMIT 1
+      ''', [productId, saleDate]);
+
+      double effectiveBuyPrice = 0.0;
+
+      if (lastBuyResult.isNotEmpty) {
+        effectiveBuyPrice = (lastBuyResult.first['buy_price'] as num?)?.toDouble() ?? 0.0;
+      } else {
+        final List> productRes = await db.query(
+          'products',
+          columns: ['buy_price'],
+          where: 'id = ?',
+          whereArgs: [productId],
+          limit: 1,
+        );
+        if (productRes.isNotEmpty) {
+          effectiveBuyPrice = (productRes.first['buy_price'] as num?)?.toDouble() ?? 0.0;
+        }
+      }
+
+      final double itemProfit = (salePrice - effectiveBuyPrice) * qty;
+      totalProfit += itemProfit;
+    }
+
+    return totalProfit;
+  }
+
+  // ==================== جهات الاتصال والرصيد ====================
+
+  Future<int> insertContact(Map<String, dynamic> contact) async {
+    final db = await instance.database;
+    return await db.insert('contacts', contact);
+  }
+
+  Future<List>> getContacts() async {
+    final db = await instance.database;
+    return await db.query('contacts', orderBy: 'name ASC');
+  }
+
+  Future<void> updateContactBalance(int? contactId, double adjustment) async {
+    if (contactId == null || contactId <= 0) return;
+    final db = await instance.database;
+    await db.rawUpdate(
+      'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+      [adjustment, contactId],
+    );
+  }
+
+  // ==================== الصندوق / اليومية المربوط بالفواتير ====================
+
+  Future<double> getDailyReceipts(String formattedDate) async {
+    final db = await instance.database;
+
+    final salesResult = await db.rawQuery('''
+      SELECT SUM(paid_amount) as total 
+      FROM invoices 
+      WHERE (type = 'sale' OR type = 'mefraq') AND date LIKE ?
+    ''', ['$formattedDate%']);
+
+    double salesPaid = (salesResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    final cashResult = await db.rawQuery('''
+      SELECT SUM(amount) as total 
+      FROM cash_transactions 
+      WHERE (type = 'income' OR type = 'قبض') AND date LIKE ?
+    ''', ['$formattedDate%']);
+
+    double cashIncome = (cashResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    return salesPaid + cashIncome;
+  }
+
+  Future<double> getDailyPayments(String formattedDate) async {
+    final db = await instance.database;
+
+    final purchaseResult = await db.rawQuery('''
+      SELECT SUM(paid_amount) as total 
+      FROM invoices 
+      WHERE (type = 'buy' OR type = 'purchase') AND date LIKE ?
+    ''', ['$formattedDate%']);
+
+    double purchasePaid = (purchaseResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    final cashResult = await db.rawQuery('''
+      SELECT SUM(amount) as total 
+      FROM cash_transactions 
+      WHERE (type = 'expense' OR type = 'دفع') AND date LIKE ?
+    ''', ['$formattedDate%']);
+
+    double cashExpense = (cashResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    return purchasePaid + cashExpense;
+  }
+
+  Future<List>> getAllDailyTransactions(String formattedDate) async {
+    final db = await instance.database;
+
+    final cashTx = await db.rawQuery('''
+      SELECT ct.id, 
+             COALESCE(c.name, 'غير محدد') as contact_name, 
+             ct.amount, 
+             ct.type, 
+             COALESCE(ct.note, 'سند صندوق') as note, 
+             ct.date
+      FROM cash_transactions ct
+      LEFT JOIN contacts c ON ct.contact_id = c.id
+      WHERE ct.date LIKE ?
+    ''', ['$formattedDate%']);
+
+    final salesInvoices = await db.rawQuery('''
+      SELECT i.id, 
+             COALESCE(c.name, 'عميل عام') as contact_name, 
+             i.paid_amount as amount, 
+             'قبض' as type, 
+             ('دفعة فاتورة مبيعات #' || i.id) as note, 
+             i.date
+      FROM invoices i
+      LEFT JOIN contacts c ON i.contact_id = c.id
+      WHERE (i.type = 'sale' OR i.type = 'mefraq') 
+        AND i.paid_amount > 0 
+        AND i.date LIKE ?
+    ''', ['$formattedDate%']);
+
+    final purchaseInvoices = await db.rawQuery('''
+      SELECT i.id, 
+             COALESCE(c.name, 'مورد عام') as contact_name, 
+             i.paid_amount as amount, 
+             'دفع' as type, 
+             ('دفعة فاتورة مشتريات #' || i.id) as note, 
+             i.date
+      FROM invoices i
+      LEFT JOIN contacts c ON i.contact_id = c.id
+      WHERE (i.type = 'buy' OR i.type = 'purchase') 
+        AND i.paid_amount > 0 
+        AND i.date LIKE ?
+    ''', ['$formattedDate%']);
+
+    List> resultsList = [];
+    resultsList.addAll(cashTx);
+    resultsList.addAll(salesInvoices);
+    resultsList.addAll(purchaseInvoices);
+
+    return resultsList;
+  }
+
+  Future<List>> getDailyTransactions(String formattedDate) async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT ct.*, c.name as contact_name 
+      FROM cash_transactions ct
+      LEFT JOIN contacts c ON ct.contact_id = c.id
+      WHERE ct.date LIKE ?
+      ORDER BY ct.id DESC
+    ''', ['$formattedDate%']);
+  }
+
+  Future<int> addCashTransaction(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    return await db.insert('cash_transactions', row);
+  }
+
+  Future<int> updateCashTransaction(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    return await db.update(
+      'cash_transactions',
+      row,
+      where: 'id = ?',
+      whereArgs: [row['id']],
+    );
+  }
+
+  Future<int> deleteCashTransaction(int transactionId) async {
+    final db = await instance.database;
+    return await db.delete(
+      'cash_transactions',
+      where: 'id = ?',
+      whereArgs: [transactionId],
+    );
+  }
+
+  // ==================== الفواتير ====================
+
+  Future<int> addFullInvoice({
+    required int contactId,
+    required String type,
+    required double totalAmount,
+    required double discount,
+    required double netAmount,
+    required double paidAmount,
+    required List> itemsList,
+    String? date,
+  }) async {
+    final db = await instance.database;
+    int invoiceId = 0;
+
+    await db.transaction((txn) async {
+      invoiceId = await txn.insert('invoices', {
+        'contact_id': contactId,
+        'type': type,
+        'total_amount': totalAmount,
+        'discount': discount,
+        'net_amount': netAmount,
+        'paid_amount': paidAmount,
+        'date': date ?? DateTime.now().toIso8601String(),
+      });
+
+      for (var item in itemsList) {
+        await txn.insert('invoice_items', {
+          'invoice_id': invoiceId,
+          'product_id': item['product_id'],
+          'quantity': item['quantity'],
+          'price': item['price'],
+          'total': item['total'],
+          'expiry_date': item['expiry_date'],
+        });
+
+        if (type == 'sale' || type == 'mefraq') {
+          await txn.rawUpdate(
+            'UPDATE products SET quantity = quantity - ? WHERE id = ?',
+            [item['quantity'], item['product_id']],
+          );
+        } else if (type == 'buy' || type == 'purchase') {
+          await txn.rawUpdate(
+            'UPDATE products SET quantity = quantity + ? WHERE id = ?',
+            [item['quantity'], item['product_id']],
+          );
+        }
+      }
+
+      if (contactId > 0) {
+        final double remaining = netAmount - paidAmount;
+        if (remaining != 0) {
+          double adjustment = 0.0;
+          if (type == 'sale' || type == 'mefraq') {
+            adjustment = remaining;
+          } else if (type == 'buy' || type == 'purchase') {
+            adjustment = -remaining;
+          }
+
+          await txn.rawUpdate(
+            'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+            [adjustment, contactId],
+          );
+        }
+      }
+    });
+
+    return invoiceId;
+  }
+
+  Future<int> updateFullInvoice({
+    required int invoiceId,
+    int? contactId,
+    String? type,
+    double? totalAmount,
+    double? discount,
+    double? netAmount,
+    double? paidAmount,
+    List>? itemsList,
+  }) async {
+    final db = await instance.database;
+
+    int result = 0;
+    await db.transaction((txn) async {
+      final oldInvoiceResult = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+      if (oldInvoiceResult.isNotEmpty) {
+        final oldInv = oldInvoiceResult.first;
+        final int oldContactId = (oldInv['contact_id'] as num).toInt();
+        final String oldType = oldInv['type'].toString();
+        final double oldNet = (oldInv['net_amount'] as num).toDouble();
+        final double oldPaid = (oldInv['paid_amount'] as num).toDouble();
+        final double oldRemaining = oldNet - oldPaid;
+
+        if (oldContactId > 0 && oldRemaining != 0) {
+          double reverseAdjustment = 0.0;
+          if (oldType == 'sale' || oldType == 'mefraq') {
+            reverseAdjustment = -oldRemaining;
+          } else if (oldType == 'buy' || oldType == 'purchase') {
+            reverseAdjustment = oldRemaining;
+          }
+          await txn.rawUpdate(
+            'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+            [reverseAdjustment, oldContactId],
+          );
+        }
+
+        final oldItems = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+        for (var item in oldItems) {
+          final double qty = (item['quantity'] as num).toDouble();
+          final int prodId = (item['product_id'] as num).toInt();
+
+          if (oldType == 'sale' || oldType == 'mefraq') {
+            await txn.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [qty, prodId]);
+          } else if (oldType == 'buy' || oldType == 'purchase') {
+            await txn.rawUpdate('UPDATE products SET quantity = quantity - ? WHERE id = ?', [qty, prodId]);
+          }
+        }
+      }
+
+      final Map<String, dynamic> row = {};
+      if (contactId != null) row['contact_id'] = contactId;
+      if (type != null) row['type'] = type;
+      if (totalAmount != null) row['total_amount'] = totalAmount;
+      if (discount != null) row['discount'] = discount;
+      if (netAmount != null) row['net_amount'] = netAmount;
+      if (paidAmount != null) row['paid_amount'] = paidAmount;
+
+      if (row.isNotEmpty) {
+        result = await txn.update(
+          'invoices',
+          row,
+          where: 'id = ?',
+          whereArgs: [invoiceId],
+        );
+      }
+
+      if (itemsList != null) {
+        await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+
+        final String currentType = type ?? (oldInvoiceResult.isNotEmpty ? oldInvoiceResult.first['type'].toString() : 'sale');
+
+        for (var item in itemsList) {
+          await txn.insert('invoice_items', {
+            'invoice_id': invoiceId,
+            'product_id': item['product_id'],
+            'quantity': item['quantity'],
+            'price': item['price'],
+            'total': item['total'],
+            'expiry_date': item['expiry_date'],
+          });
+
+          if (currentType == 'sale' || currentType == 'mefraq') {
+            await txn.rawUpdate('UPDATE products SET quantity = quantity - ? WHERE id = ?', [item['quantity'], item['product_id']]);
+          } else if (currentType == 'buy' || currentType == 'purchase') {
+            await txn.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [item['quantity'], item['product_id']]);
+          }
+        }
+      }
+
+      final int newContactId = contactId ?? (oldInvoiceResult.isNotEmpty ? (oldInvoiceResult.first['contact_id'] as num).toInt() : 0);
+      final String newType = type ?? (oldInvoiceResult.isNotEmpty ? oldInvoiceResult.first['type'].toString() : 'sale');
+      final double newNet = netAmount ?? (oldInvoiceResult.isNotEmpty ? (oldInvoiceResult.first['net_amount'] as num).toDouble() : 0.0);
+      final double newPaid = paidAmount ?? (oldInvoiceResult.isNotEmpty ? (oldInvoiceResult.first['paid_amount'] as num).toDouble() : 0.0);
+      final double newRemaining = newNet - newPaid;
+
+      if (newContactId > 0 && newRemaining != 0) {
+        double newAdjustment = 0.0;
+        if (newType == 'sale' || newType == 'mefraq') {
+          newAdjustment = newRemaining;
+        } else if (newType == 'buy' || newType == 'purchase') {
+          newAdjustment = -newRemaining;
+        }
+        await txn.rawUpdate(
+          'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+          [newAdjustment, newContactId],
+        );
+      }
+    });
+
+    return result;
+  }
+
+  Future<void> deleteFullInvoice(int invoiceId) async {
+    final db = await instance.database;
+
+    await db.transaction((txn) async {
+      final invoiceResult = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+      if (invoiceResult.isEmpty) return;
+
+      final inv = invoiceResult.first;
+      final int contactId = (inv['contact_id'] as num).toInt();
+      final String type = inv['type'].toString();
+      final double netAmount = (inv['net_amount'] as num).toDouble();
+      final double paidAmount = (inv['paid_amount'] as num).toDouble();
+      final double remaining = netAmount - paidAmount;
+
+      if (contactId > 0 && remaining != 0) {
+        double reverseAdjustment = 0.0;
+        if (type == 'sale' || type == 'mefraq') {
+          reverseAdjustment = -remaining;
+        } else if (type == 'buy' || type == 'purchase') {
+          reverseAdjustment = remaining;
+        }
+        await txn.rawUpdate(
+          'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
+          [reverseAdjustment, contactId],
+        );
+      }
+
+      final dbItems = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+      for (var item in dbItems) {
+        final double qty = (item['quantity'] as num).toDouble();
+        final int prodId = (item['product_id'] as num).toInt();
+
+        if (type == 'sale' || type == 'mefraq') {
+          await txn.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [qty, prodId]);
+        } else if (type == 'buy' || type == 'purchase') {
+          await txn.rawUpdate('UPDATE products SET quantity = quantity - ? WHERE id = ?', [qty, prodId]);
+        }
+      }
+
+      await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+      await txn.delete('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+    });
+  }
+
+  Future<List>> getInvoices() async {
+    final db = await instance.database;
+    return await db.query('invoices', orderBy: 'id DESC');
+  }
+
+  Future<List>> getInvoiceItems(int invoiceId) async {
+    final db = await instance.database;
+    return await db.query(
+      'invoice_items',
+      where: 'invoice_id = ?',
+      whereArgs: [invoiceId],
+    );
+  }
+
+  // ==================== إغلاق السنة المالية ====================
+
+  Future<void> executeFiscalYearRollover(int newYear) async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      await txn.delete('cash_transactions');
+      await txn.delete('invoice_items');
+      await txn.delete('invoices');
+    });
+  }
+
+  Future<void> close() async {
+    final db = await instance.database;
+    db.close();
   }
 }

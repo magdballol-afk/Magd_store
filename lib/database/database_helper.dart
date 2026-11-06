@@ -115,7 +115,7 @@ class DatabaseHelper {
     return await db.insert('products', data);
   }
 
-  Future<List>> getProducts() async {
+  Future<List<dynamic>> getProducts() async {
     final db = await instance.database;
     return await db.query('products', orderBy: 'id DESC');
   }
@@ -158,7 +158,7 @@ class DatabaseHelper {
     return await db.delete('products', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<List>> getProductMovements(int productId) async {
+  Future<List<dynamic>> getProductMovements(int productId) async {
     final db = await instance.database;
     return await db.rawQuery('''
       SELECT ii.*, i.date, i.type as invoice_type 
@@ -171,7 +171,7 @@ class DatabaseHelper {
 
   // ==================== تقرير مراقبة تواريخ الصلاحية ====================
   
-  Future<List>> getExpiryReport() async {
+  Future<List<dynamic>> getExpiryReport() async {
     final db = await database;
     return await db.rawQuery('''
       SELECT 
@@ -210,7 +210,7 @@ class DatabaseHelper {
 
     final cleanDate = formattedDate.replaceAll('/', '-').split('T')[0];
 
-    final List> salesItems = await db.rawQuery('''
+    final List<dynamic> salesItems = await db.rawQuery('''
       SELECT ii.product_id, ii.quantity, ii.price as sale_price, i.date
       FROM invoice_items ii
       JOIN invoices i ON ii.invoice_id = i.id
@@ -226,7 +226,7 @@ class DatabaseHelper {
       final double salePrice = (item['sale_price'] as num?)?.toDouble() ?? 0.0;
       final String saleDate = item['date'].toString();
 
-      final List> lastBuyResult = await db.rawQuery('''
+      final List<dynamic> lastBuyResult = await db.rawQuery('''
         SELECT ii.price as buy_price
         FROM invoice_items ii
         JOIN invoices i ON ii.invoice_id = i.id
@@ -240,7 +240,7 @@ class DatabaseHelper {
       if (lastBuyResult.isNotEmpty) {
         effectiveBuyPrice = (lastBuyResult.first['buy_price'] as num?)?.toDouble() ?? 0.0;
       } else {
-        final List> productRes = await db.query(
+        final List<dynamic> productRes = await db.query(
           'products',
           columns: ['buy_price'],
           where: 'id = ?',
@@ -266,7 +266,7 @@ class DatabaseHelper {
     return await db.insert('contacts', contact);
   }
 
-  Future<List>> getContacts() async {
+  Future<List<dynamic>> getContacts() async {
     final db = await instance.database;
     return await db.query('contacts', orderBy: 'name ASC');
   }
@@ -326,7 +326,7 @@ class DatabaseHelper {
     return purchasePaid + cashExpense;
   }
 
-  Future<List>> getAllDailyTransactions(String formattedDate) async {
+  Future<List<dynamic>> getAllDailyTransactions(String formattedDate) async {
     final db = await instance.database;
 
     final cashTx = await db.rawQuery('''
@@ -369,7 +369,7 @@ class DatabaseHelper {
         AND i.date LIKE ?
     ''', ['$formattedDate%']);
 
-    List> resultsList = [];
+    List<dynamic> resultsList = [];
     resultsList.addAll(cashTx);
     resultsList.addAll(salesInvoices);
     resultsList.addAll(purchaseInvoices);
@@ -377,7 +377,7 @@ class DatabaseHelper {
     return resultsList;
   }
 
-  Future<List>> getDailyTransactions(String formattedDate) async {
+  Future<List<dynamic>> getDailyTransactions(String formattedDate) async {
     final db = await instance.database;
     return await db.rawQuery('''
       SELECT ct.*, c.name as contact_name 
@@ -421,7 +421,7 @@ class DatabaseHelper {
     required double discount,
     required double netAmount,
     required double paidAmount,
-    required List> itemsList,
+    required List<dynamic> itemsList,
     String? date,
   }) async {
     final db = await instance.database;
@@ -490,7 +490,7 @@ class DatabaseHelper {
     double? discount,
     double? netAmount,
     double? paidAmount,
-    List>? itemsList,
+    List<dynamic>? itemsList,
   }) async {
     final db = await instance.database;
 
@@ -638,12 +638,12 @@ class DatabaseHelper {
     });
   }
 
-  Future<List>> getInvoices() async {
+  Future<List<dynamic>> getInvoices() async {
     final db = await instance.database;
     return await db.query('invoices', orderBy: 'id DESC');
   }
 
-  Future<List>> getInvoiceItems(int invoiceId) async {
+  Future<List<dynamic>> getInvoiceItems(int invoiceId) async {
     final db = await instance.database;
     return await db.query(
       'invoice_items',

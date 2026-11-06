@@ -44,7 +44,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
   }
 
-  // دالة تأكيد وحذف المادة
+  // دالة تأكيد وحذف المادة من قاعدة البيانات
   void _confirmDeleteProduct(Map<String, dynamic> product) {
     showDialog(
       context: context,

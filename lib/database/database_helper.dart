@@ -121,7 +121,8 @@ class DatabaseHelper {
   }
 
   /// جلب منتج بواسطة الباركود
-  Future?> getProductByBarcode(String barcode) async {
+  Future
+    getProductByBarcode(String barcode) async {
     final db = await instance.database;
     final result = await db.query(
       'products',
@@ -216,7 +217,7 @@ class DatabaseHelper {
       JOIN invoices i ON ii.invoice_id = i.id
       WHERE (i.type = 'sale' OR i.type = 'mefraq') 
         AND (i.date LIKE ? OR i.date LIKE ?)
-    ''', ['$cleanDate%', '$formattedDate%']);
+    ''', ['$cleanDate\%', '$formattedDate%']);
 
     double totalProfit = 0.0;
 
@@ -272,7 +273,9 @@ class DatabaseHelper {
   }
 
   Future<void> updateContactBalance(int? contactId, double adjustment) async {
-    if (contactId == null || contactId <= 0) return;
+    if (contactId == null || contactId <= 0) {
+      return;
+    }
     final db = await instance.database;
     await db.rawUpdate(
       'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
@@ -586,85 +589,4 @@ class DatabaseHelper {
         }
         await txn.rawUpdate(
           'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
-          [newAdjustment, newContactId],
-        );
-      }
-    });
-
-    return result;
-  }
-
-  Future<void> deleteFullInvoice(int invoiceId) async {
-    final db = await instance.database;
-
-    await db.transaction((txn) async {
-      final invoiceResult = await txn.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
-      if (invoiceResult.isEmpty) return;
-
-      final inv = invoiceResult.first;
-      final int contactId = (inv['contact_id'] as num).toInt();
-      final String type = inv['type'].toString();
-      final double netAmount = (inv['net_amount'] as num).toDouble();
-      final double paidAmount = (inv['paid_amount'] as num).toDouble();
-      final double remaining = netAmount - paidAmount;
-
-      if (contactId > 0 && remaining != 0) {
-        double reverseAdjustment = 0.0;
-        if (type == 'sale' || type == 'mefraq') {
-          reverseAdjustment = -remaining;
-        } else if (type == 'buy' || type == 'purchase') {
-          reverseAdjustment = remaining;
-        }
-        await txn.rawUpdate(
-          'UPDATE contacts SET balance = COALESCE(balance, 0.0) + ? WHERE id = ?',
-          [reverseAdjustment, contactId],
-        );
-      }
-
-      final dbItems = await txn.query('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
-      for (var item in dbItems) {
-        final double qty = (item['quantity'] as num).toDouble();
-        final int prodId = (item['product_id'] as num).toInt();
-
-        if (type == 'sale' || type == 'mefraq') {
-          await txn.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [qty, prodId]);
-        } else if (type == 'buy' || type == 'purchase') {
-          await txn.rawUpdate('UPDATE products SET quantity = quantity - ? WHERE id = ?', [qty, prodId]);
-        }
-      }
-
-      await txn.delete('invoice_items', where: 'invoice_id = ?', whereArgs: [invoiceId]);
-      await txn.delete('invoices', where: 'id = ?', whereArgs: [invoiceId]);
-    });
-  }
-
-  Future<List<dynamic>> getInvoices() async {
-    final db = await instance.database;
-    return await db.query('invoices', orderBy: 'id DESC');
-  }
-
-  Future<List<dynamic>> getInvoiceItems(int invoiceId) async {
-    final db = await instance.database;
-    return await db.query(
-      'invoice_items',
-      where: 'invoice_id = ?',
-      whereArgs: [invoiceId],
-    );
-  }
-
-  // ==================== إغلاق السنة المالية ====================
-
-  Future<void> executeFiscalYearRollover(int newYear) async {
-    final db = await instance.database;
-    await db.transaction((txn) async {
-      await txn.delete('cash_transactions');
-      await txn.delete('invoice_items');
-      await txn.delete('invoices');
-    });
-  }
-
-  Future<void> close() async {
-    final db = await instance.database;
-    db.close();
-  }
-}
+          [newAdjustment, newContactId

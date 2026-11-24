@@ -450,6 +450,8 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                           const SizedBox(height: 8),
 
                           // البحث عن العميل / الجهة
+                          
+                                                 // البحث عن العميل / الجهة
                           RawAutocomplete>(
                             textEditingController: _contactSearchController,
                             focusNode: FocusNode(),
@@ -508,6 +510,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                               );
                             },
                           ),
+
                           const SizedBox(height: 12),
 
                           TextField(

@@ -10,8 +10,8 @@ class CashJournalScreen extends StatefulWidget {
 
 class _CashJournalScreenState extends State<CashJournalScreen> {
   DateTime _selectedDate = DateTime.now();
-  List> _contacts = [];
-  List> _dailyTransactions = [];
+  List<Map<String, dynamic>> _contacts = [];
+  List<Map<String, dynamic>> _dailyTransactions = [];
 
   double _totalIncome = 0.0;
   double _totalExpense = 0.0;
@@ -45,8 +45,8 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
       final transactionsData = await DatabaseHelper.instance.getAllDailyTransactions(formattedDate);
 
       setState(() {
-        _contacts = List>.from(contactsData);
-        _dailyTransactions = List>.from(transactionsData);
+        _contacts = List<Map<String, dynamic>>.from(contactsData);
+        _dailyTransactions = List<Map<String, dynamic>>.from(transactionsData);
         _totalIncome = receipts;
         _totalExpense = payments;
         _isLoading = false;
@@ -131,7 +131,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('تأكيد الحذف'),
-        content: const Text('هل أنت متأكد برغبتك في حذف هذه الحركة؟ سيتم تعديل رصيد العميل تلقائياً.'),
+        content: const Text('هل أنت أحدث برغبتك في حذف هذه الحركة؟ سيتم تعديل رصيد العميل تلقائياً.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -178,15 +178,12 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     }
   }
 
-  // تعديل حركة صندوق وتحديث رصيد العميل بشكل دقيق ومتوافق مع قاعدة البيانات
+  // تعديل حركة صندوق وتحديث رصيد العميل
   Future<void> _editTransaction(Map<String, dynamic> item) async {
     final TextEditingController editAmountController = TextEditingController(text: item['amount'].toString());
     final TextEditingController editNotesController = TextEditingController(text: item['note'] ?? item['notes'] ?? '');
-    
-    String rawType = item['type'] ?? 'income';
-    String editType = (rawType == 'expense' || rawType == 'دفع') ? 'expense' : 'income';
-    
-    int? editContactId = (item['contact_id'] == null || item['contact_id'] == 0) ? null : item['contact_id'];
+    String editType = (item['type'] == 'expense' || item['type'] == 'دفع') ? 'expense' : 'income';
+    int? editContactId = item['contact_id'];
 
     await showDialog(
       context: context,
@@ -220,7 +217,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                       ],
                     ),
                     DropdownButtonFormField<int?>(
-                      value: editContactId,
+                      value: (editContactId == null || editContactId == 0) ? null : editContactId,
                       items: [
                         const DropdownMenuItem<int?>(
                           value: null,
@@ -261,28 +258,23 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5C6BC0)),
                   onPressed: () async {
                     final double? newAmount = double.tryParse(editAmountController.text.trim());
-                    if (newAmount == null || newAmount <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('يرجى إدخال مبلغ صحيح')),
-                      );
-                      return;
-                    }
+                    if (newAmount == null || newAmount <= 0) return;
 
                     final double oldAmount = ((item['amount'] ?? 0.0) as num).toDouble();
-                    final String oldRawType = item['type'] ?? 'income';
-                    final bool isOldIncome = (oldRawType == 'income' || oldRawType == 'قبض');
-                    final int? oldContactId = (item['contact_id'] == null || item['contact_id'] == 0) ? null : item['contact_id'];
+                    final String oldType = item['type'] ?? 'income';
+                    final int? oldContactId = item['contact_id'];
 
-                    // 1. عكس التأثير المالي القديم على رصيد العميل القديم
+                    // 1. إعادة تسوية رصيد العميل القديم (معالجة آمنة من null)
                     if (oldContactId != null && oldContactId > 0) {
-                      double reverseOld = isOldIncome ? oldAmount : -oldAmount;
+                      double reverseOld = (oldType == 'income' || oldType == 'قبض') ? oldAmount : -oldAmount;
                       await DatabaseHelper.instance.updateContactBalance(oldContactId, reverseOld);
                     }
 
-                    // 2. تطبيق التأثير المالي الجديد على رصيد العميل الجديد
-                    if (editContactId != null && editContactId > 0) {
+                    // 2. تطبيق تأثير الحركة الجديدة على رصيد العميل الجديد (معالجة آمنة من null)
+                    final int? newContactId = editContactId;
+                    if (newContactId != null && newContactId > 0) {
                       double applyNew = (editType == 'income') ? -newAmount : newAmount;
-                      await DatabaseHelper.instance.updateContactBalance(editContactId, applyNew);
+                      await DatabaseHelper.instance.updateContactBalance(newContactId, applyNew);
                     }
 
                     // 3. تحديث الحركة في قاعدة البيانات
@@ -450,12 +442,11 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                           const SizedBox(height: 8),
 
                           // البحث عن العميل / الجهة
-                                                    // البحث عن العميل / الجهة
-                          RawAutocomplete(
+                          RawAutocomplete<Map<String, dynamic>>(
                             textEditingController: _contactSearchController,
                             focusNode: FocusNode(),
                             optionsBuilder: (TextEditingValue textEditingValue) {
-                              final allOptions = [
+                              final List<Map<String, dynamic>> allOptions = [
                                 {'id': null, 'name': 'عام / غير محدد'},
                                 ..._contacts,
                               ];
@@ -509,9 +500,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                               );
                             },
                           ),
-
-                                    
-
                           const SizedBox(height: 12),
 
                           TextField(

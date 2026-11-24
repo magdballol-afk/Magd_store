@@ -131,7 +131,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('تأكيد الحذف'),
-        content: const Text('هل أنت أحدث برغبتك في حذف هذه الحركة؟ سيتم تعديل رصيد العميل تلقائياً.'),
+        content: const Text('هل أنت متأكد برغبتك في حذف هذه الحركة؟ سيتم تعديل رصيد العميل تلقائياً.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),

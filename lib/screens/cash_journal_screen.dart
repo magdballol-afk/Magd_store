@@ -154,36 +154,17 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
         final String type = item['type'] ?? 'income';
 
         // 1. عكس التأثير المالي على رصيد العميل
-        if (contactId != null && contactId > 0) {
-          double adjustment = (type == 'income' || type == 'قبض') ? amount : -amount;
-          await DatabaseHelper.instance.updateContactBalance(contactId, adjustment);
-        }
 
-        // 2. حذف الحركة
-        await DatabaseHelper.instance.deleteCashTransaction(transactionId);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تم حذف الحركة وتحديث رصيد العميل')),
-          );
-          _loadData();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('حدث خطأ أثناء الحذف: $e')),
-          );
-        }
-      }
-    }
-  }
-
-  // تعديل حركة صندوق وتحديث رصيد العميل
+  // تعديل حركة صندوق وتحديث رصيد العميل (المصححة كلياً)
   Future<void> _editTransaction(Map<String, dynamic> item) async {
     final TextEditingController editAmountController = TextEditingController(text: item['amount'].toString());
     final TextEditingController editNotesController = TextEditingController(text: item['note'] ?? item['notes'] ?? '');
     String editType = (item['type'] == 'expense' || item['type'] == 'دفع') ? 'expense' : 'income';
-    int? editContactId = item['contact_id'];
+    
+    // 💡 التعديل الجذري 1: التقاط معرف العميل الحالي بدقة والتأكد من التعامل مع الصفر أو القيمة الفارغة كـ null
+    int? editContactId = (item['contact_id'] != null && (item['contact_id'] as num).toInt() > 0) 
+        ? (item['contact_id'] as num).toInt() 
+        : null;
 
     await showDialog(
       context: context,
@@ -216,15 +197,17 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                         ),
                       ],
                     ),
+                    // 💡 التعديل الجذري 2: ضبط القيمة الافتراضية للـ DropdownButton وتأمين الـ items لمنع مشاكل العميل
                     DropdownButtonFormField<int?>(
-                      value: (editContactId == null || editContactId == 0) ? null : editContactId,
+                      value: editContactId,
+                      isExpanded: true,
                       items: [
                         const DropdownMenuItem<int?>(
                           value: null,
                           child: Text('عام / غير محدد'),
                         ),
                         ..._contacts.map((c) => DropdownMenuItem<int?>(
-                              value: c['id'],
+                              value: (c['id'] as num).toInt(),
                               child: Text(c['name'] ?? ''),
                             )),
                       ],
@@ -262,22 +245,24 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
 
                     final double oldAmount = ((item['amount'] ?? 0.0) as num).toDouble();
                     final String oldType = item['type'] ?? 'income';
-                    final int? oldContactId = item['contact_id'];
+                    final int? oldContactId = (item['contact_id'] != null && (item['contact_id'] as num).toInt() > 0)
+                        ? (item['contact_id'] as num).toInt()
+                        : null;
 
-                    // 1. إعادة تسوية رصيد العميل القديم (معالجة آمنة من null)
+                    // 1. إعادة تسوية رصيد العميل القديم وعكس تأثير الحركة السابقة تماماً
                     if (oldContactId != null && oldContactId > 0) {
                       double reverseOld = (oldType == 'income' || oldType == 'قبض') ? oldAmount : -oldAmount;
                       await DatabaseHelper.instance.updateContactBalance(oldContactId, reverseOld);
                     }
 
-                    // 2. تطبيق تأثير الحركة الجديدة على رصيد العميل الجديد (معالجة آمنة من null)
+                    // 2. تطبيق تأثير الحركة الجديدة على رصيد العميل المختار حديثاً
                     final int? newContactId = editContactId;
                     if (newContactId != null && newContactId > 0) {
                       double applyNew = (editType == 'income') ? -newAmount : newAmount;
                       await DatabaseHelper.instance.updateContactBalance(newContactId, applyNew);
                     }
 
-                    // 3. تحديث الحركة في قاعدة البيانات
+                    // 3. تحديث الحركة في قاعدة البيانات بمعرف العميل الصحيح
                     final Map<String, dynamic> row = {
                       'id': item['id'],
                       'contact_id': editContactId ?? 0,
@@ -297,6 +282,17 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                       );
                     }
                   },
+                  child: const Text('حفظ التعديلات', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+        
                   child: const Text('حفظ التعديلات', style: TextStyle(color: Colors.white)),
                 ),
               ],

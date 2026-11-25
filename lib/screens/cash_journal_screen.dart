@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
-
 class CashJournalScreen extends StatefulWidget {
   const CashJournalScreen({Key? key}) : super(key: key);
 

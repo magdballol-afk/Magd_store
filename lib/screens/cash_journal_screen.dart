@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../database/database_helper.dart';
+
 class CashJournalScreen extends StatefulWidget {
   const CashJournalScreen({Key? key}) : super(key: key);
 
@@ -11,6 +12,9 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
   DateTime _selectedDate = DateTime.now();
   List<Map<String, dynamic>> _contacts = [];
   List<Map<String, dynamic>> _dailyTransactions = [];
+
+  double _totalIncome = 0.0;
+  double _totalExpense = 0.0;
 
   bool _isLoading = true;
   bool _isSaving = false;
@@ -28,17 +32,23 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     _loadData();
   }
 
-  // جلب البيانات
+  // جلب البيانات الشاملة (فواتير + صندوق)
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
       final contactsData = await DatabaseHelper.instance.getContacts();
       final formattedDate = _selectedDate.toString().split(' ')[0];
-      final transactionsData = await DatabaseHelper.instance.getDailyTransactions(formattedDate);
+
+      // جلب إجمالي المقبوضات والمدفوعات الشاملة للواجهة
+      final receipts = await DatabaseHelper.instance.getDailyReceipts(formattedDate);
+      final payments = await DatabaseHelper.instance.getDailyPayments(formattedDate);
+      final transactionsData = await DatabaseHelper.instance.getAllDailyTransactions(formattedDate);
 
       setState(() {
         _contacts = List<Map<String, dynamic>>.from(contactsData);
         _dailyTransactions = List<Map<String, dynamic>>.from(transactionsData);
+        _totalIncome = receipts;
+        _totalExpense = payments;
         _isLoading = false;
       });
     } catch (e) {
@@ -121,7 +131,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('تأكيد الحذف'),
-        content: const Text('هل أنت أحدث برغبتك في حذف هذه الحركة؟ سيتم تعديل رصيد العميل تلقائياً.'),
+        content: const Text('هل أنت متأكد برغبتك في حذف هذه الحركة؟ سيتم تعديل رصيد العميل تلقائياً.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -145,7 +155,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
 
         // 1. عكس التأثير المالي على رصيد العميل
         if (contactId != null && contactId > 0) {
-          double adjustment = (type == 'income') ? amount : -amount;
+          double adjustment = (type == 'income' || type == 'قبض') ? amount : -amount;
           await DatabaseHelper.instance.updateContactBalance(contactId, adjustment);
         }
 
@@ -172,9 +182,8 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
   Future<void> _editTransaction(Map<String, dynamic> item) async {
     final TextEditingController editAmountController = TextEditingController(text: item['amount'].toString());
     final TextEditingController editNotesController = TextEditingController(text: item['note'] ?? item['notes'] ?? '');
-    String editType = item['type'] ?? 'income';
+    String editType = (item['type'] == 'expense' || item['type'] == 'دفع') ? 'expense' : 'income';
     int? editContactId = item['contact_id'];
-    String editContactName = item['contact_name'] ?? 'عام / غير محدد';
 
     await showDialog(
       context: context,
@@ -222,12 +231,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                       onChanged: (val) {
                         setDialogState(() {
                           editContactId = val;
-                          if (val == null) {
-                            editContactName = 'عام / غير محدد';
-                          } else {
-                            final c = _contacts.firstWhere((element) => element['id'] == val, orElse: () => {});
-                            editContactName = c['name'] ?? 'عام / غير محدد';
-                          }
                         });
                       },
                       decoration: const InputDecoration(labelText: 'الجهة / اسم العميل'),
@@ -263,7 +266,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
 
                     // 1. إعادة تسوية رصيد العميل القديم (معالجة آمنة من null)
                     if (oldContactId != null && oldContactId > 0) {
-                      double reverseOld = (oldType == 'income') ? oldAmount : -oldAmount;
+                      double reverseOld = (oldType == 'income' || oldType == 'قبض') ? oldAmount : -oldAmount;
                       await DatabaseHelper.instance.updateContactBalance(oldContactId, reverseOld);
                     }
 
@@ -302,18 +305,6 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
         );
       },
     );
-  }
-
-  double get _totalIncome {
-    return _dailyTransactions
-        .where((t) => t['type'] == 'income')
-        .fold(0.0, (sum, item) => sum + ((item['amount'] ?? 0.0) as num).toDouble());
-  }
-
-  double get _totalExpense {
-    return _dailyTransactions
-        .where((t) => t['type'] == 'expense')
-        .fold(0.0, (sum, item) => sum + ((item['amount'] ?? 0.0) as num).toDouble());
   }
 
   @override
@@ -367,7 +358,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // كروت المقبوضات والمدفوعات
+                  // كروت المقبوضات والمدفوعات الشاملة
                   Row(
                     children: [
                       Expanded(
@@ -566,9 +557,10 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                           itemCount: _dailyTransactions.length,
                           itemBuilder: (context, index) {
                             final item = _dailyTransactions[index];
-                            final bool isIncome = item['type'] == 'income';
+                            final bool isIncome = item['type'] == 'income' || item['type'] == 'قبض';
                             final double amount = ((item['amount'] ?? 0.0) as num).toDouble();
                             final String notesText = item['note'] ?? item['notes'] ?? '';
+                            final bool isInvoice = notesText.contains('دفعة فاتورة');
 
                             return Card(
                               margin: const EdgeInsets.symmetric(vertical: 4),
@@ -593,14 +585,16 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                                         color: isIncome ? Colors.green : Colors.red,
                                       ),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                                      onPressed: () => _editTransaction(item),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                      onPressed: () => _deleteTransaction(item),
-                                    ),
+                                    if (!isInvoice) ...[
+                                      IconButton(
+                                        icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                                        onPressed: () => _editTransaction(item),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                        onPressed: () => _deleteTransaction(item),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),

@@ -929,8 +929,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                 child: ListTile(
                                   title: Text(item['product_name'] ?? 'مادة'),
                                   subtitle: Text(
-                                    'الكمية: ${item['quantity']} × السعر: ${item['unit_price']} ${item['discount'] > 0 ? '| حسم: ${item['discount']}' : ''}${expiry.isNotEmpty ? '
-انتهاء الصلاحية الصادر: $expiry' : ''}',
+                                    'الكمية: ${item['quantity']} × السعر: ${item['unit_price']} ${item['discount'] > 0 ? '| حسم: ${item['discount']}' : ''}${expiry.isNotEmpty ? '\nانتهاء الصلاحية الصادر: $expiry' : ''}',
                                   ),
                                   isThreeLine: expiry.isNotEmpty,
                                   trailing: Row(
@@ -1032,7 +1031,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _selectedCurrency == 'USD' ? Colors.green.shade700 : const Color(0xFF5C6BC0),
                       ),
-                      onPressed: _isSaving ? null : _saveInvoice,
+                      onPressed: _isSaving ? _saveInvoice : null,
                       child: _isSaving
                           ? const CircularProgressIndicator(color: Colors.white)
                           : Text(
@@ -1060,7 +1059,6 @@ class _BarcodeScannerSimpleScreenState extends State<BarcodeScannerSimpleScreen>
 
   @override
   Widget build(BuildContext context) {
-    print('Barcode scanner built');
     return Scaffold(
       appBar: AppBar(
         title: const Text('مسح الباركود'),

@@ -10,6 +10,7 @@ class CashJournalScreen extends StatefulWidget {
 
 class _CashJournalScreenState extends State<CashJournalScreen> {
   DateTime _selectedDate = DateTime.now();
+  String _selectedCurrency = 'SYP'; // 'SYP' (صندوق سوري) أو 'USD' (صندوق دولار)
   List<Map<String, dynamic>> _contacts = [];
   List<Map<String, dynamic>> _dailyTransactions = [];
 
@@ -32,17 +33,26 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     _loadData();
   }
 
-  // جلب البيانات الشاملة (فواتير + صندوق)
+  // جلب البيانات الشاملة (فواتير + صندوق) حسب العملة المختارة
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
       final contactsData = await DatabaseHelper.instance.getContacts();
       final formattedDate = _selectedDate.toString().split(' ')[0];
 
-      // جلب إجمالي المقبوضات والمدفوعات الشاملة للواجهة
-      final receipts = await DatabaseHelper.instance.getDailyReceipts(formattedDate);
-      final payments = await DatabaseHelper.instance.getDailyPayments(formattedDate);
-      final transactionsData = await DatabaseHelper.instance.getAllDailyTransactions(formattedDate);
+      // جلب إجمالي المقبوضات والمدفوعات الشاملة للواجهة حسب العملة
+      final receipts = await DatabaseHelper.instance.getDailyReceipts(
+        formattedDate,
+        currency: _selectedCurrency,
+      );
+      final payments = await DatabaseHelper.instance.getDailyPayments(
+        formattedDate,
+        currency: _selectedCurrency,
+      );
+      final transactionsData = await DatabaseHelper.instance.getAllDailyTransactions(
+        formattedDate,
+        currency: _selectedCurrency,
+      );
 
       setState(() {
         _contacts = List<Map<String, dynamic>>.from(contactsData);
@@ -58,7 +68,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     }
   }
 
-  // إضافة حركة جديدة وتحديث رصيد العميل وقاعدة البيانات
+  // إضافة حركة جديدة وتحديث رصيد العميل وقاعدة البيانات حسب العملة المختارة
   Future<void> _submitTransaction() async {
     final double? amount = double.tryParse(_amountController.text.trim());
     if (amount == null || amount <= 0) {
@@ -79,6 +89,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
         'amount': amount,
         'note': _notesController.text.trim(),
         'date': formattedDate,
+        'currency': _selectedCurrency,
       };
 
       // 1. حفظ الحركة في قاعدة البيانات
@@ -298,7 +309,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                       await DatabaseHelper.instance.updateContactBalance(newContactId, applyNew);
                     }
 
-                    // 3. تحديث الحركة نفسها في قاعدة البيانات
+                    // 3. تحديث الحركة نفسها في قاعدة البيانات مع الحفاظ على العملة
                     final Map<String, dynamic> row = {
                       'id': item['id'],
                       'contact_id': editContactId ?? 0,
@@ -306,6 +317,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                       'amount': newAmount,
                       'note': editNotesController.text.trim(),
                       'date': item['date'] ?? _selectedDate.toString().split(' ')[0],
+                      'currency': item['currency'] ?? _selectedCurrency,
                     };
 
                     await DatabaseHelper.instance.updateCashTransaction(row);
@@ -338,6 +350,8 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final String currencyLabel = _selectedCurrency == 'USD' ? 'دولار (\$)' : 'سوري (ل.س)';
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('حركة الصندوق اليومية'),
@@ -351,6 +365,101 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // أزرار التبديل بين صندوق سوري وصندوق دولار أعلى الشاشة
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(25),
+                      border: Border.all(color: Colors.grey.shade400),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: const BorderRadius.horizontal(right: Radius.circular(25)),
+                            onTap: () {
+                              if (_selectedCurrency != 'SYP') {
+                                setState(() => _selectedCurrency = 'SYP');
+                                _loadData();
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _selectedCurrency == 'SYP'
+                                    ? const Color(0xFF5C6BC0).withOpacity(0.15)
+                                    : Colors.transparent,
+                                borderRadius: const BorderRadius.horizontal(right: Radius.circular(25)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_selectedCurrency == 'SYP')
+                                    const Padding(
+                                      padding: EdgeInsets.only(left: 6),
+                                      child: Icon(Icons.check, size: 18, color: Color(0xFF5C6BC0)),
+                                    ),
+                                  Text(
+                                    'صندوق سوري',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                      color: _selectedCurrency == 'SYP'
+                                          ? const Color(0xFF5C6BC0)
+                                          : Colors.black87,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Container(width: 1, height: 30, color: Colors.grey.shade400),
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: const BorderRadius.horizontal(left: Radius.circular(25)),
+                            onTap: () {
+                              if (_selectedCurrency != 'USD') {
+                                setState(() => _selectedCurrency = 'USD');
+                                _loadData();
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _selectedCurrency == 'USD'
+                                    ? Colors.green.withOpacity(0.15)
+                                    : Colors.transparent,
+                                borderRadius: const BorderRadius.horizontal(left: Radius.circular(25)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_selectedCurrency == 'USD')
+                                    const Padding(
+                                      padding: EdgeInsets.only(left: 6),
+                                      child: Icon(Icons.check, size: 18, color: Colors.green),
+                                    ),
+                                  const Icon(Icons.attach_money, size: 18, color: Colors.green),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'صندوق دولار',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                      color: _selectedCurrency == 'USD' ? Colors.green.shade800 : Colors.black87,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
                   // اختيار التاريخ
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -393,7 +502,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('المقبوضات', style: TextStyle(color: Colors.green, fontSize: 13)),
+                              Text('المقبوضات ($currencyLabel)', style: const TextStyle(color: Colors.green, fontSize: 13)),
                               const SizedBox(height: 4),
                               Text(
                                 _totalIncome.toStringAsFixed(2),
@@ -415,7 +524,7 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('المدفوعات', style: TextStyle(color: Colors.red, fontSize: 13)),
+                              Text('المدفوعات ($currencyLabel)', style: const TextStyle(color: Colors.red, fontSize: 13)),
                               const SizedBox(height: 4),
                               Text(
                                 _totalExpense.toStringAsFixed(2),
@@ -438,7 +547,10 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('تسجيل حركة جديدة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          Text(
+                            'تسجيل حركة جديدة ($currencyLabel)',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
                           const SizedBox(height: 12),
                           Row(
                             children: [
@@ -526,10 +638,10 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                           TextField(
                             controller: _amountController,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(
-                              labelText: 'المبلغ',
-                              prefixIcon: Icon(Icons.attach_money),
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: 'المبلغ ($currencyLabel)',
+                              prefixIcon: const Icon(Icons.attach_money),
+                              border: const OutlineInputBorder(),
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -549,12 +661,17 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                             height: 44,
                             child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF5C6BC0),
+                                backgroundColor: _selectedCurrency == 'USD'
+                                    ? Colors.green.shade700
+                                    : const Color(0xFF5C6BC0),
                               ),
                               onPressed: _isSaving ? null : _submitTransaction,
                               child: _isSaving
                                   ? const CircularProgressIndicator(color: Colors.white)
-                                  : const Text('حفظ الحركة', style: TextStyle(color: Colors.white, fontSize: 16)),
+                                  : Text(
+                                      'حفظ الحركة في $currencyLabel',
+                                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                                    ),
                             ),
                           ),
                         ],
@@ -564,13 +681,13 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                   const SizedBox(height: 20),
 
                   // سجل الحركات اليومية
-                  const Text('حركات اليوم:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text('حركات اليوم ($currencyLabel):', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
 
                   _dailyTransactions.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24.0),
-                          child: Center(child: Text('لا توجد حركات صندوق مسجلة لهذا اليوم')),
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24.0),
+                          child: Center(child: Text('لا توجد حركات مسجلة في $currencyLabel لهذا اليوم')),
                         )
                       : ListView.builder(
                           shrinkWrap: true,
@@ -599,9 +716,9 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
-                                      amount.toStringAsFixed(2),
+                                      '${amount.toStringAsFixed(2)} ${_selectedCurrency == 'USD' ? '\$' : 'ل.س'}',
                                       style: TextStyle(
-                                        fontSize: 16,
+                                        fontSize: 15,
                                         fontWeight: FontWeight.bold,
                                         color: isIncome ? Colors.green : Colors.red,
                                       ),

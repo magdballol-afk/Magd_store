@@ -15,6 +15,7 @@ class NewInvoiceScreen extends StatefulWidget {
 
 class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   late String _invoiceType; // 'sale' أو 'purchase'
+  String _selectedCurrency = 'SYP'; // 'SYP' (سوري) أو 'USD' (دولار)
 
   List<Map<String, dynamic>> _contacts = [];
   List<Map<String, dynamic>> _products = [];
@@ -74,6 +75,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       final invoice = invoiceResult.first;
 
       _invoiceType = (invoice['type'] ?? 'sale').toString();
+      _selectedCurrency = (invoice['currency'] ?? 'SYP').toString();
       _selectedContactId = invoice['contact_id'] != null
           ? (invoice['contact_id'] as num).toInt()
           : null;
@@ -270,7 +272,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
       paidAmount: _paidAmount,
       remainingAmount: _remainingAmount,
       customerBalance: currentContactBalance,
-      currency: "",
+      currency: _selectedCurrency == 'USD' ? '\$' : 'ل.س',
     );
   }
 
@@ -414,7 +416,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                   List<Map<String, dynamic>> batches = [];
                                   if (_invoiceType == 'sale') {
                                     final db = await DatabaseHelper.instance.database;
-                                    // استعلام ديناميكي لحساب المتبقي الفعلي بالدفعة (شراء ناقص مبيعات)
                                     batches = await db.rawQuery('''
                                       SELECT 
                                         buy_batch.expiry_date, 
@@ -482,7 +483,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                 List<Map<String, dynamic>> batches = [];
                                 if (_invoiceType == 'sale') {
                                   final db = await DatabaseHelper.instance.database;
-                                  // استعلام ديناميكي لحساب المتبقي الفعلي بالدفعة (شراء ناقص مبيعات)
                                   batches = await db.rawQuery('''
                                     SELECT 
                                       buy_batch.expiry_date, 
@@ -573,10 +573,10 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       TextFormField(
                         controller: priceController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'السعر (يقبل الفواصل)',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.attach_money),
+                        decoration: InputDecoration(
+                          labelText: 'السعر (${_selectedCurrency == 'USD' ? '\$' : 'ل.س'})',
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.attach_money),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -703,6 +703,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           netAmount: _finalTotal,
           paidAmount: _paidAmount,
           itemsList: dbItems,
+          currency: _selectedCurrency,
         );
       } else {
         await DatabaseHelper.instance.addFullInvoice(
@@ -714,6 +715,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
           paidAmount: _paidAmount,
           itemsList: dbItems,
           date: DateTime.now().toString().split(' ')[0],
+          currency: _selectedCurrency,
         );
       }
 
@@ -745,13 +747,14 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isEditing = widget.invoiceId != null;
+    final String currencyLabel = _selectedCurrency == 'USD' ? 'دولار (\$)' : 'سوري (ل.س)';
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
           isEditing
-              ? 'تعديل فاتورة #${widget.invoiceId}'
-              : (_invoiceType == 'purchase' ? 'فاتورة شراء جديدة' : 'فاتورة مبيعات جديدة'),
+              ? 'تعديل فاتورة #${widget.invoiceId} ($currencyLabel)'
+              : (_invoiceType == 'purchase' ? 'فاتورة شراء جديدة ($currencyLabel)' : 'فاتورة مبيعات جديدة ($currencyLabel)'),
         ),
         backgroundColor: const Color(0xFF5C6BC0),
         actions: [
@@ -773,6 +776,92 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               padding: const EdgeInsets.all(12.0),
               child: Column(
                 children: [
+                  // شريط تبديل العملة (صندوق سوري | صندوق دولار)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(25),
+                      border: Border.all(color: Colors.grey.shade400),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: const BorderRadius.horizontal(right: Radius.circular(25)),
+                            onTap: () {
+                              setState(() => _selectedCurrency = 'SYP');
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _selectedCurrency == 'SYP'
+                                    ? const Color(0xFF5C6BC0).withOpacity(0.15)
+                                    : Colors.transparent,
+                                borderRadius: const BorderRadius.horizontal(right: Radius.circular(25)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_selectedCurrency == 'SYP')
+                                    const Padding(
+                                      padding: EdgeInsets.only(left: 6),
+                                      child: Icon(Icons.check, size: 16, color: Color(0xFF5C6BC0)),
+                                    ),
+                                  const Text(
+                                    'عملة سورية (ل.س)',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Container(width: 1, height: 28, color: Colors.grey.shade400),
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: const BorderRadius.horizontal(left: Radius.circular(25)),
+                            onTap: () {
+                              setState(() => _selectedCurrency = 'USD');
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _selectedCurrency == 'USD'
+                                    ? Colors.green.withOpacity(0.15)
+                                    : Colors.transparent,
+                                borderRadius: const BorderRadius.horizontal(left: Radius.circular(25)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_selectedCurrency == 'USD')
+                                    const Padding(
+                                      padding: EdgeInsets.only(left: 6),
+                                      child: Icon(Icons.check, size: 16, color: Colors.green),
+                                    ),
+                                  const Icon(Icons.attach_money, size: 16, color: Colors.green),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'عملة دولار (\$)',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: _selectedCurrency == 'USD' ? Colors.green.shade800 : Colors.black87,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
                   SegmentedButton<String>(
                     segments: const [
                       ButtonSegment(value: 'sale', label: Text('فاتورة مبيعات'), icon: Icon(Icons.sell)),
@@ -804,7 +893,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('المواد المضافة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text('المواد المضافة ($currencyLabel):', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       Row(
                         children: [
                           IconButton(
@@ -840,14 +929,15 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                                 child: ListTile(
                                   title: Text(item['product_name'] ?? 'مادة'),
                                   subtitle: Text(
-                                    'الكمية: ${item['quantity']} × السعر: ${item['unit_price']} ${item['discount'] > 0 ? '| حسم: ${item['discount']}' : ''}${expiry.isNotEmpty ? '\nانتهاء الصلاحية الصادر: $expiry' : ''}',
+                                    'الكمية: ${item['quantity']} × السعر: ${item['unit_price']} ${item['discount'] > 0 ? '| حسم: ${item['discount']}' : ''}${expiry.isNotEmpty ? '
+انتهاء الصلاحية الصادر: $expiry' : ''}',
                                   ),
                                   isThreeLine: expiry.isNotEmpty,
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        (item['total'] as double).toStringAsFixed(2),
+                                        '${(item['total'] as double).toStringAsFixed(2)} ${_selectedCurrency == 'USD' ? '\$' : 'ل.س'}',
                                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                       ),
                                       IconButton(
@@ -939,12 +1029,14 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5C6BC0)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _selectedCurrency == 'USD' ? Colors.green.shade700 : const Color(0xFF5C6BC0),
+                      ),
                       onPressed: _isSaving ? null : _saveInvoice,
                       child: _isSaving
                           ? const CircularProgressIndicator(color: Colors.white)
                           : Text(
-                              isEditing ? 'تحديث الفاتورة' : 'حفظ الفاتورة',
+                              isEditing ? 'تحديث الفاتورة في $currencyLabel' : 'حفظ الفاتورة في $currencyLabel',
                               style: const TextStyle(color: Colors.white, fontSize: 16),
                             ),
                     ),
@@ -968,6 +1060,7 @@ class _BarcodeScannerSimpleScreenState extends State<BarcodeScannerSimpleScreen>
 
   @override
   Widget build(BuildContext context) {
+    print('Barcode scanner built');
     return Scaffold(
       appBar: AppBar(
         title: const Text('مسح الباركود'),

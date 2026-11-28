@@ -19,15 +19,18 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4, // 👈 تم رفع الإصدار إلى 4 لدعم تاريخ الصلاحية
+      version: 5,
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 3) {
           await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT');
         }
         if (oldVersion < 4) {
-          // 👈 إضافة حقل تاريخ الصلاحية عند تحديث الإصدار
           await db.execute('ALTER TABLE invoice_items ADD COLUMN expiry_date TEXT');
+        }
+        if (oldVersion < 5) {
+          await db.execute("ALTER TABLE invoices ADD COLUMN currency TEXT NOT NULL DEFAULT 'SYP'");
+          await db.execute("ALTER TABLE cash_transactions ADD COLUMN currency TEXT NOT NULL DEFAULT 'SYP'");
         }
       },
     );
@@ -41,7 +44,6 @@ class DatabaseHelper {
     const realDefaultZero = 'REAL NOT NULL DEFAULT 0.0';
     const integerType = 'INTEGER NOT NULL';
 
-    // جدول المنتجات
     await db.execute('''
       CREATE TABLE products (
         id $idType,
@@ -55,7 +57,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول جهات الاتصال (العملاء والموردين)
     await db.execute('''
       CREATE TABLE contacts (
         id $idType,
@@ -66,7 +67,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول الفواتير
     await db.execute('''
       CREATE TABLE invoices (
         id $idType,
@@ -76,11 +76,11 @@ class DatabaseHelper {
         discount $realType,
         net_amount $realType,
         paid_amount $realType,
-        date $textType
+        date $textType,
+        currency $textType DEFAULT 'SYP'
       )
     ''');
 
-    // جدول عناصر الفاتورة (محدث ليشمل تاريخ الصلاحية)
     await db.execute('''
       CREATE TABLE invoice_items (
         id $idType,
@@ -93,7 +93,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // جدول حركة الصندوق (دفتر اليومية)
     await db.execute('''
       CREATE TABLE cash_transactions (
         id $idType,
@@ -101,12 +100,11 @@ class DatabaseHelper {
         amount $realType,
         type $textType,
         note $textNullable,
-        date $textType
+        date $textType,
+        currency $textType DEFAULT 'SYP'
       )
     ''');
   }
-
-  // ==================== المنتجات والتحركات والباركود ====================
 
   Future<int> insertProduct(Map<String, dynamic> product) async {
     final db = await instance.database;
@@ -126,7 +124,6 @@ class DatabaseHelper {
     return await db.query('products', orderBy: 'id DESC');
   }
 
-  /// جلب منتج بواسطة الباركود
   Future<Map<String, dynamic>?> getProductByBarcode(String barcode) async {
     final db = await instance.database;
     final result = await db.query(
@@ -175,9 +172,6 @@ class DatabaseHelper {
     ''', [productId]);
   }
 
-  // ==================== تقرير مراقبة تواريخ الصلاحية (الديناميكي المحدث) ====================
-  
-  /// تقرير تفصيلي بالمواد وتواريخ صلاحيتها المتبقية فعلياً في المستودع (شراء ناقص مبيعات)
   Future<List<Map<String, dynamic>>> getExpiryReport() async {
     final db = await database;
     return await db.rawQuery('''
@@ -209,8 +203,6 @@ class DatabaseHelper {
       ORDER BY buy_batch.expiry_date ASC
     ''');
   }
-
-  // ==================== أرباح المواد المباعة ====================
 
   Future<double> getDailyProfitUsingLastBuyPrice(String formattedDate) async {
     final db = await instance.database;
@@ -263,8 +255,6 @@ class DatabaseHelper {
     return totalProfit;
   }
 
-  // ==================== جهات الاتصال والرصيد ====================
-
   Future<int> insertContact(Map<String, dynamic> contact) async {
     final db = await instance.database;
     return await db.insert('contacts', contact);
@@ -284,53 +274,51 @@ class DatabaseHelper {
     );
   }
 
-  // ==================== الصندوق / اليومية المربوط بالفواتير ====================
-
-  Future<double> getDailyReceipts(String formattedDate) async {
+  Future<double> getDailyReceipts(String formattedDate, {String currency = 'SYP'}) async {
     final db = await instance.database;
 
     final salesResult = await db.rawQuery('''
       SELECT SUM(paid_amount) as total 
       FROM invoices 
-      WHERE (type = 'sale' OR type = 'mefraq') AND date LIKE ?
-    ''', ['$formattedDate%']);
+      WHERE (type = 'sale' OR type = 'mefraq') AND currency = ? AND date LIKE ?
+    ''', [currency, '$formattedDate%']);
 
     double salesPaid = (salesResult.first['total'] as num?)?.toDouble() ?? 0.0;
 
     final cashResult = await db.rawQuery('''
       SELECT SUM(amount) as total 
       FROM cash_transactions 
-      WHERE (type = 'income' OR type = 'قبض') AND date LIKE ?
-    ''', ['$formattedDate%']);
+      WHERE (type = 'income' OR type = 'قبض') AND currency = ? AND date LIKE ?
+    ''', [currency, '$formattedDate%']);
 
     double cashIncome = (cashResult.first['total'] as num?)?.toDouble() ?? 0.0;
 
     return salesPaid + cashIncome;
   }
 
-  Future<double> getDailyPayments(String formattedDate) async {
+  Future<double> getDailyPayments(String formattedDate, {String currency = 'SYP'}) async {
     final db = await instance.database;
 
     final purchaseResult = await db.rawQuery('''
       SELECT SUM(paid_amount) as total 
       FROM invoices 
-      WHERE (type = 'buy' OR type = 'purchase') AND date LIKE ?
-    ''', ['$formattedDate%']);
+      WHERE (type = 'buy' OR type = 'purchase') AND currency = ? AND date LIKE ?
+    ''', [currency, '$formattedDate%']);
 
     double purchasePaid = (purchaseResult.first['total'] as num?)?.toDouble() ?? 0.0;
 
     final cashResult = await db.rawQuery('''
       SELECT SUM(amount) as total 
       FROM cash_transactions 
-      WHERE (type = 'expense' OR type = 'دفع') AND date LIKE ?
-    ''', ['$formattedDate%']);
+      WHERE (type = 'expense' OR type = 'دفع') AND currency = ? AND date LIKE ?
+    ''', [currency, '$formattedDate%']);
 
     double cashExpense = (cashResult.first['total'] as num?)?.toDouble() ?? 0.0;
 
     return purchasePaid + cashExpense;
   }
 
-  Future<List<Map<String, dynamic>>> getAllDailyTransactions(String formattedDate) async {
+  Future<List<Map<String, dynamic>>> getAllDailyTransactions(String formattedDate, {String currency = 'SYP'}) async {
     final db = await instance.database;
 
     final cashTx = await db.rawQuery('''
@@ -339,11 +327,12 @@ class DatabaseHelper {
              ct.amount, 
              ct.type, 
              COALESCE(ct.note, 'سند صندوق') as note, 
-             ct.date
+             ct.date,
+             ct.currency
       FROM cash_transactions ct
       LEFT JOIN contacts c ON ct.contact_id = c.id
-      WHERE ct.date LIKE ?
-    ''', ['$formattedDate%']);
+      WHERE ct.currency = ? AND ct.date LIKE ?
+    ''', [currency, '$formattedDate%']);
 
     final salesInvoices = await db.rawQuery('''
       SELECT i.id, 
@@ -351,13 +340,15 @@ class DatabaseHelper {
              i.paid_amount as amount, 
              'قبض' as type, 
              ('دفعة فاتورة مبيعات #' || i.id) as note, 
-             i.date
+             i.date,
+             i.currency
       FROM invoices i
       LEFT JOIN contacts c ON i.contact_id = c.id
       WHERE (i.type = 'sale' OR i.type = 'mefraq') 
         AND i.paid_amount > 0 
+        AND i.currency = ? 
         AND i.date LIKE ?
-    ''', ['$formattedDate%']);
+    ''', [currency, '$formattedDate%']);
 
     final purchaseInvoices = await db.rawQuery('''
       SELECT i.id, 
@@ -365,13 +356,15 @@ class DatabaseHelper {
              i.paid_amount as amount, 
              'دفع' as type, 
              ('دفعة فاتورة مشتريات #' || i.id) as note, 
-             i.date
+             i.date,
+             i.currency
       FROM invoices i
       LEFT JOIN contacts c ON i.contact_id = c.id
       WHERE (i.type = 'buy' OR i.type = 'purchase') 
         AND i.paid_amount > 0 
+        AND i.currency = ? 
         AND i.date LIKE ?
-    ''', ['$formattedDate%']);
+    ''', [currency, '$formattedDate%']);
 
     List<Map<String, dynamic>> allList = [];
     allList.addAll(cashTx);
@@ -381,15 +374,15 @@ class DatabaseHelper {
     return allList;
   }
 
-  Future<List<Map<String, dynamic>>> getDailyTransactions(String formattedDate) async {
+  Future<List<Map<String, dynamic>>> getDailyTransactions(String formattedDate, {String currency = 'SYP'}) async {
     final db = await instance.database;
     return await db.rawQuery('''
       SELECT ct.*, c.name as contact_name 
       FROM cash_transactions ct
       LEFT JOIN contacts c ON ct.contact_id = c.id
-      WHERE ct.date LIKE ?
+      WHERE ct.currency = ? AND ct.date LIKE ?
       ORDER BY ct.id DESC
-    ''', ['$formattedDate%']);
+    ''', [currency, '$formattedDate%']);
   }
 
   Future<int> addCashTransaction(Map<String, dynamic> row) async {
@@ -416,8 +409,6 @@ class DatabaseHelper {
     );
   }
 
-  // ==================== الفواتير ====================
-
   Future<int> addFullInvoice({
     required int contactId,
     required String type,
@@ -427,6 +418,7 @@ class DatabaseHelper {
     required double paidAmount,
     required List<Map<String, dynamic>> itemsList,
     String? date,
+    String currency = 'SYP',
   }) async {
     final db = await instance.database;
     int invoiceId = 0;
@@ -440,6 +432,7 @@ class DatabaseHelper {
         'net_amount': netAmount,
         'paid_amount': paidAmount,
         'date': date ?? DateTime.now().toIso8601String(),
+        'currency': currency,
       });
 
       for (var item in itemsList) {
@@ -449,7 +442,7 @@ class DatabaseHelper {
           'quantity': item['quantity'],
           'price': item['price'],
           'total': item['total'],
-          'expiry_date': item['expiry_date'], // 👈 حفظ تاريخ الصلاحية
+          'expiry_date': item['expiry_date'],
         });
 
         if (type == 'sale' || type == 'mefraq') {
@@ -495,6 +488,7 @@ class DatabaseHelper {
     double? netAmount,
     double? paidAmount,
     List<Map<String, dynamic>>? itemsList,
+    String? currency,
   }) async {
     final db = await instance.database;
 
@@ -542,6 +536,7 @@ class DatabaseHelper {
       if (discount != null) row['discount'] = discount;
       if (netAmount != null) row['net_amount'] = netAmount;
       if (paidAmount != null) row['paid_amount'] = paidAmount;
+      if (currency != null) row['currency'] = currency;
 
       if (row.isNotEmpty) {
         result = await txn.update(
@@ -564,7 +559,7 @@ class DatabaseHelper {
             'quantity': item['quantity'],
             'price': item['price'],
             'total': item['total'],
-            'expiry_date': item['expiry_date'], // 👈 حفظ تاريخ الصلاحية الجديد
+            'expiry_date': item['expiry_date'],
           });
 
           if (currentType == 'sale' || currentType == 'mefraq') {
@@ -656,8 +651,6 @@ class DatabaseHelper {
     );
   }
 
-  // ==================== إغلاق السنة المالية ====================
-
   Future<void> executeFiscalYearRollover(int newYear) async {
     final db = await instance.database;
     await db.transaction((txn) async {
@@ -667,7 +660,7 @@ class DatabaseHelper {
     });
   }
 
-  Future<void> close() async {
+    Future<void> close() async {
     final db = await instance.database;
     db.close();
   }

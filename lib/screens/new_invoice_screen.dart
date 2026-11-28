@@ -776,7 +776,6 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
               padding: const EdgeInsets.all(12.0),
               child: Column(
                 children: [
-                  // شريط تبديل العملة (صندوق سوري | صندوق دولار)
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -1031,7 +1030,7 @@ class _NewInvoiceScreenState extends State<NewInvoiceScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _selectedCurrency == 'USD' ? Colors.green.shade700 : const Color(0xFF5C6BC0),
                       ),
-                      onPressed: _isSaving ? _saveInvoice : null,
+                      onPressed: _isSaving ? null : _saveInvoice,
                       child: _isSaving
                           ? const CircularProgressIndicator(color: Colors.white)
                           : Text(
@@ -1061,7 +1060,7 @@ class _BarcodeScannerSimpleScreenState extends State<BarcodeScannerSimpleScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('مسح الباركود'),
+        title: const Text('سكانر الباركود'),
         backgroundColor: const Color(0xFF5C6BC0),
       ),
       body: MobileScanner(

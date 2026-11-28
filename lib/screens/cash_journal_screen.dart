@@ -160,9 +160,17 @@ class _CashJournalScreenState extends State<CashJournalScreen> {
     if (confirm == true) {
       try {
         final int transactionId = item['id'];
-        final int? contactId = item['contact_id'] is int
+        int? contactId = item['contact_id'] is int
             ? item['contact_id']
             : int.tryParse(item['contact_id']?.toString() ?? '');
+
+        if ((contactId == null || contactId == 0) && item['contact_name'] != null) {
+          final matched = _contacts.where((c) => c['name'] == item['contact_name']);
+          if (matched.isNotEmpty) {
+            contactId = matched.first['id'] as int?;
+          }
+        }
+
         final double amount = ((item['amount'] ?? 0.0) as num).toDouble();
         final String type = item['type'] ?? 'income';
 

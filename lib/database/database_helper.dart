@@ -323,6 +323,7 @@ class DatabaseHelper {
 
     final cashTx = await db.rawQuery('''
       SELECT ct.id, 
+             ct.contact_id,
              COALESCE(c.name, 'غير محدد') as contact_name, 
              ct.amount, 
              ct.type, 
